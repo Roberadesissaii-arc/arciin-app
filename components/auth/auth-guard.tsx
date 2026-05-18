@@ -1,0 +1,40 @@
+"use client"
+
+import { useEffect } from "react"
+import { usePathname, useRouter } from "next/navigation"
+
+import { useConnection } from "@/components/providers/connection-provider"
+
+export function AuthGuard({ children }: { children: React.ReactNode }) {
+  const router = useRouter()
+  const pathname = usePathname()
+  const { ready, connection, refresh } = useConnection()
+
+  useEffect(() => {
+    if (!ready) return
+    if (connection) return
+    router.replace(`/sign-in?next=${encodeURIComponent(pathname)}`)
+  }, [ready, connection, pathname, router])
+
+  useEffect(() => {
+    if (!ready || !connection) return
+    const id = setInterval(() => {
+      void refresh()
+    }, 5 * 60_000)
+    return () => clearInterval(id)
+  }, [ready, connection, refresh])
+
+  if (!ready) {
+    return (
+      <div className="flex min-h-[50dvh] items-center justify-center">
+        <span className="size-7 animate-spin rounded-full border-2 border-[#ff4f12]/30 border-t-[#ff4f12]" />
+      </div>
+    )
+  }
+
+  if (!connection) {
+    return null
+  }
+
+  return <>{children}</>
+}

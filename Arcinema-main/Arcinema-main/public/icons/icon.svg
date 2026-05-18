@@ -1,0 +1,22 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Arcinema App Icon - Black background with white "A" in Galindo font -->
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Galindo&amp;display=swap');
+    </style>
+  </defs>
+  <rect width="512" height="512" rx="115" fill="#0A0A0A"/>
+  
+  <!-- Letter "A" in Galindo font (same as navigation logo) -->
+  <text 
+    x="50%" 
+    y="52%" 
+    dominant-baseline="middle" 
+    text-anchor="middle" 
+    fill="white" 
+    font-family="'Galindo', cursive" 
+    font-size="420" 
+    font-weight="400"
+    letter-spacing="0"
+  >A</text>
+</svg>

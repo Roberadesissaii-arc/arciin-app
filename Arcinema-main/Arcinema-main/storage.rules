@@ -1,0 +1,37 @@
+rules_version = '2';
+
+// Craft rules based on data in your Firestore database
+// allow write: if firestore.get(
+//    /databases/(default)/documents/users/$(request.auth.uid)).data.isAdmin;
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+    // Base profile-pictures path
+    match /profile-pictures/{userId} {
+      // Allow read access to everyone
+      allow read: if true;
+      // Allow write and delete access to authenticated users for their own profile
+      allow write, delete: if request.auth != null 
+        && request.auth.uid == userId;
+      // Allow create/update with size and type restrictions
+      allow create, update: if request.auth != null 
+        && request.auth.uid == userId
+        && request.resource.size < 50 * 1024 * 1024  // 50MB limit
+        && request.resource.contentType.matches('image/.*');
+    }
+    
+    // Spoiler audio files - shared cache for all users
+    match /spoiler-audio/{audioFile} {
+      // Everyone can read cached audio files
+      allow read: if true;
+      // Authenticated users can upload audio files
+      allow create: if request.auth != null
+        && request.resource.size < 10 * 1024 * 1024  // 10MB limit for audio
+        && request.resource.contentType.matches('audio/.*');
+      // Allow updates and deletes for authenticated users
+      allow update, delete: if request.auth != null;
+    }
+  }
+}

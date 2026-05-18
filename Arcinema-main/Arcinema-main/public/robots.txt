@@ -1,0 +1,30 @@
+User-agent: *
+Allow: /
+
+# PWA files
+Allow: /manifest.json
+Allow: /sw.js
+Allow: /icons/
+
+# Important pages for movie streaming app
+Allow: /movies
+Allow: /tv-shows  
+Allow: /anime
+Allow: /games
+Allow: /search
+Allow: /new-releases
+
+# Sitemaps
+Sitemap: https://your-domain.com/sitemap.xml
+
+# Block admin areas (if any)
+Disallow: /admin
+Disallow: /api/
+Disallow: /_next/
+
+# Allow social media crawlers
+User-agent: facebookexternalhit/*
+Allow: /
+
+User-agent: Twitterbot
+Allow: /

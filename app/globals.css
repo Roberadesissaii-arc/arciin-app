@@ -1,26 +1,131 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-space-grotesk);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+:root {
+  --arciin-accent: #ff4f12;
+
+  --background: #ffffff;
+  --secondary-bg: #f7f7f7;
+  --foreground: #222222;
+  --text-secondary: #717171;
+  --text-muted: #a0a0a0;
+  --border: #e5e5e5;
+  --surface: #ffffff;
+}
+
+@layer base {
+  * {
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html {
+    height: 100%;
+    font-family: var(--font-sans, system-ui, sans-serif);
+    background-color: #f7f7f7;
+    -webkit-text-size-adjust: 100%;
+    overscroll-behavior: none;
+  }
+
+  body {
+    min-height: 100%;
+    min-height: 100dvh;
+    background-color: #f7f7f7;
+    color: var(--foreground);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overscroll-behavior: none;
+  }
+
+  /* Mobile app shell: only main scrolls; top nav + bottom nav stay fixed */
+  body:has(.mobile-app-shell) {
+    overflow: hidden;
+    height: 100dvh;
+    max-height: 100dvh;
+  }
+
+  ::selection {
+    background: rgba(255, 79, 18, 0.15);
+    color: #222222;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Safe area utilities — CSS classes (not inline styles) so iOS PWA respects them */
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.h-safe-bottom {
+  height: env(safe-area-inset-bottom, 0px);
+}
+/* Content clearance: floating nav (4rem) + gap; nav already sits above home indicator */
+.pb-nav-safe {
+  padding-bottom: calc(4rem + 0.75rem + max(0.5rem, env(safe-area-inset-bottom, 0px)));
+}
+
+/* Floating bottom nav — sits above home indicator, not inside a padded wrapper */
+.mobile-bottom-nav {
+  bottom: max(0.5rem, env(safe-area-inset-bottom, 0px));
+}
+
+/* Chat composer — fixed above the bottom nav pill (nav stays in shell, not inside chat) */
+.mobile-composer-fixed {
+  position: fixed;
+  left: 1rem;
+  right: 1rem;
+  z-index: 40;
+  bottom: calc(4rem + 0.75rem + max(0.5rem, env(safe-area-inset-bottom, 0px)));
+}
+
+.mobile-chat-scroll-pad {
+  padding-bottom: calc(6.5rem + 4rem + 0.75rem + max(0.5rem, env(safe-area-inset-bottom, 0px)));
+}
+
+/* Files empty state — fills viewport above bottom nav */
+.min-h-files-empty {
+  min-height: calc(
+    100dvh - 12.5rem - 4rem - 0.75rem - max(0.5rem, env(safe-area-inset-bottom, 0px))
+  );
+}
+
+/* ── Auth success animation keyframes ───────────────────────────── */
+@keyframes arciin-ring {
+  to { stroke-dashoffset: 0; }
+}
+@keyframes arciin-check {
+  to { stroke-dashoffset: 0; }
+}
+@keyframes arciin-ripple {
+  0%   { transform: scale(1);   opacity: 0.45; }
+  100% { transform: scale(2.6); opacity: 0; }
+}
+@keyframes arciin-fade-up {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes arciin-scale-in {
+  0%   { transform: scale(0);    opacity: 0; }
+  60%  { transform: scale(1.12); opacity: 1; }
+  100% { transform: scale(1);    opacity: 1; }
+}
+@keyframes arciin-dot-bounce {
+  0%, 80%, 100% { transform: translateY(0); }
+  40%           { transform: translateY(-6px); }
+}
+
+@utility scrollbar-hide {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
 }

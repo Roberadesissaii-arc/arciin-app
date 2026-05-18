@@ -1,0 +1,76 @@
+
+> arcinema@0.1.0 build
+> next build
+
+ ⚠ Warning: Next.js inferred your workspace root, but it may not be correct.
+ We detected multiple lockfiles and selected the directory of C:\Users\rober\Desktop\package-lock.json as the root directory.
+ To silence this warning, set `outputFileTracingRoot` in your Next.js config, or consider removing one of the lockfiles if it's not needed.
+   See https://nextjs.org/docs/app/api-reference/config/next-config-js/output#caveats for more information.
+ Detected additional lockfiles: 
+   * C:\Users\rober\Desktop\movie-master\pnpm-lock.yaml
+
+   ▲ Next.js 15.5.6
+   - Environments: .env.local
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully in 11.2s
+   Skipping linting
+   Checking validity of types ...
+   Collecting page data ...
+   Generating static pages (0/31) ...
+   Generating static pages (7/31) 
+   Generating static pages (15/31) 
+   Generating static pages (23/31) 
+ ✓ Generating static pages (31/31)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                                 Size  First Load JS
+┌ ○ /                                    25.2 kB         371 kB
+├ ○ /_not-found                            163 B         103 kB
+├ ○ /anime                               10.5 kB         304 kB
+├ ƒ /anime/[id]                          12.3 kB         301 kB
+├ ƒ /api/cast/[type]/[id]                  163 B         103 kB
+├ ƒ /api/check-new-releases                163 B         103 kB
+├ ƒ /api/check-releases                    163 B         103 kB
+├ ƒ /api/netflix/search                    163 B         103 kB
+├ ƒ /api/notifications                     163 B         103 kB
+├ ƒ /api/notify-release                    163 B         103 kB
+├ ƒ /api/person/[id]                       163 B         103 kB
+├ ƒ /api/person/[id]/admin                 163 B         103 kB
+├ ƒ /api/test-email                        163 B         103 kB
+├ ƒ /api/user/following                    163 B         103 kB
+├ ƒ /api/wheretowatch/lookup               163 B         103 kB
+├ ○ /auth/login                          5.77 kB         277 kB
+├ ○ /auth/signup                         6.83 kB         285 kB
+├ ○ /books                                 683 B         103 kB
+├ ○ /cineai                              73.3 kB         386 kB
+├ ○ /clear-cache                         1.14 kB         104 kB
+├ ○ /movies                              6.84 kB         370 kB
+├ ƒ /movies/[id]                         14.4 kB         320 kB
+├ ƒ /movies/[id]/spoilers                2.91 kB         326 kB
+├ ○ /new-releases                        4.83 kB         368 kB
+├ ○ /notifications                       12.2 kB         317 kB
+├ ○ /offline                             1.94 kB         144 kB
+├ ƒ /person/[id]                         10.5 kB         288 kB
+├ ○ /search                              11.8 kB         312 kB
+├ ƒ /share/[id]                          8.24 kB         321 kB
+├ ○ /tv-shows                            17.7 kB         366 kB
+├ ƒ /tv-shows/[id]                       19.1 kB         327 kB
+├ ƒ /tv-shows/[id]/spoilers              2.95 kB         326 kB
+├ ○ /user/activity                         13 kB         319 kB
+├ ○ /user/downloads                        163 B         103 kB
+├ ○ /user/likes                          6.44 kB         342 kB
+├ ○ /user/my-list                        11.5 kB         347 kB
+├ ○ /user/profile                        12.9 kB         294 kB
+├ ○ /user/settings                       15.9 kB         318 kB
+└ ○ /user/watch-history                  17.1 kB         322 kB
++ First Load JS shared by all             103 kB
+  ├ chunks/3453-359eaf66b5561afc.js      46.2 kB
+  ├ chunks/f0f2fef0-8b6b2d2707739d0c.js  54.2 kB
+  └ other shared chunks (total)          2.19 kB
+
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+

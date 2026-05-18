@@ -1,0 +1,549 @@
+"use client"
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { ChevronRight, CloudUpload, Folder, Loader2 } from "lucide-react"
+
+import { useFilesChrome } from "@/components/files/files-chrome-context"
+import { AssetThumbnail } from "@/components/files/asset-thumbnail"
+import { AssetViewer } from "@/components/files/asset-viewer"
+import { useConnection } from "@/components/providers/connection-provider"
+import { getAssets } from "@/lib/api/assets"
+import { formatApiError } from "@/lib/api/errors"
+import { listFolders } from "@/lib/api/folders"
+import { listLibraries } from "@/lib/api/libraries"
+import { uploadFile } from "@/lib/api/uploads"
+import { classifyFile, filterIdForMediaType } from "@/lib/files/classify-file"
+import {
+  filesCacheKey,
+  isFilesCacheStale,
+  readFilesCache,
+  removeAssetFromAllCaches,
+  writeFilesCache,
+} from "@/lib/files/files-cache"
+import { evictThumbnail } from "@/lib/files/thumbnail-cache"
+import {
+  assetCountForFilter,
+  findLibraryBySlug,
+  libraryIdForFilter,
+  librarySlugForFilter,
+  type FilesFilterId,
+} from "@/lib/files/library-helpers"
+import type { AssetSummary, LibrarySummary } from "@/lib/types/assets"
+import type { FolderSummary } from "@/lib/types/folders"
+import { FILES_FILTERS } from "@/lib/files/filter-config"
+import { formatBytes } from "@/lib/utils/format-bytes"
+
+function GridSkeleton() {
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <div
+          key={i}
+          className="animate-pulse overflow-hidden rounded-2xl bg-white p-2"
+          style={{ border: "1px solid #e5e5e5" }}
+        >
+          <div className="aspect-square rounded-xl bg-[#ececec]" />
+          <div className="mt-2 h-3 w-3/4 rounded bg-[#f0f0f0]" />
+          <div className="mt-1.5 h-2 w-1/2 rounded bg-[#f5f5f5]" />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function SectionPlaceholder({
+  icon: Icon,
+  title,
+  description,
+}: {
+  icon: React.ElementType
+  title: string
+  description: string
+}) {
+  return (
+    <div
+      className="flex flex-col items-center justify-center rounded-2xl bg-white px-6 py-10"
+      style={{ border: "1px solid #e5e5e5" }}
+    >
+      <div
+        className="flex size-14 items-center justify-center rounded-2xl"
+        style={{
+          backgroundColor: "rgba(255,79,18,0.08)",
+          border: "1px solid rgba(255,79,18,0.18)",
+        }}
+      >
+        <Icon className="size-7 text-[#ff4f12]" strokeWidth={1.75} />
+      </div>
+      <p className="mt-4 text-center text-[14px] font-semibold text-[#222222]">{title}</p>
+      <p className="mt-1 max-w-[220px] text-center text-[12px] leading-relaxed text-[#a0a0a0]">
+        {description}
+      </p>
+    </div>
+  )
+}
+
+function FolderCard({
+  folder,
+  onOpen,
+}: {
+  folder: FolderSummary
+  onOpen: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="flex w-full items-center gap-3 rounded-2xl bg-white px-3.5 py-3 text-left active:opacity-90"
+      style={{ border: "1px solid #e5e5e5" }}
+    >
+      <div
+        className="flex size-10 shrink-0 items-center justify-center rounded-xl"
+        style={{ backgroundColor: "rgba(255,79,18,0.1)", border: "1px solid rgba(255,79,18,0.2)" }}
+      >
+        <Folder className="size-5 text-[#ff4f12]" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-[13px] font-semibold text-[#222222]">{folder.name}</p>
+        <p className="text-[11px] text-[#a0a0a0]">
+          {folder.assetCount} file{folder.assetCount === 1 ? "" : "s"}
+        </p>
+      </div>
+      <ChevronRight className="size-4 shrink-0 text-[#c0c0c0]" />
+    </button>
+  )
+}
+
+export function FilesPage() {
+  const { connection, ready } = useConnection()
+  const { setChrome } = useFilesChrome()
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [filter, setFilter] = useState<FilesFilterId>("all")
+  const [folderId, setFolderId] = useState<string | null>(null)
+  const [libraries, setLibraries] = useState<LibrarySummary[]>([])
+  const [folders, setFolders] = useState<FolderSummary[]>([])
+  const [assets, setAssets] = useState<AssetSummary[]>([])
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null)
+  const [uploadName, setUploadName] = useState<string | null>(null)
+  const [uploadNotice, setUploadNotice] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [viewerAsset, setViewerAsset] = useState<AssetSummary | null>(null)
+  const [hasCache, setHasCache] = useState(false)
+
+  const libraryScoped = filter !== "all"
+
+  const currentFolder = useMemo(
+    () => (folderId ? folders.find((f) => f.id === folderId) : null),
+    [folderId, folders],
+  )
+
+  const visibleFolders = useMemo(() => {
+    if (!libraryScoped) return []
+    if (folderId) return folders.filter((f) => f.parentFolderId === folderId)
+    return folders.filter((f) => !f.parentFolderId)
+  }, [folders, folderId, libraryScoped])
+
+  const applyCache = useCallback((cached: ReturnType<typeof readFilesCache>) => {
+    if (!cached) return false
+    setLibraries(cached.libraries)
+    setAssets(cached.assets)
+    if (cached.folders) setFolders(cached.folders)
+    setHasCache(true)
+    setLoading(false)
+    return true
+  }, [])
+
+  const load = useCallback(
+    async (
+      signal?: AbortSignal,
+      isRefresh = false,
+      opts?: { filter?: FilesFilterId; folderId?: string | null },
+    ) => {
+      if (!connection) return
+      const activeFilter = opts?.filter ?? filter
+      const activeFolderId = opts?.folderId !== undefined ? opts.folderId : folderId
+      const scoped = activeFilter !== "all"
+      const libId = libraryIdForFilter(libraries, activeFilter)
+
+      const cacheKey = filesCacheKey(connection.apiBaseUrl, activeFilter, activeFolderId)
+      const cached = readFilesCache(cacheKey)
+
+      if (!isRefresh && cached) {
+        applyCache(cached)
+        if (!isFilesCacheStale(cached)) return
+        setRefreshing(true)
+      } else if (isRefresh) {
+        setRefreshing(true)
+      } else if (!cached) {
+        setLoading(true)
+        setHasCache(false)
+      }
+
+      setError(null)
+
+      try {
+        const libs = libraries.length ? libraries : await listLibraries(connection, signal)
+        if (signal?.aborted) return
+
+        const resolvedLibId = libraryIdForFilter(libs, activeFilter)
+        let folderList: FolderSummary[] = []
+        if (scoped && resolvedLibId) {
+          folderList = await listFolders(connection, resolvedLibId, signal)
+        }
+        if (signal?.aborted) return
+
+        let list: AssetSummary[] = []
+        if (scoped && resolvedLibId && activeFolderId) {
+          list = await getAssets(connection, { libraryId: resolvedLibId, folderId: activeFolderId }, signal)
+        } else if (scoped && resolvedLibId) {
+          const raw = await getAssets(connection, { libraryId: resolvedLibId }, signal)
+          list = raw.filter((a) => !a.folderId)
+        } else {
+          list = await getAssets(connection, {}, signal)
+        }
+
+        if (signal?.aborted) return
+
+        writeFilesCache(cacheKey, { libraries: libs, assets: list, folders: folderList })
+        setLibraries(libs)
+        setFolders(folderList)
+        setAssets(list)
+        setHasCache(true)
+      } catch (err) {
+        if (!signal?.aborted && !cached) setError(formatApiError(err))
+      } finally {
+        if (!signal?.aborted) {
+          setLoading(false)
+          setRefreshing(false)
+        }
+      }
+    },
+    [applyCache, connection, filter, folderId, libraries],
+  )
+
+  useEffect(() => {
+    if (!ready || !connection) return
+    const controller = new AbortController()
+    void load(controller.signal)
+    return () => controller.abort()
+  }, [ready, connection, load])
+
+  const changeFilter = useCallback(
+    (id: FilesFilterId) => {
+      setFilter(id)
+      setFolderId(null)
+      void load(undefined, false, { filter: id, folderId: null })
+    },
+    [load],
+  )
+
+  const openFolder = useCallback(
+    (id: string) => {
+      setFolderId(id)
+      void load(undefined, false, { folderId: id })
+    },
+    [load],
+  )
+
+  const goToLibraryRoot = useCallback(() => {
+    setFolderId(null)
+    void load(undefined, false, { folderId: null })
+  }, [load])
+
+  async function handleFilesSelected(fileList: FileList | null) {
+    if (!connection || !fileList?.length) return
+    const files = Array.from(fileList)
+    setUploading(true)
+    setError(null)
+    setUploadNotice(null)
+
+    const forceInbox =
+      filter === "inbox" ? libraryIdForFilter(libraries, "inbox") : undefined
+
+    let lastDestination = ""
+    let reloadFilter: FilesFilterId = filter
+    const reloadFolderId = folderId
+
+    try {
+      for (const file of files) {
+        const hint = classifyFile(file)
+        setUploadName(`${file.name} → ${hint.toLowerCase()}`)
+        setUploadProgress(0)
+
+        const result = await uploadFile(connection, file, {
+          ...(forceInbox ? { targetLibraryId: forceInbox } : {}),
+          ...(folderId ? { targetFolderId: folderId } : {}),
+          onProgress: setUploadProgress,
+        })
+
+        const detected = result.detectedMediaType ?? hint
+        const destName = result.targetLibrary?.name
+        lastDestination = destName
+          ? `${destName} (${detected.toLowerCase()})`
+          : detected.toLowerCase()
+
+        if (result.detectedMediaType) {
+          const nextFilter = filterIdForMediaType(result.detectedMediaType)
+          reloadFilter = filter === "all" ? "all" : nextFilter
+          if (reloadFilter !== filter) setFilter(reloadFilter)
+        }
+      }
+
+      setUploadNotice(
+        files.length === 1
+          ? `Uploaded to ${lastDestination}.`
+          : `${files.length} files uploaded.`,
+      )
+      setTimeout(() => setUploadNotice(null), 4000)
+
+      await load(undefined, true, { filter: reloadFilter, folderId: reloadFolderId })
+    } catch (err) {
+      setError(formatApiError(err))
+    } finally {
+      setUploading(false)
+      setUploadProgress(null)
+      setUploadName(null)
+      if (inputRef.current) inputRef.current.value = ""
+    }
+  }
+
+  function handleAssetDeleted(assetId: string) {
+    if (!connection) return
+    removeAssetFromAllCaches(connection.apiBaseUrl, assetId)
+    evictThumbnail(assetId)
+    setAssets((prev) => prev.filter((a) => a.id !== assetId))
+    void load(undefined, true)
+  }
+
+  const filterLabel = FILES_FILTERS.find((f) => f.id === filter)?.label ?? "files"
+  const libraryTotal = useMemo(() => assetCountForFilter(libraries, filter), [libraries, filter])
+  const showFoldersSection = libraryScoped && !folderId
+  const countMismatch = !loading && filter !== "all" && libraryTotal !== assets.length && !folderId
+  const showSkeleton = loading && assets.length === 0 && visibleFolders.length === 0 && !hasCache
+
+  const breadcrumbLibrary = libraryScoped
+    ? findLibraryBySlug(libraries, librarySlugForFilter(filter))?.name ?? filterLabel
+    : null
+
+  const subtitle =
+    loading && !hasCache
+      ? "Loading…"
+      : refreshing
+        ? "Updating…"
+        : currentFolder
+          ? `${currentFolder.name} · ${assets.length} files`
+          : filter === "all"
+            ? `${assets.length} files across all libraries`
+            : `${assets.length} in ${filterLabel}${libraryTotal !== assets.length ? ` · ${libraryTotal} in library` : ""}`
+
+  const triggerUpload = useCallback(() => {
+    inputRef.current?.click()
+  }, [])
+
+  const triggerRefresh = useCallback(() => {
+    void load(undefined, true)
+  }, [load])
+
+  useEffect(() => {
+    setChrome({
+      subtitle,
+      filter,
+      libraries,
+      libraryScoped,
+      breadcrumbLibrary,
+      currentFolderName: currentFolder?.name ?? null,
+      loading,
+      hasCache,
+      refreshing,
+      uploading,
+      canUpload: Boolean(connection),
+      onRefresh: triggerRefresh,
+      onUpload: triggerUpload,
+      onChangeFilter: changeFilter,
+      onGoToLibraryRoot: goToLibraryRoot,
+    })
+    return () => setChrome(null)
+  }, [
+    subtitle,
+    filter,
+    libraries,
+    libraryScoped,
+    breadcrumbLibrary,
+    currentFolder,
+    loading,
+    hasCache,
+    refreshing,
+    uploading,
+    connection,
+    setChrome,
+    triggerRefresh,
+    triggerUpload,
+    changeFilter,
+    goToLibraryRoot,
+  ])
+
+  return (
+    <div className="flex flex-col gap-5">
+      <input
+        ref={inputRef}
+        type="file"
+        className="hidden"
+        multiple
+        accept="image/*,video/*,audio/*,.pdf,.doc,.docx,application/*"
+        onChange={(e) => void handleFilesSelected(e.target.files)}
+      />
+
+      {viewerAsset && connection ? (
+        <AssetViewer
+          asset={viewerAsset}
+          libraries={libraries}
+          connection={connection}
+          onClose={() => setViewerAsset(null)}
+          onChanged={() => void load(undefined, true)}
+          onDeleted={handleAssetDeleted}
+        />
+      ) : null}
+
+
+      {uploadNotice ? (
+        <p
+          className="rounded-xl px-4 py-2.5 text-center text-[12px] font-medium text-[#15803d]"
+            style={{ backgroundColor: "#f0fdf4", border: "1px solid #bbf7d0" }}
+          >
+            {uploadNotice}
+          </p>
+        ) : null}
+
+        {error ? (
+          <div
+            className="mt-3 rounded-xl px-4 py-3 text-[12px] text-[#b91c1c]"
+            style={{ backgroundColor: "#fef2f2", border: "1px solid #fecaca" }}
+            role="alert"
+          >
+            {error}
+          </div>
+        ) : null}
+
+        {countMismatch ? (
+          <p className="mt-2 text-[11px] leading-relaxed text-[#717171]">
+            Some files may still be processing. Tap refresh or check All files.
+          </p>
+        ) : null}
+
+        {uploading && uploadName ? (
+          <div
+            className="mt-3 rounded-2xl bg-white px-4 py-3"
+            style={{ border: "1px solid #e5e5e5" }}
+          >
+            <div className="flex items-center gap-2">
+              <CloudUpload className="size-4 shrink-0 text-[#ff4f12]" />
+              <p className="min-w-0 flex-1 truncate text-[12px] font-medium text-[#222222]">
+                {uploadName}
+              </p>
+              <span className="text-[11px] font-semibold tabular-nums text-[#717171]">
+                {uploadProgress ?? 0}%
+              </span>
+            </div>
+            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#f0f0f0]">
+              <div
+                className="h-full rounded-full transition-all"
+                style={{
+                  width: `${uploadProgress ?? 0}%`,
+                  backgroundColor: "#ff4f12",
+                }}
+              />
+            </div>
+          </div>
+        ) : null}
+
+      <div>
+        {showSkeleton ? (
+          <GridSkeleton />
+        ) : (
+          <div className={`flex flex-col gap-4 ${refreshing ? "opacity-80" : ""}`}>
+            {showFoldersSection ? (
+              <section className="flex flex-col gap-2">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-[#a0a0a0]">
+                  Folders
+                </p>
+                {visibleFolders.length > 0 ? (
+                  visibleFolders.map((folder) => (
+                    <FolderCard key={folder.id} folder={folder} onOpen={() => openFolder(folder.id)} />
+                  ))
+                ) : (
+                  <SectionPlaceholder
+                    icon={Folder}
+                    title="No folders yet"
+                    description="Create folders on your server to organize files in this library."
+                  />
+                )}
+              </section>
+            ) : null}
+
+            <section className="flex flex-col gap-2">
+              {(showFoldersSection || assets.length > 0) && (
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-[#a0a0a0]">
+                  {showFoldersSection ? "Files" : "Assets"}
+                </p>
+              )}
+              {assets.length > 0 ? (
+                <div className="grid grid-cols-2 gap-3">
+                  {assets.map((asset) => (
+                    <button
+                      key={asset.id}
+                      type="button"
+                      onClick={() => setViewerAsset(asset)}
+                      className="overflow-hidden rounded-2xl bg-white p-2 text-left shadow-sm active:opacity-90"
+                      style={{ border: "1px solid #e5e5e5" }}
+                    >
+                      {connection ? (
+                        <AssetThumbnail asset={asset} connection={connection} />
+                      ) : null}
+                      <p className="mt-2 truncate px-0.5 text-[12px] font-semibold text-[#222222]">
+                        {asset.title?.trim() || asset.originalFilename}
+                      </p>
+                      <p className="truncate px-0.5 pb-0.5 text-[10px] text-[#a0a0a0]">
+                        {formatBytes(asset.sizeBytes)}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <SectionPlaceholder
+                  icon={CloudUpload}
+                  title={
+                    currentFolder
+                      ? "No files in this folder"
+                      : filter === "all"
+                        ? "No files yet"
+                        : `No ${filterLabel.toLowerCase()} yet`
+                  }
+                  description={
+                    currentFolder
+                      ? "Upload files here or move items from another folder."
+                      : "Tap upload above to add files to this library."
+                  }
+                />
+              )}
+            </section>
+
+            {!showFoldersSection && assets.length === 0 && filter === "all" ? (
+              <button
+                type="button"
+                disabled={uploading}
+                onClick={() => inputRef.current?.click()}
+                className="flex items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-[13px] font-semibold text-white active:opacity-90 disabled:opacity-50"
+                style={{ backgroundColor: "#ff4f12" }}
+              >
+                <CloudUpload className="size-4" />
+                Upload files
+              </button>
+            ) : null}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
