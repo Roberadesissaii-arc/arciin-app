@@ -61,13 +61,6 @@ export function getCloudflareTunnelStatus(connection: MobileConnection, signal?:
   })
 }
 
-export function startCloudflareTunnelForMobile(connection: MobileConnection) {
-  return fetchApi<CloudflareTunnelStatus>("/settings/cloudflare-tunnel/start-mobile", {
-    connection,
-    method: "POST",
-  })
-}
-
 export function getApiKeys(connection: MobileConnection, signal?: AbortSignal) {
   return fetchApi<ApiKeySummary[]>("/api-keys", {
     connection,

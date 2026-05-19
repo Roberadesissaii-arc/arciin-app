@@ -4,8 +4,6 @@ import { useCallback, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import {
   ArrowLeftRight,
-  Cloud,
-  Copy,
   Globe,
   Link2,
   Loader2,
@@ -16,17 +14,8 @@ import {
 
 import { SettingsIntroCard } from "@/components/settings/settings-intro-card"
 import { formatApiError } from "@/lib/api/errors"
-import {
-  getRemoteAccessSettings,
-  startCloudflareTunnelForMobile,
-  updateRemoteAccessSettings,
-} from "@/lib/api/settings"
-import {
-  deriveMobileServerUrlsFromApiBase,
-  normalizeApiBase,
-} from "@/lib/connection/normalize-url"
+import { getRemoteAccessSettings, updateRemoteAccessSettings } from "@/lib/api/settings"
 import { serverAddressFromProfile } from "@/lib/connection/reconnect-server"
-import { loadServerProfile, saveServerProfile } from "@/lib/connection/storage"
 import { useConnection } from "@/components/providers/connection-provider"
 import { dispatchAppForeground } from "@/lib/hooks/use-app-foreground"
 import { useStablePanelLoad } from "@/lib/hooks/use-stable-panel-load"
@@ -43,15 +32,6 @@ function readStoredMode(): ConnectionMode {
 function writeStoredMode(mode: ConnectionMode) {
   if (typeof window === "undefined") return
   localStorage.setItem("arciin_mobile_connection_mode_v1", mode)
-}
-
-function applyServerProfileFromWebUrl(webUrl: string, instanceName?: string) {
-  const apiBase = normalizeApiBase(`${webUrl.replace(/\/+$/, "")}/api`)
-  const urls = deriveMobileServerUrlsFromApiBase(apiBase)
-  saveServerProfile({
-    ...urls,
-    instanceName: instanceName ?? loadServerProfile()?.instanceName ?? "Arciin",
-  })
 }
 
 export function RemoteAccessInlinePanel({ enabled }: { enabled: boolean }) {
@@ -76,10 +56,8 @@ export function RemoteAccessInlinePanel({ enabled }: { enabled: boolean }) {
   const [localUrl, setLocalUrl] = useState<string | null>(null)
   const [loopbackUrl, setLoopbackUrl] = useState<string | null>(null)
   const [lanUrls, setLanUrls] = useState<string[]>([])
-  const [mobilePublicUrl, setMobilePublicUrl] = useState<string | null>(null)
   const [connectionMode, setConnectionMode] = useState<ConnectionMode>("local")
   const [saving, setSaving] = useState(false)
-  const [generating, setGenerating] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
 
@@ -96,12 +74,11 @@ export function RemoteAccessInlinePanel({ enabled }: { enabled: boolean }) {
     setLocalUrl(data.primaryLanUrl ?? data.localUrl ?? data.requestOrigin ?? null)
     setLoopbackUrl(data.loopbackUrl ?? null)
     setLanUrls(data.lanUrls?.length ? data.lanUrls : [])
-    setMobilePublicUrl(data.mobilePublicUrl ?? null)
     setConnectionMode(readStoredMode())
   }, [data])
 
   const showReconnect = serverReachable === false
-  const activePublicUrl = (mobilePublicUrl || data?.publicUrl || domain || "").trim()
+  const activePublicUrl = (data?.publicUrl || domain || "").trim()
   const activeLocalUrl = (localUrl || data?.localUrl || "").trim()
   const usingPublic = connectionMode === "public" && Boolean(activePublicUrl)
   const lanList =
@@ -146,7 +123,6 @@ export function RemoteAccessInlinePanel({ enabled }: { enabled: boolean }) {
       setLocalUrl(updated.primaryLanUrl ?? updated.localUrl ?? updated.requestOrigin ?? null)
       setLoopbackUrl(updated.loopbackUrl ?? null)
       setLanUrls(updated.lanUrls ?? [])
-      setMobilePublicUrl(updated.mobilePublicUrl ?? null)
       setMessage("Remote access updated.")
       await reload()
     } catch (err) {
@@ -171,7 +147,7 @@ export function RemoteAccessInlinePanel({ enabled }: { enabled: boolean }) {
   async function switchToPublic() {
     const target = activePublicUrl || domain.trim()
     if (!target) {
-      setSaveError("Set or generate a public URL first.")
+      setSaveError("Set your server’s public URL first (from desktop Settings → Domain).")
       return
     }
     setServerAddress(target)
@@ -206,49 +182,6 @@ export function RemoteAccessInlinePanel({ enabled }: { enabled: boolean }) {
     }
   }
 
-  async function generateMobilePublicUrl() {
-    if (!connection) {
-      setSaveError("Connect to the server on your network first, or update the server address below.")
-      return
-    }
-    setGenerating(true)
-    setSaveError(null)
-    setMessage(null)
-    try {
-      const result = await startCloudflareTunnelForMobile(connection)
-      const url = (result.mobilePublicUrl ?? result.publicUrl ?? result.url ?? "").trim()
-      if (!url) {
-        setSaveError("Tunnel started but no URL was returned.")
-        return
-      }
-      if (!url.startsWith("https://")) {
-        setSaveError("Invalid tunnel URL from server. Generate again from desktop Settings → Domain.")
-        return
-      }
-      applyServerProfileFromWebUrl(url, connection.instanceName)
-      setMobilePublicUrl(url)
-      setDomain(url)
-      setInitialDomain(url)
-      setServerAddress(url)
-      writeStoredMode("public")
-      setConnectionMode("public")
-      await handleReconnectWithAddress(url)
-    } catch (err) {
-      setSaveError(formatApiError(err))
-    } finally {
-      setGenerating(false)
-    }
-  }
-
-  async function copyText(text: string) {
-    try {
-      await navigator.clipboard.writeText(text)
-      setMessage("Copied to clipboard.")
-    } catch {
-      setSaveError("Could not copy to clipboard.")
-    }
-  }
-
   if (!enabled) return null
 
   return (
@@ -256,7 +189,7 @@ export function RemoteAccessInlinePanel({ enabled }: { enabled: boolean }) {
       <SettingsIntroCard
         icon={Globe}
         title="Remote access"
-        description="Update where this app connects. When a tunnel expires, paste the new URL here — you keep your account; only re-pair if sign-in asks."
+        description="Point this app at your Arciin server — on Wi‑Fi (LAN) or your public domain. Paste the URL from desktop Settings → Domain when connecting from anywhere."
       />
 
       <section
@@ -279,7 +212,7 @@ export function RemoteAccessInlinePanel({ enabled }: { enabled: boolean }) {
             type="url"
             value={serverAddress}
             onChange={(e) => setServerAddress(e.target.value)}
-            placeholder="https://xxxx.trycloudflare.com or http://192.168.1.10:3004"
+            placeholder="https://your-domain.com or http://192.168.1.10:3004"
             className="w-full rounded-xl bg-[#f7f7f7] px-4 py-3 font-mono text-[13px] text-[#222222] outline-none"
             style={{ border: "1px solid #e5e5e5" }}
             autoComplete="url"
@@ -306,6 +239,11 @@ export function RemoteAccessInlinePanel({ enabled }: { enabled: boolean }) {
         <div className="flex justify-center py-6">
           <Loader2 className="size-6 animate-spin text-[#c0c0c0]" />
         </div>
+      ) : null}
+      {error && connection && !loading ? (
+        <p className="rounded-xl border border-[#fecaca] bg-[#fef2f2] px-3 py-2 text-[12px] text-[#b91c1c]">
+          {error}
+        </p>
       ) : null}
 
       <section
@@ -379,17 +317,11 @@ export function RemoteAccessInlinePanel({ enabled }: { enabled: boolean }) {
               type="url"
               value={domain}
               onChange={(e) => setDomain(e.target.value)}
-              placeholder="https://xxxx.trycloudflare.com"
+              placeholder="https://your-domain.com"
               className="rounded-xl bg-[#f7f7f7] px-4 py-3 text-[13px] text-[#222222] outline-none focus:bg-white"
               style={{ border: "1px solid #e5e5e5" }}
             />
           </div>
-          {mobilePublicUrl ? (
-            <div className="rounded-xl bg-[#f7f7f7] px-3 py-2.5" style={{ border: "1px solid #e5e5e5" }}>
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-[#a0a0a0]">Phone tunnel URL</p>
-              <p className="mt-1 break-all font-mono text-[12px] text-[#222222]">{mobilePublicUrl}</p>
-            </div>
-          ) : null}
           <div className="flex flex-col gap-2">
             <button
               type="button"
@@ -413,23 +345,9 @@ export function RemoteAccessInlinePanel({ enabled }: { enabled: boolean }) {
               <ArrowLeftRight className="size-4 shrink-0" />
               Switch to public URL
             </button>
-            <button
-              type="button"
-              disabled={generating || saving || reconnecting || !connection}
-              onClick={() => void generateMobilePublicUrl()}
-              className="flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-[#ff4f12]/40 bg-[#fff7f4] px-3 py-2.5 text-[13px] font-semibold text-[#ff4f12] disabled:opacity-50"
-            >
-              {generating ? (
-                <Loader2 className="size-4 shrink-0 animate-spin" />
-              ) : (
-                <Cloud className="size-4 shrink-0" />
-              )}
-              <span className="text-center leading-tight">
-                {generating ? "Starting tunnel…" : "Generate public URL"}
-              </span>
-            </button>
-            <p className="text-center text-[11px] text-[#a0a0a0]">
-              Same as desktop Settings → Domain. Your Arciin server must be online.
+            <p className="text-center text-[11px] leading-relaxed text-[#a0a0a0]">
+              Set this on your Arciin server (desktop Settings → Domain), or paste your own domain / tunnel URL
+              above.
             </p>
           </div>
         </div>
@@ -437,9 +355,9 @@ export function RemoteAccessInlinePanel({ enabled }: { enabled: boolean }) {
 
       <section className="rounded-2xl bg-[#fafafa] px-4 py-3" style={{ border: "1px solid #e5e5e5" }}>
         <p className="text-[11px] leading-relaxed text-[#717171]">
-          Quick tunnels expire after a few hours. When you get Cloudflare 530, paste the new URL in Server address
-          above and tap Update — you stay signed in. For a URL that lasts until reboot, keep cloudflared running on
-          the server (PM2).
+          The mobile app on Vercel is separate from your home server. This screen only tells the app where your
+          Arciin server lives (LAN or public URL). Generate tunnels on the server from desktop Settings → Domain if
+          you use Cloudflare quick access.
         </p>
       </section>
 
