@@ -44,13 +44,6 @@
     overscroll-behavior: none;
   }
 
-  /* Mobile app shell: only main scrolls; top nav + bottom nav stay fixed */
-  body:has(.mobile-app-shell) {
-    overflow: hidden;
-    height: 100dvh;
-    max-height: 100dvh;
-  }
-
   ::selection {
     background: rgba(255, 79, 18, 0.15);
     color: #222222;
@@ -67,34 +60,88 @@
 .h-safe-bottom {
   height: env(safe-area-inset-bottom, 0px);
 }
-/* Content clearance: floating nav (4rem) + gap; nav already sits above home indicator */
-.pb-nav-safe {
-  padding-bottom: calc(4rem + 0.75rem + max(0.5rem, env(safe-area-inset-bottom, 0px)));
-}
-
-/* Floating bottom nav — sits above home indicator, not inside a padded wrapper */
+/* Floating bottom nav — small gap above screen edge / home indicator */
 .mobile-bottom-nav {
   bottom: max(0.5rem, env(safe-area-inset-bottom, 0px));
 }
 
-/* Chat composer — fixed above the bottom nav pill (nav stays in shell, not inside chat) */
-.mobile-composer-fixed {
-  position: fixed;
-  left: 1rem;
-  right: 1rem;
-  z-index: 40;
-  bottom: calc(4rem + 0.75rem + max(0.5rem, env(safe-area-inset-bottom, 0px)));
+/* Bottom nav below modal overlays (overlays use z-[200] on body) */
+.mobile-bottom-nav {
+  z-index: 30;
 }
 
-.mobile-chat-scroll-pad {
-  padding-bottom: calc(6.5rem + 4rem + 0.75rem + max(0.5rem, env(safe-area-inset-bottom, 0px)));
+/* iOS: hide tab bar while sheet is open (stacking fallback) */
+body.arciin-mobile-sheet-open .mobile-bottom-nav {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* Content clearance above bottom nav (h-16 tab row + float offset) */
+.pb-nav-safe {
+  padding-bottom: calc(4rem + max(0.5rem, env(safe-area-inset-bottom, 0px)) + 0.375rem);
+}
+
+/* PWA: gray fills the screen; do not lock body scroll (causes iOS home-indicator gaps) */
+.mobile-app-root {
+  background-color: #f7f7f7;
+}
+
+html:has(.mobile-app-root),
+body:has(.mobile-app-root) {
+  min-height: 100%;
+  min-height: 100dvh;
+  background-color: #f7f7f7;
+}
+
+.mobile-app-main:has(.files-page-content) {
+  padding-top: 0.75rem;
+}
+
+/* Chat: column layout inside the scrolling page */
+.mobile-app-main:has(.chat-page) {
+  display: flex;
+  flex-direction: column;
+  padding-top: 0.75rem;
+  padding-bottom: 0;
+}
+
+.chat-page {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.chat-page-messages {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.chat-page-composer {
+  flex-shrink: 0;
+  padding-top: 0.5rem;
+  padding-bottom: calc(4rem + max(0.5rem, env(safe-area-inset-bottom, 0px)) + 0.375rem);
+  background-color: #f7f7f7;
+}
+
+.mobile-app-main:has(.chat-page) > .mobile-app-content {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 0;
 }
 
 /* Files empty state — fills viewport above bottom nav */
 .min-h-files-empty {
-  min-height: calc(
-    100dvh - 12.5rem - 4rem - 0.75rem - max(0.5rem, env(safe-area-inset-bottom, 0px))
-  );
+  min-height: calc(100dvh - 12.5rem - 4rem - env(safe-area-inset-bottom, 0px) - 0.5rem);
+}
+
+/* Page list card — stretches to bottom nav for pages with intro + search header */
+.min-h-page-list {
+  min-height: calc(100dvh - 15rem - 4rem - env(safe-area-inset-bottom, 0px) - 0.5rem);
 }
 
 /* ── Auth success animation keyframes ───────────────────────────── */

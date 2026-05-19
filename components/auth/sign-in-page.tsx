@@ -10,8 +10,14 @@ import {
   deriveMobileServerUrlsFromApiBase,
   displayServerLabel,
   isLoopbackApiBase,
+  isPublicServerAddress,
 } from "@/lib/connection/normalize-url"
-import { hasStoredConnection, loadConnection } from "@/lib/connection/storage"
+import { authWithClientApiBase } from "@/lib/connection/merge-auth"
+import {
+  hasStoredServer,
+  loadServerProfile,
+  saveServerProfile,
+} from "@/lib/connection/storage"
 import { BrandHeroCarousel } from "@/components/auth/brand-hero"
 import { useConnection } from "@/components/providers/connection-provider"
 
@@ -215,6 +221,51 @@ function SignInOptionsRow({
   )
 }
 
+type ServerAddressMode = "local" | "remote"
+
+function ServerAddressModeToggle({
+  mode,
+  onChange,
+}: {
+  mode: ServerAddressMode
+  onChange: (mode: ServerAddressMode) => void
+}) {
+  return (
+    <div
+      className="flex rounded-2xl p-1"
+      style={{ backgroundColor: "#f7f7f7", border: "1.5px solid #e8e8e8" }}
+      role="tablist"
+      aria-label="How you reach your server"
+    >
+      {(
+        [
+          { id: "local" as const, label: "On my network" },
+          { id: "remote" as const, label: "From anywhere" },
+        ] as const
+      ).map(({ id, label }) => {
+        const active = mode === id
+        return (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            onClick={() => onChange(id)}
+            className="flex-1 rounded-xl py-2.5 text-[12.5px] font-semibold transition-colors"
+            style={{
+              backgroundColor: active ? "#ffffff" : "transparent",
+              color: active ? "#111111" : "#a0a0a0",
+              boxShadow: active ? "0 1px 4px rgba(0,0,0,0.06)" : undefined,
+            }}
+          >
+            {label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 function SetupStepIndicator({ step }: { step: 1 | 2 }) {
   return (
     <div className="flex items-center gap-2">
@@ -298,18 +349,21 @@ export function SignInPage() {
   const [signingIn, setSigningIn] = useState(false)
 
   const [serverUrl, setServerUrl] = useState("")
+  const [serverAddressMode, setServerAddressMode] = useState<ServerAddressMode>("local")
   const [pairingCode, setPairingCode] = useState("")
   const [setupEmail, setSetupEmail] = useState("")
   const [setupPassword, setSetupPassword] = useState("")
   const [showSetupPw, setShowSetupPw] = useState(false)
-  const [verifyingServer, setVerifyingServer] = useState(false)
+  const [setupBusy, setSetupBusy] = useState<"check" | "continue" | null>(null)
   const [connecting, setConnecting] = useState(false)
   const [verifiedApiBase, setVerifiedApiBase] = useState<string | null>(null)
   const [verifiedInstanceName, setVerifiedInstanceName] = useState<string | null>(null)
+  /** True only for first-time setup on this phone (needs desktop connection code). */
+  const [requirePairingCode, setRequirePairingCode] = useState(false)
 
-  const stored = loadConnection()
-  const serverLabel = stored
-    ? displayServerLabel(stored.apiBaseUrl, stored.instanceName)
+  const serverProfile = loadServerProfile()
+  const serverLabel = serverProfile
+    ? displayServerLabel(serverProfile.apiBaseUrl, serverProfile.instanceName)
     : null
 
   function goToPage(page: 0 | 1) {
@@ -326,19 +380,25 @@ export function SignInPage() {
   }, [ready, connection, router])
 
   useEffect(() => {
-    if (!ready) return
-    if (!hasStoredConnection()) {
-      setActivePage(1)
+    if (!ready || !serverProfile?.apiBaseUrl) return
+    const display =
+      serverProfile.webUrl ??
+      serverProfile.apiBaseUrl.replace(/\/api\/?$/i, "")
+    setServerUrl(display)
+    setVerifiedApiBase(serverProfile.apiBaseUrl)
+    setVerifiedInstanceName(serverProfile.instanceName)
+    if (isPublicServerAddress(display) || isPublicServerAddress(serverProfile.apiBaseUrl)) {
+      setServerAddressMode("remote")
     }
-  }, [ready])
+  }, [ready, serverProfile?.apiBaseUrl, serverProfile?.instanceName, serverProfile?.webUrl])
 
   async function handleSignIn(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
 
-    const conn = loadConnection()
-    if (!conn?.apiBaseUrl) {
-      setError("Set up this device first to connect to your server.")
+    const server = loadServerProfile()
+    if (!server?.apiBaseUrl) {
+      setError("Connect to your server first, then sign in with your email and password.")
       goToPage(1)
       return
     }
@@ -346,15 +406,16 @@ export function SignInPage() {
     setSigningIn(true)
     try {
       const auth = await loginMobileDevice(
-        { apiBaseUrl: conn.apiBaseUrl },
+        { apiBaseUrl: server.apiBaseUrl },
         { email, password, deviceName: detectDeviceName() },
       )
-      applyAuth(auth)
-      setConnectedUrl(displayServerLabel(auth.server.apiBaseUrl, auth.server.instanceName))
+      applyAuth(auth, server.apiBaseUrl)
+      const labelBase = authWithClientApiBase(auth, server.apiBaseUrl).server.apiBaseUrl
+      setConnectedUrl(displayServerLabel(labelBase, auth.server.instanceName))
       setShowSuccess(true)
       setTimeout(() => router.push("/home"), 2200)
     } catch (err) {
-      setError(formatApiError(err))
+      setError(formatApiError(err, serverProfile?.apiBaseUrl ?? serverProfile?.webUrl))
     } finally {
       setSigningIn(false)
     }
@@ -362,18 +423,37 @@ export function SignInPage() {
 
   async function handleVerifyServer() {
     setError(null)
-    setVerifyingServer(true)
+    setSetupBusy("check")
     setVerifiedApiBase(null)
     setVerifiedInstanceName(null)
     try {
       const { discover, apiBaseUrl } = await discoverServer(serverUrl)
       setVerifiedApiBase(apiBaseUrl)
       setVerifiedInstanceName(discover.instanceName)
+      const clientUrls = deriveMobileServerUrlsFromApiBase(apiBaseUrl)
+      saveServerProfile({
+        ...clientUrls,
+        instanceName: discover.instanceName,
+      })
     } catch (err) {
-      setError(formatApiError(err))
+      setError(formatApiError(err, serverUrl))
     } finally {
-      setVerifyingServer(false)
+      setSetupBusy(null)
     }
+  }
+
+  async function saveVerifiedServerAndFinishSetup(apiBase: string, instanceName: string) {
+    const clientUrls = deriveMobileServerUrlsFromApiBase(apiBase)
+    saveServerProfile({
+      ...clientUrls,
+      instanceName,
+    })
+    if (!requirePairingCode) {
+      setError(null)
+      goToPage(0)
+      return true
+    }
+    return false
   }
 
   async function handleContinueSetup() {
@@ -383,20 +463,28 @@ export function SignInPage() {
       return
     }
     if (!verifiedApiBase) {
-      setVerifyingServer(true)
+      setSetupBusy("continue")
       try {
         const { discover, apiBaseUrl } = await discoverServer(serverUrl)
         setVerifiedApiBase(apiBaseUrl)
         setVerifiedInstanceName(discover.instanceName)
-        setSetupStep(2)
+        const finished = await saveVerifiedServerAndFinishSetup(
+          apiBaseUrl,
+          discover.instanceName,
+        )
+        if (!finished) setSetupStep(2)
       } catch (err) {
-        setError(formatApiError(err))
+        setError(formatApiError(err, serverUrl))
       } finally {
-        setVerifyingServer(false)
+        setSetupBusy(null)
       }
       return
     }
-    setSetupStep(2)
+    const finished = await saveVerifiedServerAndFinishSetup(
+      verifiedApiBase,
+      verifiedInstanceName ?? "Arciin",
+    )
+    if (!finished) setSetupStep(2)
   }
 
   async function handleConnect(e: React.FormEvent) {
@@ -427,22 +515,31 @@ export function SignInPage() {
         deviceName: detectDeviceName(),
       })
 
-      const clientUrls = deriveMobileServerUrlsFromApiBase(apiBase)
-      applyAuth({
-        ...auth,
-        server: {
-          ...auth.server,
-          ...clientUrls,
-          instanceName: auth.server.instanceName ?? instanceName ?? "Arciin",
-        },
-      })
-      setConnectedUrl(displayServerLabel(auth.server.apiBaseUrl, auth.server.instanceName))
+      applyAuth(auth, apiBase)
+      setConnectedUrl(
+        displayServerLabel(
+          authWithClientApiBase(auth, apiBase).server.apiBaseUrl,
+          auth.server.instanceName ?? instanceName ?? "Arciin",
+        ),
+      )
       setShowSuccess(true)
       setTimeout(() => router.push("/home"), 2200)
     } catch (err) {
-      setError(formatApiError(err))
+      setError(formatApiError(err, serverUrl.trim() || verifiedApiBase))
     } finally {
       setConnecting(false)
+    }
+  }
+
+  function handleServerUrlChange(value: string) {
+    setServerUrl(value)
+    setVerifiedApiBase(null)
+    setVerifiedInstanceName(null)
+    const trimmed = value.trim()
+    if (/^https:\/\//i.test(trimmed) || (trimmed && isPublicServerAddress(trimmed))) {
+      setServerAddressMode("remote")
+    } else if (/^192\.168\.|^10\.|^172\.(1[6-9]|2\d|3[01])\./.test(trimmed)) {
+      setServerAddressMode("local")
     }
   }
 
@@ -474,7 +571,13 @@ export function SignInPage() {
           footer={
             <>
               <CardDivider />
-              <GhostButton label="Set up a new device" onClick={() => goToPage(1)} />
+              <GhostButton
+                label={hasStoredServer() ? "Change server" : "Connect to a server"}
+                onClick={() => {
+                  setRequirePairingCode(!hasStoredServer())
+                  goToPage(1)
+                }}
+              />
             </>
           }
         >
@@ -486,6 +589,17 @@ export function SignInPage() {
               >
                 <Server className="size-3.5 shrink-0 text-[#ff4f12]" />
                 {serverLabel}
+              </p>
+            ) : null}
+            {serverProfile && isLoopbackApiBase(serverProfile.apiBaseUrl) ? (
+              <p
+                className="rounded-xl px-3 py-2 text-[12px] leading-relaxed text-[#b45309]"
+                style={{ backgroundColor: "#fffbeb", border: "1px solid #fde68a" }}
+                role="alert"
+              >
+                This device saved <strong>localhost</strong>, which does not work on your
+                iPhone. Tap <strong>Change server</strong> and enter a LAN IP (e.g. 192.168.1.10)
+                or a public URL if you use a tunnel or domain.
               </p>
             ) : null}
             {error ? <ErrorBanner message={error} /> : null}
@@ -515,15 +629,28 @@ export function SignInPage() {
               onRememberMeChange={setRememberMe}
               onForgotPassword={() => router.push("/sign-in/forgot-password")}
             />
+            <p className="text-[11.5px] leading-relaxed text-[#a0a0a0]">
+              {hasStoredServer()
+                ? "No connection code needed — use your email and password. Change the server address below if you switched to a public URL."
+                : "First time on this phone? Tap Connect to a server and use the 6-digit code from your computer."}
+            </p>
             <OrangeButton loading={signingIn} label="Sign in" loadingLabel="Signing in…" />
           </form>
         </AuthCard>
       ) : (
         <AuthCard
-          title={setupStep === 1 ? "Connect a server" : "Pair this device"}
+          title={
+            setupStep === 1
+              ? requirePairingCode
+                ? "Connect a server"
+                : "Change server"
+              : "Pair this device"
+          }
           subtitle={
             setupStep === 1
-              ? "Enter your Arciin server address on your network"
+              ? serverAddressMode === "remote"
+                ? "Paste your public URL or tunnel link — works from cellular, not only Wi‑Fi"
+                : "Enter your server’s LAN IP while on the same Wi‑Fi"
               : verifiedInstanceName
                 ? `Link to ${verifiedInstanceName}`
                 : "Connection code and your account"
@@ -531,10 +658,7 @@ export function SignInPage() {
           footer={
             <>
               <CardDivider />
-              <GhostButton
-                label="Already connected? Sign in"
-                onClick={() => goToPage(0)}
-              />
+              <GhostButton label="Back to sign in" onClick={() => goToPage(0)} />
             </>
           }
         >
@@ -543,24 +667,37 @@ export function SignInPage() {
           {setupStep === 1 ? (
             <div className="flex flex-col gap-3.5">
               {error ? <ErrorBanner message={error} /> : null}
-              <Field
-                label="Server address"
-                icon={Globe}
-                placeholder="192.168.1.100"
-                value={serverUrl}
-                onChange={(v) => {
-                  setServerUrl(v)
-                  setVerifiedApiBase(null)
-                  setVerifiedInstanceName(null)
+              <ServerAddressModeToggle
+                mode={serverAddressMode}
+                onChange={(mode) => {
+                  setServerAddressMode(mode)
+                  setError(null)
                 }}
+              />
+              <Field
+                label={serverAddressMode === "remote" ? "Public URL" : "Server IP address"}
+                icon={Globe}
+                placeholder={
+                  serverAddressMode === "remote"
+                    ? "https://arciin.example.com"
+                    : "192.168.1.100"
+                }
+                value={serverUrl}
+                onChange={handleServerUrlChange}
                 autoComplete="url"
               />
+              <p className="-mt-1 text-[11.5px] leading-relaxed text-[#a0a0a0]">
+                {serverAddressMode === "remote"
+                  ? "Use a domain, reverse proxy, or generated tunnel URL from Arciin settings. You do not need to be on the same network."
+                  : "Find this in Arciin on your computer, or use your router’s device list. Phone and server must share Wi‑Fi."}
+              </p>
               <OrangeButton
                 type="button"
-                loading={verifyingServer}
+                loading={setupBusy === "check"}
                 label="Check server"
                 loadingLabel="Checking…"
                 onClick={handleVerifyServer}
+                disabled={setupBusy !== null}
               />
               {verifiedInstanceName ? (
                 <p
@@ -572,11 +709,11 @@ export function SignInPage() {
               ) : null}
               <OrangeButton
                 type="button"
-                loading={verifyingServer}
-                label="Continue"
-                loadingLabel="Checking…"
+                loading={setupBusy === "continue"}
+                label={requirePairingCode ? "Continue" : "Save & sign in"}
+                loadingLabel={requirePairingCode ? "Continuing…" : "Saving…"}
                 onClick={handleContinueSetup}
-                disabled={!serverUrl.trim()}
+                disabled={!serverUrl.trim() || setupBusy !== null}
               />
             </div>
           ) : (

@@ -23,7 +23,7 @@ export function getAuthMe(connection: MobileConnection, signal?: AbortSignal) {
 export function updateProfile(connection: MobileConnection, input: UpdateProfileInput) {
   return fetchApi<AuthSession>("/auth/profile", {
     connection,
-    method: "PATCH",
+    method: "POST",
     body: input,
   })
 }
@@ -39,16 +39,16 @@ export function uploadProfileAvatar(connection: MobileConnection, file: File) {
 }
 
 export function removeProfileAvatar(connection: MobileConnection) {
-  return fetchApi<AuthSession>("/auth/profile/avatar", {
+  return fetchApi<AuthSession>("/auth/profile/avatar/remove", {
     connection,
-    method: "DELETE",
+    method: "POST",
   })
 }
 
 export function changePassword(connection: MobileConnection, input: ChangePasswordInput) {
   return fetchApi<{ success: true }>("/auth/password", {
     connection,
-    method: "PATCH",
+    method: "POST",
     body: input,
   })
 }
@@ -62,8 +62,8 @@ export function getSessions(connection: MobileConnection, signal?: AbortSignal) 
 }
 
 export function revokeSession(connection: MobileConnection, id: string) {
-  return fetchApi<{ success: true }>(`/auth/sessions/${id}`, {
+  return fetchApi<{ success: true }>(`/auth/sessions/${encodeURIComponent(id)}/revoke`, {
     connection,
-    method: "DELETE",
+    method: "POST",
   })
 }

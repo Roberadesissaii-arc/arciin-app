@@ -48,7 +48,7 @@ export function MobileHeader() {
   if (pathname !== "/home") return null
 
   return (
-    <header className="sticky top-0 z-40 shrink-0 border-b border-[#e5e5e5] bg-white pt-safe">
+    <header className="z-40 shrink-0 border-b border-[#e5e5e5] bg-white pt-safe">
       <div className="flex h-14 items-center gap-2 px-4">
         <Link href="/home" className="flex shrink-0 items-center">
           <span

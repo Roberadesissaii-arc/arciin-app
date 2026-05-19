@@ -46,7 +46,7 @@ export function MobileActivityPage({ title = "Activity" }: { title?: string }) {
           {title}
         </h2>
         <p className="mt-0.5 text-[13px] text-[#717171]">
-          {loading ? "Loading…" : `${items.length} events in the feed`}
+          {loading ? "Loading…" : `${items.length} items in timeline`}
         </p>
       </div>
 

@@ -14,6 +14,7 @@ import {
 
 import { fetchHomeOverview } from "@/lib/api/dashboard"
 import { formatApiError } from "@/lib/api/errors"
+import { ARCIIN_FOREGROUND_EVENT } from "@/lib/hooks/use-app-foreground"
 import {
   activityIconFor,
   activityTypeLabel,
@@ -125,6 +126,15 @@ export function HomePage() {
     return () => controller.abort()
   }, [ready, connection, load])
 
+  useEffect(() => {
+    const onForeground = () => {
+      if (!connection) return
+      void load()
+    }
+    window.addEventListener(ARCIIN_FOREGROUND_EVENT, onForeground)
+    return () => window.removeEventListener(ARCIIN_FOREGROUND_EVENT, onForeground)
+  }, [connection, load])
+
   const storage = data?.storage
   const storagePct = storage ? storagePercent(storage) : null
   const storageLabel =
@@ -214,10 +224,9 @@ export function HomePage() {
         />
         <StatCard
           label="Events"
-          value={data ? String(data.recentEventsCount) : "—"}
-          sub="in activity feed"
+          value="Live"
+          sub="Socket.IO monitor"
           icon={GalleryVerticalEnd}
-          loading={loading}
           href="/events"
         />
       </div>

@@ -1,5 +1,5 @@
-import { SecurityPage } from "@/components/profile/security-page"
+import { redirect } from "next/navigation"
 
 export default function Page() {
-  return <SecurityPage />
+  redirect("/profile")
 }

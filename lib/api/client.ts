@@ -1,4 +1,4 @@
-import { ApiError, parseApiError } from "@/lib/api/errors"
+import { ApiError, networkErrorMessage, parseApiError } from "@/lib/api/errors"
 import type { MobileConnection } from "@/lib/types/api"
 
 type FetchOptions = {
@@ -53,11 +53,16 @@ export async function fetchApi<T>(path: string, options: FetchOptions = {}): Pro
       signal: options.signal,
       cache: "no-store",
     })
-  } catch {
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw err
+    }
     throw new ApiError(
       0,
       "NETWORK_ERROR",
-      "Could not reach the server. Check the address and that you are on the same network.",
+      networkErrorMessage(
+        options.apiBaseUrl ?? options.connection?.apiBaseUrl ?? options.connection?.webUrl,
+      ),
     )
   }
 
@@ -69,6 +74,17 @@ export async function fetchApi<T>(path: string, options: FetchOptions = {}): Pro
     return undefined as T
   }
 
-  const json = (await response.json()) as { data: T }
-  return json.data
+  const raw = await response.text()
+  if (!raw.trim()) {
+    return undefined as T
+  }
+
+  let json: { data?: T }
+  try {
+    json = JSON.parse(raw) as { data?: T }
+  } catch {
+    throw new ApiError(response.status, "INVALID_RESPONSE", "Server returned an invalid response.")
+  }
+
+  return json.data as T
 }

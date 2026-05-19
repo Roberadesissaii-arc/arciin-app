@@ -476,7 +476,7 @@ export function ChatPage() {
   const canSend = Boolean(input.trim()) && !streaming && selectedProfile && !profilesLoading
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="chat-page">
       <HistoryDrawer
         open={historyOpen}
         onClose={() => setHistoryOpen(false)}
@@ -489,7 +489,7 @@ export function ChatPage() {
         onDelete={(id) => void handleDeleteConversation(id)}
       />
 
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex shrink-0 items-start justify-between gap-3 pb-3">
         <div>
           <h2
             className="text-[22px] font-bold tracking-tight text-[#222222]"
@@ -514,15 +514,14 @@ export function ChatPage() {
 
       {error ? (
         <div
-          className="rounded-xl px-3 py-2 text-[12px] text-[#b91c1c]"
+          className="mb-3 shrink-0 rounded-xl px-3 py-2 text-[12px] text-[#b91c1c]"
           style={{ backgroundColor: "#fef2f2", border: "1px solid #fecaca" }}
         >
           {error}
         </div>
       ) : null}
 
-      {/* Messages — extra top padding pushes content below header */}
-      <div ref={scrollRef} className="mobile-chat-scroll-pad flex flex-col gap-3 scrollbar-hide">
+      <div ref={scrollRef} className="chat-page-messages flex flex-col gap-3 scrollbar-hide">
         {showWelcome ? (
           <div className="flex flex-col items-center gap-5 pt-6">
             <div
@@ -562,7 +561,7 @@ export function ChatPage() {
             </div>
           </div>
         ) : (
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-3 pb-2">
             {messages.map((msg) => (
               <MessageBubble key={msg.id} msg={msg} />
             ))}
@@ -570,9 +569,9 @@ export function ChatPage() {
         )}
       </div>
 
-      <div className="mobile-composer-fixed pointer-events-none">
+      <div className="chat-page-composer">
         <div
-          className="pointer-events-auto mx-auto flex max-w-lg items-center gap-2 rounded-2xl bg-white px-3 py-2.5 shadow-[0_4px_24px_rgba(0,0,0,0.1)]"
+          className="flex items-center gap-2 rounded-2xl bg-white px-3 py-2.5 shadow-[0_2px_12px_rgba(0,0,0,0.06)]"
           style={{ border: "1px solid #e5e5e5" }}
         >
           <input
@@ -591,7 +590,9 @@ export function ChatPage() {
                 ? "Generating…"
                 : profilesLoading
                   ? "Loading…"
-                  : "Ask anything…"
+                  : !selectedProfile
+                    ? "No AI model configured"
+                    : "Ask anything…"
             }
             disabled={streaming || profilesLoading || !selectedProfile}
             className="min-w-0 flex-1 bg-transparent text-[14px] text-[#222222] outline-none placeholder:text-[#a0a0a0] disabled:opacity-50"
@@ -611,7 +612,7 @@ export function ChatPage() {
             )}
           </button>
         </div>
-        <p className="pointer-events-none mt-2 text-center text-[10px] text-[#a0a0a0]">
+        <p className="mt-2 text-center text-[10px] text-[#a0a0a0]">
           {profilesLoading ? (
             <span className="inline-flex items-center gap-1">
               <Loader2 className="size-2.5 animate-spin" />

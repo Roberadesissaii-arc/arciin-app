@@ -10,6 +10,7 @@ import {
   X,
 } from "lucide-react"
 
+import { DeleteAssetDialog } from "@/components/files/delete-asset-dialog"
 import {
   assetDownloadUrl,
   deleteAsset,
@@ -68,6 +69,7 @@ export function AssetViewer({
 }: AssetViewerProps) {
   const [mounted, setMounted] = useState(false)
   const [moveOpen, setMoveOpen] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
   const [busy, setBusy] = useState<"download" | "delete" | "move" | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [previewSrc, setPreviewSrc] = useState<string | null>(null)
@@ -145,13 +147,12 @@ export function AssetViewer({
     }
   }, [asset, connection])
 
-  const handleDelete = useCallback(async () => {
-    const ok = window.confirm(`Delete “${title}”? This cannot be undone.`)
-    if (!ok) return
+  const handleDeleteConfirm = useCallback(async () => {
     setBusy("delete")
     setError(null)
     try {
       await deleteAsset(connection, asset.id)
+      setDeleteOpen(false)
       onDeleted(asset.id)
       onClose()
     } catch (err) {
@@ -159,7 +160,7 @@ export function AssetViewer({
     } finally {
       setBusy(null)
     }
-  }, [asset.id, connection, onClose, onDeleted, title])
+  }, [asset.id, connection, onClose, onDeleted])
 
   const handleMove = useCallback(
     async (libraryId: string) => {
@@ -306,7 +307,7 @@ export function AssetViewer({
           <button
             type="button"
             disabled={Boolean(busy)}
-            onClick={() => void handleDelete()}
+            onClick={() => setDeleteOpen(true)}
             className="flex h-11 items-center justify-center gap-1.5 rounded-xl bg-[#dc2626] text-[12px] font-semibold text-white active:bg-[#b91c1c] disabled:opacity-50"
           >
             {busy === "delete" ? (
@@ -318,6 +319,16 @@ export function AssetViewer({
           </button>
         </div>
       )}
+
+      <DeleteAssetDialog
+        open={deleteOpen}
+        fileName={title}
+        busy={busy === "delete"}
+        onCancel={() => {
+          if (busy !== "delete") setDeleteOpen(false)
+        }}
+        onConfirm={() => void handleDeleteConfirm()}
+      />
     </div>,
     document.body,
   )

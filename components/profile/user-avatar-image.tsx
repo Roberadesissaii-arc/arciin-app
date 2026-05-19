@@ -1,83 +1,132 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { User } from "lucide-react"
+import { useEffect, useMemo, useState } from "react"
 
-import { resolveUserAvatarUrl } from "@/lib/utils/user-avatar-url"
+import { fetchUserAvatarBlob } from "@/lib/api/user-avatar"
 import type { MobileConnection } from "@/lib/types/api"
+import {
+  cacheUserAvatarBlob,
+  clearCachedUserAvatar,
+  readCachedUserAvatarDataUrl,
+} from "@/lib/utils/user-avatar-cache"
 
 type UserAvatarImageProps = {
   connection: MobileConnection
-  avatarUrl: string | null | undefined
+  userId?: string
+  /** Hint from API; we still probe by userId when this is missing (stale local session). */
+  avatarUrl?: string | null | undefined
   updatedAt?: string
   name?: string
   size?: number
   className?: string
   fallbackClassName?: string
+  fallbackTextClassName?: string
+  tone?: "dark" | "light"
+  /** Match desktop account page (rounded-2xl), not a circle. */
+  shape?: "rounded" | "circle"
+}
+
+function shapeClass(shape: "rounded" | "circle") {
+  return shape === "circle" ? "rounded-full" : "rounded-2xl"
 }
 
 export function UserAvatarImage({
   connection,
+  userId,
   avatarUrl,
   updatedAt,
   name,
   size = 72,
   className = "",
   fallbackClassName = "",
+  fallbackTextClassName = "text-[#ff4f12]",
+  tone = "dark",
+  shape = "rounded",
 }: UserAvatarImageProps) {
-  const [src, setSrc] = useState<string | null>(null)
-  const [failed, setFailed] = useState(false)
+  const resolvedUserId = userId ?? connection.user.id
+  const letter = (name?.trim()?.[0] ?? connection.user.name?.trim()?.[0] ?? "?").toUpperCase()
+  const isDark = tone === "dark"
+  const radius = shapeClass(shape)
+
+  const cacheKey = updatedAt ?? avatarUrl ?? connection.user.updatedAt ?? ""
+
+  const storedCache = useMemo(
+    () => readCachedUserAvatarDataUrl(resolvedUserId, cacheKey || undefined),
+    [resolvedUserId, cacheKey],
+  )
+
+  const [src, setSrc] = useState<string | null>(storedCache)
+  const [loading, setLoading] = useState(Boolean(resolvedUserId) && !storedCache)
 
   useEffect(() => {
-    setFailed(false)
-    if (!avatarUrl?.trim()) {
+    if (!resolvedUserId || !connection.sessionToken) {
       setSrc(null)
-      return
-    }
-
-    const url = resolveUserAvatarUrl(connection.apiBaseUrl, avatarUrl, updatedAt)
-    if (!url) {
-      setSrc(null)
+      setLoading(false)
       return
     }
 
     let objectUrl: string | null = null
     let cancelled = false
 
-    void fetch(url, {
-      headers: { Authorization: `Bearer ${connection.sessionToken}` },
-    })
-      .then((res) => {
-        if (!res.ok) throw new Error("avatar")
-        return res.blob()
-      })
-      .then((blob) => {
-        if (cancelled) return
+    if (storedCache) {
+      setSrc(storedCache)
+      setLoading(false)
+    } else {
+      setLoading(true)
+    }
+
+    void (async () => {
+      const blob = await fetchUserAvatarBlob(
+        connection,
+        resolvedUserId,
+        cacheKey || undefined,
+      )
+
+      if (cancelled) return
+
+      if (blob) {
+        const dataUrl =
+          (await cacheUserAvatarBlob(resolvedUserId, blob, cacheKey || undefined)) ?? null
+        if (dataUrl) {
+          setSrc(dataUrl)
+          setLoading(false)
+          return
+        }
         objectUrl = URL.createObjectURL(blob)
         setSrc(objectUrl)
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setSrc(null)
-          setFailed(true)
-        }
-      })
+        setLoading(false)
+        return
+      }
+
+      if (!storedCache) {
+        setSrc(null)
+        clearCachedUserAvatar(resolvedUserId)
+      }
+      setLoading(false)
+    })()
 
     return () => {
       cancelled = true
       if (objectUrl) URL.revokeObjectURL(objectUrl)
     }
-  }, [avatarUrl, connection.apiBaseUrl, connection.sessionToken, updatedAt])
+  }, [
+    cacheKey,
+    connection.apiBaseUrl,
+    connection.sessionToken,
+    resolvedUserId,
+    storedCache,
+  ])
 
   const dim = { width: size, height: size }
+  const ring = isDark ? "ring-2 ring-white/15" : "ring-2 ring-[#e5e5e5]"
 
-  if (src && !failed) {
+  if (src) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
         src={src}
         alt={name ? `${name} profile` : "Profile"}
-        className={`rounded-full object-cover ${className}`}
+        className={`${radius} object-cover ${ring} ${className}`}
         style={dim}
         draggable={false}
       />
@@ -86,12 +135,23 @@ export function UserAvatarImage({
 
   return (
     <div
-      className={`flex items-center justify-center rounded-full ${fallbackClassName}`}
+      className={`flex items-center justify-center font-semibold ${radius} ${ring} ${
+        isDark
+          ? "bg-zinc-800"
+          : `bg-[#f7f7f7] ${fallbackClassName}`
+      }`}
       style={dim}
-      aria-hidden
+      aria-hidden={!name}
     >
-      <User className="text-white" style={{ width: size * 0.42, height: size * 0.42 }} />
+      {loading ? (
+        <span
+          className={`size-[40%] animate-pulse ${radius} ${
+            isDark ? "bg-zinc-600/60" : "bg-zinc-300/50"
+          }`}
+        />
+      ) : (
+        <span className={fallbackTextClassName}>{letter}</span>
+      )}
     </div>
   )
 }
-

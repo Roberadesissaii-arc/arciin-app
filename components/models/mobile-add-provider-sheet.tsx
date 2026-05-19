@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { Loader2, X } from "lucide-react"
 
 import { useConnection } from "@/components/providers/connection-provider"
+import { MobileOverlay } from "@/components/shell/mobile-bottom-sheet"
 import { formatApiError } from "@/lib/api/errors"
 import { createModelProfile } from "@/lib/api/models"
 import type { ModelProfile } from "@/lib/types/models"
@@ -107,11 +108,12 @@ export function MobileAddProviderSheet({
     }
   }
 
+  if (!open) return null
+
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} aria-hidden />
+    <MobileOverlay open={open} onClose={onClose}>
       <div
-        className="relative flex max-h-[90vh] w-full max-w-md flex-col rounded-t-3xl bg-white"
+        className="pointer-events-auto flex max-h-[min(92dvh,800px)] w-full flex-col rounded-t-3xl bg-white pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-12px_48px_rgba(0,0,0,0.18)]"
         style={{ borderTop: "1px solid #e5e5e5" }}
       >
         <div className="flex shrink-0 items-start justify-between gap-3 border-b border-[#f0f0f0] px-5 py-4">
@@ -236,6 +238,6 @@ export function MobileAddProviderSheet({
           </button>
         </div>
       </div>
-    </div>
+    </MobileOverlay>
   )
 }

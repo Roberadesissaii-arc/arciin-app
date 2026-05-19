@@ -6,30 +6,30 @@ import { ChevronRight, CloudUpload, Loader2, RefreshCw } from "lucide-react"
 import { useFilesChromeOptional } from "@/components/files/files-chrome-context"
 import { assetCountForFilter } from "@/lib/files/library-helpers"
 import { FILES_FILTERS } from "@/lib/files/filter-config"
+import {
+  mobilePageSubtitleClass,
+  mobilePageTitleClass,
+  mobilePageTitleStyle,
+} from "@/lib/ui/mobile-page-header"
 
-/** Files top bar — outside scrolling main, same placement as home search bar. */
+/** Files top bar — shell sibling (outside scrolling main), same role as home search bar. */
 export function FilesMobileHeader() {
   const pathname = usePathname()
   const ctx = useFilesChromeOptional()
 
-  if (pathname !== "/files") return null
+  if (pathname !== "/files" && !pathname.startsWith("/files/")) return null
 
   const chrome = ctx?.chrome
 
   return (
-    <header className="mobile-files-header z-40 shrink-0 border-b border-[#e5e5e5] bg-[#f7f7f7] pt-safe">
-      <div className="flex flex-col gap-3 px-4 pb-3">
+    <header className="z-40 shrink-0 border-b border-[#e5e5e5] bg-[#f7f7f7] pt-safe">
+      <div className="flex flex-col gap-3 px-4 pb-3 pt-1">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h2
-              className="text-[22px] font-bold tracking-tight text-[#222222]"
-              style={{ fontFamily: "var(--font-space-grotesk, sans-serif)" }}
-            >
+            <h2 className={mobilePageTitleClass} style={mobilePageTitleStyle}>
               Files
             </h2>
-            <p className="mt-0.5 truncate text-[13px] text-[#717171]">
-              {chrome?.subtitle ?? "Loading…"}
-            </p>
+            <p className={mobilePageSubtitleClass}>{chrome?.subtitle ?? "Loading…"}</p>
           </div>
           <div className="flex shrink-0 gap-2">
             <button
@@ -46,7 +46,7 @@ export function FilesMobileHeader() {
             </button>
             <button
               type="button"
-              disabled={!chrome?.canUpload || chrome.uploading}
+              disabled={!chrome?.canUpload || chrome?.uploading}
               onClick={() => chrome?.onUpload()}
               className="flex size-9 items-center justify-center rounded-xl text-white active:opacity-80 disabled:opacity-50"
               style={{ backgroundColor: "#ff4f12" }}
@@ -62,7 +62,7 @@ export function FilesMobileHeader() {
         </div>
 
         {chrome?.libraryScoped && chrome.breadcrumbLibrary ? (
-          <div className="flex flex-wrap items-center gap-1 text-[12px]">
+          <div className="flex flex-wrap items-center gap-1 text-[11px]">
             <button
               type="button"
               onClick={() => chrome.onGoToLibraryRoot()}
@@ -95,7 +95,7 @@ export function FilesMobileHeader() {
                   type="button"
                   onClick={() => chrome?.onChangeFilter(id)}
                   disabled={!chrome}
-                  className="flex shrink-0 items-center gap-1.5 rounded-2xl py-2 pl-3.5 pr-3 text-[13px] font-semibold transition-colors active:opacity-70 disabled:opacity-50"
+                  className="flex shrink-0 items-center gap-1.5 rounded-2xl py-2 pl-3.5 pr-3 text-[12px] font-semibold transition-colors active:opacity-70 disabled:opacity-50"
                   style={{
                     backgroundColor: active ? "#ff4f12" : "#ffffff",
                     border: `1px solid ${active ? "#ff4f12" : "#e5e5e5"}`,

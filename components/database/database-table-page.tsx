@@ -8,6 +8,8 @@ import {
   ChevronRight,
   Database,
   RefreshCw,
+  Search,
+  X,
 } from "lucide-react"
 
 import { useConnection } from "@/components/providers/connection-provider"
@@ -322,6 +324,7 @@ export function DatabaseTablePage({ tableName }: { tableName: string }) {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [query, setQuery] = useState("")
 
   const load = useCallback(
     async (signal?: AbortSignal, isRefresh = false) => {
@@ -364,29 +367,90 @@ export function DatabaseTablePage({ tableName }: { tableName: string }) {
   const pageSize = data?.limit ?? 20
   const soloRow = (data?.rows.length ?? 0) === 1 && page === 1
 
+  const filteredRows = query.trim()
+    ? (data?.rows ?? []).filter((row) =>
+        Object.values(row).some((v) =>
+          String(v ?? "").toLowerCase().includes(query.toLowerCase()),
+        ),
+      )
+    : (data?.rows ?? [])
+
+  const label = meta?.label ?? tableName
+  const description = meta?.description ?? "Browse and inspect records from this database table."
+
   return (
-    <div className="flex min-h-0 flex-col gap-3 pb-2">
-      <div className="flex items-center gap-2">
-        <Link
-          href="/database"
-          className="flex size-9 shrink-0 items-center justify-center rounded-xl text-[#717171] active:opacity-70"
-          style={CARD_STYLE}
-          aria-label="Back to database"
+    <div className="flex flex-col gap-4">
+
+      {/* ── sticky intro card ───────────────────────────────────── */}
+      <div className="sticky top-0 z-10 -mx-4 -mt-4 px-4 pt-4 pb-2" style={{ backgroundColor: "#f7f7f7" }}>
+        <div
+          className="overflow-hidden rounded-3xl"
+          style={{ background: "linear-gradient(155deg, #ff6a30 0%, #c82d00 100%)" }}
         >
-          <ArrowLeft className="size-4" />
-        </Link>
-        <button
-          type="button"
-          onClick={() => void load(undefined, true)}
-          disabled={loading && !data}
-          className="ml-auto flex size-9 items-center justify-center rounded-xl text-[#717171] disabled:opacity-40"
-          style={CARD_STYLE}
-          aria-label="Refresh"
-        >
-          <RefreshCw className={`size-4 ${refreshing ? "animate-spin" : ""}`} />
-        </button>
+          <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-5">
+            <div className="min-w-0 flex-1">
+              <p
+                className="text-[22px] font-black leading-none tracking-tight text-white"
+                style={{ fontFamily: "var(--font-space-grotesk, sans-serif)" }}
+              >
+                {label}
+              </p>
+              <p className="mt-2 text-[12.5px] leading-relaxed" style={{ color: "rgba(255,255,255,0.72)" }}>
+                {description}
+              </p>
+              <p className="mt-2 text-[12px] font-semibold" style={{ color: "rgba(255,255,255,0.9)" }}>
+                {loading && !data
+                  ? "Loading…"
+                  : data
+                    ? `${data.total.toLocaleString()} row${data.total === 1 ? "" : "s"} · page ${page} of ${totalPages}`
+                    : "Read-only · PostgreSQL"}
+              </p>
+            </div>
+            <Link
+              href="/database"
+              className="flex size-9 shrink-0 items-center justify-center rounded-xl active:opacity-70"
+              style={{ backgroundColor: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.3)" }}
+              aria-label="Back to database"
+            >
+              <ArrowLeft className="size-4 text-white" />
+            </Link>
+          </div>
+        </div>
+
+        {/* search + refresh */}
+        <div className="mt-2 flex items-center gap-2">
+          <div
+            className="flex flex-1 items-center gap-2 rounded-2xl bg-white px-3.5 py-2.5"
+            style={{ border: "1px solid #e5e5e5" }}
+          >
+            <Search className="size-4 shrink-0 text-[#c0c0c0]" />
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={`Search ${label.toLowerCase()}…`}
+              className="min-w-0 flex-1 bg-transparent text-[13px] text-[#222222] outline-none placeholder:text-[#c0c0c0]"
+            />
+            {query ? (
+              <button type="button" onClick={() => setQuery("")} className="shrink-0 text-[#c0c0c0] active:text-[#717171]">
+                <X className="size-3.5" />
+              </button>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            onClick={() => void load(undefined, true)}
+            disabled={loading && !data}
+            className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-white text-[#717171] disabled:opacity-50 active:bg-[#f7f7f7]"
+            style={{ border: "1px solid #e5e5e5" }}
+            aria-label="Refresh"
+          >
+            <RefreshCw className={`size-4 ${refreshing ? "animate-spin" : ""}`} />
+          </button>
+        </div>
       </div>
 
+      {/* ── error ───────────────────────────────────────────────── */}
       {error ? (
         <div
           className="rounded-xl px-4 py-3 text-[12px] text-[#b91c1c]"
@@ -396,47 +460,47 @@ export function DatabaseTablePage({ tableName }: { tableName: string }) {
         </div>
       ) : null}
 
+      {/* ── content ─────────────────────────────────────────────── */}
       {loading && !data?.rows.length ? (
         <RecordsSkeleton solo={soloRow} />
       ) : !data?.rows.length ? (
         <div
-          className="flex min-h-[min(360px,50vh)] flex-col items-center justify-center rounded-2xl px-6"
-          style={CARD_STYLE}
+          className="flex flex-col items-center justify-center gap-3 rounded-2xl bg-white py-14 px-6 text-center"
+          style={{ border: "1px solid #e5e5e5" }}
         >
-          <Database className="mb-3 size-10 text-[#d4d4d4]" />
-          <p className="text-[15px] font-semibold text-[#222222]">No rows yet</p>
-          <p className="mt-1 text-center text-[13px] text-[#a0a0a0]">
-            This table exists but has no records.
-          </p>
+          <div
+            className="flex size-14 items-center justify-center rounded-2xl"
+            style={{ backgroundColor: "#fff4f0", border: "1px solid rgba(255,79,18,0.15)" }}
+          >
+            <Database className="size-6 text-[#ff4f12]" />
+          </div>
+          <div>
+            <p className="text-[14px] font-semibold text-[#222222]">No rows yet</p>
+            <p className="mt-0.5 text-[12px] text-[#a0a0a0]">
+              This table exists but has no records.
+            </p>
+          </div>
         </div>
       ) : soloRow && meta && data.rows[0] ? (
         <SoloRecordDetail row={data.rows[0]} columns={columns} meta={meta} data={data} />
       ) : (
-        <>
-          {meta ? (
-            <TableHero
-              meta={meta}
-              data={data}
-              tableName={tableName}
+        <div className={`flex flex-col gap-2.5 ${refreshing ? "opacity-70" : ""}`}>
+          {filteredRows.map((row, index) => (
+            <RecordCard
+              key={String(row.id ?? index)}
+              row={row}
+              rowIndex={index}
               page={page}
-              totalPages={totalPages}
-              compact={(data?.rows.length ?? 0) > 3}
+              pageSize={pageSize}
+              columns={columns}
             />
+          ))}
+          {filteredRows.length === 0 && query ? (
+            <p className="py-10 text-center text-[13px] text-[#a0a0a0]">
+              No records match &ldquo;{query}&rdquo;.
+            </p>
           ) : null}
-
-          <div className={`flex flex-col gap-2.5 ${refreshing ? "opacity-70" : ""}`}>
-            {data?.rows.map((row, index) => (
-              <RecordCard
-                key={String(row.id ?? index)}
-                row={row}
-                rowIndex={index}
-                page={page}
-                pageSize={pageSize}
-                columns={columns}
-              />
-            ))}
-          </div>
-        </>
+        </div>
       )}
 
       <PaginationBar

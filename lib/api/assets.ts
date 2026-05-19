@@ -78,9 +78,10 @@ export function moveAsset(
 }
 
 export function deleteAsset(connection: MobileConnection, assetId: string) {
-  return fetchApi<{ success: true }>(`/assets/${assetId}`, {
+  return fetchApi<{ success: true }>(`/assets/${assetId}/delete`, {
     connection,
-    method: "DELETE",
+    method: "POST",
+    body: {},
   })
 }
 

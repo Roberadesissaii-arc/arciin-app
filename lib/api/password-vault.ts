@@ -53,3 +53,14 @@ export function lockPasswordVault(connection: MobileConnection) {
     body: {},
   })
 }
+
+export function updatePasswordVaultDisplay(
+  connection: MobileConnection,
+  input: Partial<PasswordVaultDisplaySettings> & { accountPassword?: string },
+) {
+  return fetchApi<PasswordVaultDisplaySettings>("/settings/password-vault/display", {
+    connection,
+    method: "PATCH",
+    body: input,
+  })
+}

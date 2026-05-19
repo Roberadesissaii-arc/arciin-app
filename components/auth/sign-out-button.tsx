@@ -29,7 +29,7 @@ export function SignOutButton() {
       </div>
       <div className="min-w-0 flex-1 text-left">
         <p className="text-[14px] font-medium text-[#dc2626]">Sign out</p>
-        <p className="text-[11px] text-[#a0a0a0]">Disconnect this device</p>
+        <p className="text-[11px] text-[#a0a0a0]">Sign in again with password — no pairing code</p>
       </div>
     </button>
   )

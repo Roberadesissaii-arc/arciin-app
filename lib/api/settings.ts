@@ -44,6 +44,30 @@ export function updateRemoteAccessSettings(
   })
 }
 
+export type CloudflareTunnelStatus = {
+  running: boolean
+  url: string | null
+  localTarget: string | null
+  error: string | null
+  cloudflareTunnelEnabled: boolean
+  publicUrl?: string | null
+  mobilePublicUrl?: string | null
+}
+
+export function getCloudflareTunnelStatus(connection: MobileConnection, signal?: AbortSignal) {
+  return fetchApi<CloudflareTunnelStatus>("/settings/cloudflare-tunnel", {
+    connection,
+    signal,
+  })
+}
+
+export function startCloudflareTunnelForMobile(connection: MobileConnection) {
+  return fetchApi<CloudflareTunnelStatus>("/settings/cloudflare-tunnel/start-mobile", {
+    connection,
+    method: "POST",
+  })
+}
+
 export function getApiKeys(connection: MobileConnection, signal?: AbortSignal) {
   return fetchApi<ApiKeySummary[]>("/api-keys", {
     connection,

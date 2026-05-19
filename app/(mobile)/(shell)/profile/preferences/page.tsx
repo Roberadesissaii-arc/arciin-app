@@ -1,5 +1,5 @@
-import { PreferencesPage } from "@/components/profile/preferences-page"
+import { redirect } from "next/navigation"
 
 export default function Page() {
-  return <PreferencesPage />
+  redirect("/profile")
 }

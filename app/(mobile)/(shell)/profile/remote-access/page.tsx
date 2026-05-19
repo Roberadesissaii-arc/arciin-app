@@ -1,2 +1,5 @@
-import { RemoteAccessPage } from "@/components/profile/remote-access-page"
-export default function Page() { return <RemoteAccessPage /> }
+import { redirect } from "next/navigation"
+
+export default function Page() {
+  redirect("/profile")
+}

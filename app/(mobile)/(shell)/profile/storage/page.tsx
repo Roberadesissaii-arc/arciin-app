@@ -1,2 +1,5 @@
-import { StoragePage } from "@/components/profile/storage-page"
-export default function Page() { return <StoragePage /> }
+import { redirect } from "next/navigation"
+
+export default function Page() {
+  redirect("/profile")
+}

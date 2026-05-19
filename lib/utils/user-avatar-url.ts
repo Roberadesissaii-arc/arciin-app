@@ -7,15 +7,16 @@ export function resolveUserAvatarUrl(
   if (!avatarUrl?.trim()) return null
 
   let path = avatarUrl.trim()
-  if (path.startsWith("http://") || path.startsWith("https://")) {
-    // already absolute
-  } else {
-    if (!path.startsWith("/")) {
-      path = path.startsWith("api/") ? `/${path}` : `/api/${path.replace(/^\/?api\//, "")}`
+  if (!path.startsWith("http://") && !path.startsWith("https://")) {
+    const apiBase = apiBaseUrl.replace(/\/+$/, "")
+    const normalized = path.startsWith("/") ? path : `/${path}`
+    if (normalized.startsWith("/api/")) {
+      path = apiBase.endsWith("/api")
+        ? `${apiBase}${normalized.slice(4)}`
+        : `${apiBase}${normalized}`
+    } else {
+      path = `${apiBase}${normalized}`
     }
-    const base = apiBaseUrl.replace(/\/+$/, "")
-    const origin = base.endsWith("/api") ? base.slice(0, -4) : base
-    path = `${origin}${path}`
   }
 
   if (!cacheKey) return path

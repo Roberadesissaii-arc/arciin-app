@@ -1,2 +1,5 @@
-import { IntegrationsPage } from "@/components/profile/integrations-page"
-export default function Page() { return <IntegrationsPage /> }
+import { redirect } from "next/navigation"
+
+export default function Page() {
+  redirect("/profile")
+}

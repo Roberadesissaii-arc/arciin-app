@@ -5,11 +5,9 @@ import {
   Database,
   Files,
   GalleryVerticalEnd,
-  HardDrive,
   LayoutGrid,
   Bell,
   MonitorDot,
-  PackagePlus,
   Settings,
   Sparkles,
   User,
@@ -31,11 +29,9 @@ export const MOBILE_JUMP_NAV: MobileNavItem[] = [
   { title: "Jobs", href: "/jobs", icon: BriefcaseBusiness, keywords: "background queue worker" },
   { title: "Events", href: "/events", icon: GalleryVerticalEnd, keywords: "socket monitor stream" },
   { title: "Activity", href: "/activity", icon: MonitorDot, keywords: "timeline feed log" },
-  { title: "Integrations", href: "/profile/integrations", icon: PackagePlus, keywords: "plex jellyfin connector" },
   { title: "Uploads", href: "/files", icon: CloudUpload, keywords: "upload queue sessions" },
   { title: "Notifications", href: "/notifications", icon: Bell },
-  { title: "Storage", href: "/profile/storage", icon: HardDrive },
-  { title: "Settings", href: "/profile/preferences", icon: Settings },
+  { title: "Settings", href: "/profile", icon: Settings, keywords: "preferences integrations api keys storage" },
 ]
 
 export function filterMobileNavItems(query: string) {

@@ -1,5 +1,5 @@
-import { ApiKeysPage } from "@/components/profile/api-keys-page"
+import { redirect } from "next/navigation"
 
 export default function Page() {
-  return <ApiKeysPage />
+  redirect("/profile")
 }

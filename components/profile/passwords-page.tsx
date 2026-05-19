@@ -15,6 +15,7 @@ import {
 } from "lucide-react"
 
 import { useConnection } from "@/components/providers/connection-provider"
+import { MobileBottomSheet } from "@/components/shell/mobile-bottom-sheet"
 import { formatApiError } from "@/lib/api/errors"
 import {
   getPasswordVault,
@@ -58,42 +59,36 @@ function UnlockSheet({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} aria-hidden />
-      <div
-        className="relative z-10 w-full max-w-lg rounded-t-3xl bg-white px-5 pb-8 pt-5"
-        style={{ paddingBottom: "max(2rem, env(safe-area-inset-bottom))" }}
+    <MobileBottomSheet
+      open
+      onClose={onClose}
+      title="Unlock vault"
+      description={
+        pinConfigured
+          ? "Enter your vault PIN to view and copy passwords."
+          : "Enter your Arciin account password to view and copy vault secrets."
+      }
+    >
+      {error ? <p className="mb-3 text-[12px] text-[#b91c1c]">{error}</p> : null}
+      <input
+        type="password"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        placeholder={pinConfigured ? "Vault PIN" : "Account password"}
+        className="w-full rounded-xl border border-[#e5e5e5] bg-[#f7f7f7] px-3 py-2.5 text-[14px] outline-none focus:border-[#ff4f12]"
+        autoComplete={pinConfigured ? "off" : "current-password"}
+      />
+      <button
+        type="button"
+        disabled={saving || !value.trim()}
+        onClick={() => void submit()}
+        className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl py-3 text-[14px] font-semibold text-white disabled:opacity-50"
+        style={{ backgroundColor: "#ff4f12" }}
       >
-        <div className="mb-4 flex items-center gap-2">
-          <Lock className="size-5 text-[#ff4f12]" />
-          <h3 className="text-[17px] font-bold text-[#222222]">Unlock vault</h3>
-        </div>
-        <p className="mb-4 text-[13px] text-[#717171]">
-          {pinConfigured
-            ? "Enter your vault PIN to view and copy passwords."
-            : "Enter your Arciin account password to view and copy vault secrets."}
-        </p>
-        {error ? <p className="mb-3 text-[12px] text-[#b91c1c]">{error}</p> : null}
-        <input
-          type="password"
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          placeholder={pinConfigured ? "Vault PIN" : "Account password"}
-          className="w-full rounded-xl border border-[#e5e5e5] bg-[#f7f7f7] px-3 py-2.5 text-[14px] outline-none focus:border-[#ff4f12]"
-          autoComplete={pinConfigured ? "off" : "current-password"}
-        />
-        <button
-          type="button"
-          disabled={saving || !value.trim()}
-          onClick={() => void submit()}
-          className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl py-3 text-[14px] font-semibold text-white disabled:opacity-50"
-          style={{ backgroundColor: "#ff4f12" }}
-        >
-          {saving ? <Loader2 className="size-4 animate-spin" /> : null}
-          Unlock
-        </button>
-      </div>
-    </div>
+        {saving ? <Loader2 className="size-4 animate-spin" /> : null}
+        Unlock
+      </button>
+    </MobileBottomSheet>
   )
 }
 

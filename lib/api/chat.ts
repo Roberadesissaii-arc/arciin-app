@@ -76,7 +76,7 @@ export function getChatSelection(connection: MobileConnection, signal?: AbortSig
 export function setChatSelection(connection: MobileConnection, input: ChatSelection) {
   return fetchApi<ChatSelection>("/chat/selection", {
     connection,
-    method: "PUT",
+    method: "POST",
     body: input,
   })
 }

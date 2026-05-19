@@ -18,9 +18,10 @@ export function updateUserPreferences(
     accessibility: Partial<UserPreferences["accessibility"]>
   }>,
 ) {
+  /** POST avoids iOS PWA CORS preflight failures on PATCH. */
   return fetchApi<UserPreferences>("/auth/preferences", {
     connection,
-    method: "PATCH",
+    method: "POST",
     body: patch,
   })
 }

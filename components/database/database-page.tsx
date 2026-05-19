@@ -18,6 +18,11 @@ import { fetchHealth } from "@/lib/api/health"
 import { listAppDatabases } from "@/lib/api/app-databases"
 import { tableIconFor } from "@/lib/database/table-icons"
 import type { AdminTable, HealthStatus } from "@/lib/types/database"
+import {
+  mobilePageSubtitleClass,
+  mobilePageTitleClass,
+  mobilePageTitleStyle,
+} from "@/lib/ui/mobile-page-header"
 
 function StatPillSkeleton() {
   return (
@@ -189,15 +194,10 @@ export function DatabasePage() {
     <div className="flex flex-col gap-5">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2
-            className="text-[22px] font-bold tracking-tight text-[#222222]"
-            style={{ fontFamily: "var(--font-space-grotesk, sans-serif)" }}
-          >
+          <h2 className={mobilePageTitleClass} style={mobilePageTitleStyle}>
             Database
           </h2>
-          <p className="mt-0.5 text-[13px] text-[#717171]">
-            PostgreSQL · Prisma · live record counts
-          </p>
+          <p className={mobilePageSubtitleClass}>PostgreSQL · Prisma · live record counts</p>
         </div>
         <button
           type="button"

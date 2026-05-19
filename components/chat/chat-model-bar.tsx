@@ -4,9 +4,17 @@ import { useState } from "react"
 import { ChevronDown, Loader2, X } from "lucide-react"
 
 import { setChatSelection } from "@/lib/api/chat"
+import { chatModelForProfile } from "@/lib/models/model-helpers"
+import { providerMetaFor } from "@/lib/models/provider-catalog"
 import type { MobileConnection } from "@/lib/types/api"
 import type { ChatProfile } from "@/lib/types/chat"
+import type { ModelProfile } from "@/lib/types/models"
 import { cn } from "@/lib/utils"
+
+function modelForChatProfile(profile: ChatProfile): string {
+  const meta = providerMetaFor(profile.provider)
+  return chatModelForProfile(profile as ModelProfile, meta)
+}
 
 export function ChatModelBar({
   connection,
@@ -32,9 +40,10 @@ export function ChatModelBar({
     (loading ? "Loading model…" : "Select model")
 
   async function pick(profile: ChatProfile) {
-    const model = selectedProfile?.id === profile.id && selectedModel
-      ? selectedModel
-      : profile.defaultModel ?? ""
+    const model =
+      selectedProfile?.id === profile.id && selectedModel
+        ? selectedModel
+        : modelForChatProfile(profile)
     onSelect(profile, model)
     setOpen(false)
     try {
@@ -73,12 +82,12 @@ export function ChatModelBar({
         <>
           <button
             type="button"
-            className="fixed inset-0 z-40 bg-black/40"
+            className="mobile-overlay-root fixed inset-0 z-[100] bg-black/40"
             aria-label="Close model picker"
             onClick={() => setOpen(false)}
           />
           <div
-            className="fixed inset-x-3 bottom-[max(5rem,env(safe-area-inset-bottom))] z-50 max-h-[min(420px,70vh)] overflow-hidden rounded-2xl bg-white shadow-xl"
+            className="fixed inset-x-3 bottom-0 z-[100] max-h-[min(420px,70vh)] overflow-hidden rounded-t-2xl bg-white pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-xl"
             style={{ border: "1px solid #e5e5e5" }}
             role="dialog"
             aria-label="Choose model"

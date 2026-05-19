@@ -27,8 +27,13 @@ export type StorageSettings = {
 }
 
 export type RemoteAccessSettings = {
+  mobilePublicUrl?: string | null
+  requestOrigin?: string | null
   publicUrl?: string | null
   localUrl?: string | null
+  loopbackUrl?: string | null
+  lanUrls?: string[]
+  primaryLanUrl?: string | null
   currentUrl?: string | null
   mode: "local" | "reverse-proxy" | "cloudflare-tunnel"
   reverseProxyEnabled: boolean
@@ -127,6 +132,48 @@ export type LogsOverview = {
     queued: number
     active: number
   }
+}
+
+export type ModelProfile = {
+  id: string
+  provider: string
+  displayName: string
+  apiKeyMasked: string | null
+  hasApiKey: boolean
+  baseUrl: string | null
+  defaultModel: string | null
+  isDefault: boolean
+  isEnabled: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export type CreateModelProfileInput = {
+  provider: string
+  displayName: string
+  apiKey?: string | null
+  baseUrl?: string | null
+  defaultModel?: string | null
+  isDefault?: boolean
+  isEnabled?: boolean
+}
+
+export type UpdateModelProfileInput = Partial<CreateModelProfileInput>
+
+export type OllamaCloudModelProbe = {
+  name: string
+  access: "available" | "paid" | "rate_limited" | "error"
+  message?: string
+}
+
+export type OllamaAvailableModelsResult = {
+  models: string[]
+  fromCache: boolean
+}
+
+export type OllamaCloudModelsResult = {
+  probes: OllamaCloudModelProbe[]
+  fromCache: boolean
 }
 
 export type HomeOverview = {

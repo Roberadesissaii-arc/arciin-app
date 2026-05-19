@@ -2,11 +2,11 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Database, Files, LayoutGrid, Sparkles, User } from "lucide-react"
+import { Boxes, Files, LayoutGrid, Sparkles, User } from "lucide-react"
 
 const ALL_ITEMS = [
   { href: "/home", label: "Home", icon: LayoutGrid },
-  { href: "/database", label: "Database", icon: Database },
+  { href: "/models", label: "Models", icon: Boxes },
   { href: "/chat", label: "Chat", icon: Sparkles },
   { href: "/files", label: "Files", icon: Files },
   { href: "/profile", label: "Profile", icon: User },
@@ -17,13 +17,14 @@ function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`)
 }
 
+/** Floating bottom nav — offset via `.mobile-bottom-nav` in globals.css */
 export function BottomNav() {
   const pathname = usePathname()
 
   return (
     <nav
       aria-label="Main navigation"
-      className="mobile-bottom-nav pointer-events-auto fixed inset-x-4 z-50 flex h-16 items-center rounded-3xl border border-[#2a2a2a] bg-[#111111] shadow-[0_4px_28px_rgba(0,0,0,0.22)]"
+      className="mobile-bottom-nav pointer-events-auto fixed inset-x-4 z-30 flex h-16 items-center rounded-3xl border border-[#2a2a2a] bg-[#111111] shadow-[0_4px_28px_rgba(0,0,0,0.22)]"
     >
       {ALL_ITEMS.map(({ href, label, icon: Icon }) => {
         const active = isActive(pathname, href)

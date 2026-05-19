@@ -3,15 +3,16 @@
 import { usePathname } from "next/navigation"
 
 import { FilesMobileHeader } from "@/components/files/files-mobile-header"
+import { ModelsMobileHeader } from "@/components/models/models-mobile-header"
 import { MobileHeader } from "@/components/shell/mobile-header"
 
-/** Fixed top chrome outside scrolling main (home search bar, files library bar). */
+/** Sticky top chrome (home search bar, files library bar, models bar) — stays put while the page scrolls. */
 export function MobileTopChrome() {
   const pathname = usePathname()
 
   if (pathname === "/home") {
     return (
-      <div className="shrink-0">
+      <div className="sticky top-0 z-40 shrink-0">
         <MobileHeader />
       </div>
     )
@@ -19,8 +20,16 @@ export function MobileTopChrome() {
 
   if (pathname === "/files" || pathname.startsWith("/files/")) {
     return (
-      <div className="shrink-0">
+      <div className="sticky top-0 z-40 shrink-0">
         <FilesMobileHeader />
+      </div>
+    )
+  }
+
+  if (pathname === "/models" || pathname.startsWith("/models/")) {
+    return (
+      <div className="sticky top-0 z-40 shrink-0">
+        <ModelsMobileHeader />
       </div>
     )
   }

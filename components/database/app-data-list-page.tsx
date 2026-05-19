@@ -9,6 +9,7 @@ import {
   Loader2,
   Plus,
   RefreshCw,
+  Search,
   Trash2,
   X,
 } from "lucide-react"
@@ -173,6 +174,7 @@ export function AppDataListPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
+  const [query, setQuery] = useState("")
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -212,38 +214,80 @@ export function AppDataListPage() {
     connection?.user.role === "ADMIN" ||
     connection?.user.role === "MEMBER"
 
+  const filtered = query.trim()
+    ? databases.filter((db) =>
+        db.name.toLowerCase().includes(query.toLowerCase()),
+      )
+    : databases
+
   return (
-    <div className="flex flex-col gap-5">
-      <div className="flex items-center gap-2">
-        <Link
-          href="/database"
-          className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white text-[#717171]"
-          style={{ border: "1px solid #e5e5e5" }}
-          aria-label="Back"
+    <div className="flex flex-col gap-4">
+
+      {/* ── sticky intro card ───────────────────────────────────── */}
+      <div className="sticky top-0 z-10 -mx-4 -mt-4 px-4 pt-4 pb-2" style={{ backgroundColor: "#f7f7f7" }}>
+        <div
+          className="overflow-hidden rounded-3xl"
+          style={{ background: "linear-gradient(155deg, #ff6a30 0%, #c82d00 100%)" }}
         >
-          <ArrowLeft className="size-4" />
-        </Link>
-        <div className="min-w-0 flex-1">
-          <h2
-            className="text-[20px] font-bold text-[#222222]"
-            style={{ fontFamily: "var(--font-space-grotesk, sans-serif)" }}
-          >
-            App data
-          </h2>
-          <p className="text-[12px] text-[#717171]">
-            {loading ? "Loading…" : `${databases.length} logical database${databases.length === 1 ? "" : "s"}`}
-          </p>
+          <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-5">
+            <div className="min-w-0 flex-1">
+              <p
+                className="text-[22px] font-black leading-none tracking-tight text-white"
+                style={{ fontFamily: "var(--font-space-grotesk, sans-serif)" }}
+              >
+                App Data
+              </p>
+              <p className="mt-2 text-[12.5px] leading-relaxed" style={{ color: "rgba(255,255,255,0.72)" }}>
+                Store and manage structured JSON records for your apps and API clients. Each database has its own tables and access key.
+              </p>
+              <p className="mt-2 text-[12px] font-semibold" style={{ color: "rgba(255,255,255,0.9)" }}>
+                {loading
+                  ? "Loading…"
+                  : `${databases.length} database${databases.length === 1 ? "" : "s"}`}
+              </p>
+            </div>
+            <Link
+              href="/database"
+              className="flex size-9 shrink-0 items-center justify-center rounded-xl active:opacity-70"
+              style={{ backgroundColor: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.3)" }}
+              aria-label="Back to Database"
+            >
+              <ArrowLeft className="size-4 text-white" />
+            </Link>
+          </div>
         </div>
-        <button
-          type="button"
-          onClick={() => void load()}
-          disabled={loading}
-          className="flex size-9 items-center justify-center rounded-xl bg-white text-[#717171]"
-          style={{ border: "1px solid #e5e5e5" }}
-          aria-label="Refresh"
-        >
-          <RefreshCw className={`size-4 ${loading ? "animate-spin" : ""}`} />
-        </button>
+
+        {/* ── search + refresh row ───────────────────────────────── */}
+        <div className="mt-2 flex items-center gap-2">
+          <div
+            className="flex flex-1 items-center gap-2 rounded-2xl bg-white px-3.5 py-2.5"
+            style={{ border: "1px solid #e5e5e5" }}
+          >
+            <Search className="size-4 shrink-0 text-[#c0c0c0]" />
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search databases…"
+              className="min-w-0 flex-1 bg-transparent text-[13px] text-[#222222] outline-none placeholder:text-[#c0c0c0]"
+            />
+            {query ? (
+              <button type="button" onClick={() => setQuery("")} className="shrink-0 text-[#c0c0c0] active:text-[#717171]">
+                <X className="size-3.5" />
+              </button>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            onClick={() => void load()}
+            disabled={loading}
+            className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-white text-[#717171] disabled:opacity-50 active:bg-[#f7f7f7]"
+            style={{ border: "1px solid #e5e5e5" }}
+            aria-label="Refresh"
+          >
+            <RefreshCw className={`size-4 ${loading ? "animate-spin" : ""}`} />
+          </button>
+        </div>
       </div>
 
       {error ? (
@@ -259,7 +303,7 @@ export function AppDataListPage() {
         <button
           type="button"
           onClick={() => setCreateOpen(true)}
-          className="flex w-full items-center justify-center gap-2 rounded-2xl py-3 text-[14px] font-semibold text-white"
+          className="flex w-full items-center justify-center gap-2 rounded-2xl py-3 text-[14px] font-semibold text-white active:opacity-90"
           style={{ backgroundColor: "#ff4f12" }}
         >
           <Plus className="size-4" />
@@ -275,13 +319,13 @@ export function AppDataListPage() {
           <div className="flex justify-center py-12">
             <Loader2 className="size-7 animate-spin text-[#c0c0c0]" />
           </div>
-        ) : databases.length === 0 ? (
+        ) : filtered.length === 0 ? (
           <p className="px-4 py-12 text-center text-[13px] text-[#a0a0a0]">
-            No app data databases yet. Create one to store JSON records for API clients.
+            {query ? `No databases match "${query}".` : "No app data databases yet. Create one to store JSON records for API clients."}
           </p>
         ) : (
           <ul className="divide-y divide-[#f0f0f0]">
-            {databases.map((db) => (
+            {filtered.map((db) => (
               <DatabaseRow key={db.id} db={db} onDelete={handleDelete} />
             ))}
           </ul>

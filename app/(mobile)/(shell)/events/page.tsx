@@ -1,5 +1,5 @@
-import { MobileActivityPage } from "@/components/activity/mobile-activity-page"
+import { MobileEventsPage } from "@/components/events/mobile-events-page"
 
 export default function EventsPg() {
-  return <MobileActivityPage title="Events" />
+  return <MobileEventsPage />
 }

@@ -1,33 +1,96 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import { BriefcaseBusiness, Loader2 } from "lucide-react"
+import { BriefcaseBusiness, ChevronLeft, ChevronRight, Loader2, RefreshCw, Search, X } from "lucide-react"
 
 import { formatApiError } from "@/lib/api/errors"
 import { fetchJobs, type JobSummary } from "@/lib/api/jobs"
 import { useConnection } from "@/components/providers/connection-provider"
 import { formatRelativeDate } from "@/lib/utils/format-date"
 
-function statusLabel(status: string) {
+/* ── status helpers ───────────────────────────────────────────── */
+
+type StatusMeta = { label: string; bg: string; color: string }
+
+function statusMeta(status: string): StatusMeta {
   switch (status) {
     case "ACTIVE":
-      return "Running"
+      return { label: "Running",   bg: "#dcfce7", color: "#16a34a" }
     case "QUEUED":
-      return "Queued"
+      return { label: "Queued",    bg: "#fffbeb", color: "#d97706" }
     case "COMPLETED":
-      return "Completed"
+      return { label: "Completed", bg: "#f0fdf4", color: "#15803d" }
     case "FAILED":
-      return "Failed"
+      return { label: "Failed",    bg: "#fef2f2", color: "#b91c1c" }
     default:
-      return status
+      return { label: status,      bg: "#f7f7f7", color: "#717171" }
   }
 }
+
+/* ── job row ──────────────────────────────────────────────────── */
+
+function JobRow({ job }: { job: JobSummary }) {
+  const s = statusMeta(job.status)
+  const isActive = job.status === "ACTIVE"
+
+  return (
+    <li className="flex items-start gap-3 px-4 py-4">
+      {/* icon */}
+      <div
+        className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl bg-[#f7f7f7]"
+        style={{ border: "1px solid #e8e8e8" }}
+      >
+        <BriefcaseBusiness className="size-[15px] text-[#717171]" />
+      </div>
+
+      {/* content */}
+      <div className="min-w-0 flex-1">
+        <div className="flex items-start justify-between gap-2">
+          <p className="text-[13px] font-semibold text-[#222222]">{job.type}</p>
+          <span className="shrink-0 text-[11px] text-[#a0a0a0]">
+            {formatRelativeDate(job.createdAt)}
+          </span>
+        </div>
+
+        {/* status badge */}
+        <span
+          className="mt-1 inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold"
+          style={{ backgroundColor: s.bg, color: s.color }}
+        >
+          {s.label}
+        </span>
+
+        {/* progress bar for active jobs */}
+        {isActive && job.progress > 0 ? (
+          <div className="mt-2">
+            <div className="mb-1 flex items-center justify-between">
+              <span className="text-[11px] text-[#a0a0a0]">Progress</span>
+              <span className="text-[11px] font-semibold tabular-nums" style={{ color: s.color }}>
+                {job.progress}%
+              </span>
+            </div>
+            <div className="h-1.5 overflow-hidden rounded-full bg-[#f0f0f0]">
+              <div
+                className="h-full rounded-full transition-all"
+                style={{ width: `${job.progress}%`, backgroundColor: s.color }}
+              />
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </li>
+  )
+}
+
+/* ── main page ────────────────────────────────────────────────── */
 
 export function MobileJobsPage() {
   const { connection, ready } = useConnection()
   const [jobs, setJobs] = useState<JobSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [query, setQuery] = useState("")
+  const [page, setPage] = useState(0)
 
   const load = useCallback(async (signal?: AbortSignal) => {
     if (!connection) return
@@ -49,22 +112,79 @@ export function MobileJobsPage() {
     return () => controller.abort()
   }, [ready, connection, load])
 
+  const PAGE_SIZE = 5
   const active = jobs.filter((j) => j.status === "QUEUED" || j.status === "ACTIVE").length
+  const filtered = query.trim()
+    ? jobs.filter((j) => j.type.toLowerCase().includes(query.toLowerCase()))
+    : jobs
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
+  const pageItems = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
 
   return (
-    <div className="flex flex-col gap-5">
-      <div>
-        <h2
-          className="text-[22px] font-bold tracking-tight text-[#222222]"
-          style={{ fontFamily: "var(--font-space-grotesk, sans-serif)" }}
+    <div className="flex flex-col gap-4">
+
+      {/* ── sticky intro card + search row ──────────────────────── */}
+      <div className="sticky top-0 z-10 -mx-4 -mt-4 px-4 pt-4 pb-2" style={{ backgroundColor: "#f7f7f7" }}>
+        <div
+          className="overflow-hidden rounded-3xl"
+          style={{ background: "linear-gradient(155deg, #ff6a30 0%, #c82d00 100%)" }}
         >
-          Jobs
-        </h2>
-        <p className="mt-0.5 text-[13px] text-[#717171]">
-          {loading ? "Loading…" : `${active} running · ${jobs.length} total`}
-        </p>
+          <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-5">
+            <div className="min-w-0 flex-1">
+              <p
+                className="text-[22px] font-black leading-none tracking-tight text-white"
+                style={{ fontFamily: "var(--font-space-grotesk, sans-serif)" }}
+              >
+                Active Jobs
+              </p>
+              <p className="mt-2 text-[12.5px] leading-relaxed" style={{ color: "rgba(255,255,255,0.72)" }}>
+                Track background tasks running on your Arciin instance — uploads, processing, and scheduled operations.
+              </p>
+              <p className="mt-2 text-[12px] font-semibold" style={{ color: "rgba(255,255,255,0.9)" }}>
+                {loading
+                  ? "Loading…"
+                  : active > 0
+                    ? `${active} running · ${jobs.length} total`
+                    : `${jobs.length} job${jobs.length === 1 ? "" : "s"} · all done`}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* search + refresh */}
+        <div className="mt-2 flex items-center gap-2">
+          <div
+            className="flex flex-1 items-center gap-2 rounded-2xl bg-white px-3.5 py-2.5"
+            style={{ border: "1px solid #e5e5e5" }}
+          >
+            <Search className="size-4 shrink-0 text-[#c0c0c0]" />
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => { setQuery(e.target.value); setPage(0) }}
+              placeholder="Search jobs…"
+              className="min-w-0 flex-1 bg-transparent text-[13px] text-[#222222] outline-none placeholder:text-[#c0c0c0]"
+            />
+            {query ? (
+              <button type="button" onClick={() => { setQuery(""); setPage(0) }} className="shrink-0 text-[#c0c0c0] active:text-[#717171]">
+                <X className="size-3.5" />
+              </button>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            onClick={() => void load()}
+            disabled={loading}
+            className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-white text-[#717171] disabled:opacity-50 active:bg-[#f7f7f7]"
+            style={{ border: "1px solid #e5e5e5" }}
+            aria-label="Refresh"
+          >
+            <RefreshCw className={`size-4 ${loading ? "animate-spin" : ""}`} />
+          </button>
+        </div>
       </div>
 
+      {/* ── error ───────────────────────────────────────────────── */}
       {error ? (
         <div
           className="rounded-xl px-4 py-3 text-[12px] text-[#b91c1c]"
@@ -74,41 +194,88 @@ export function MobileJobsPage() {
         </div>
       ) : null}
 
-      <div
-        className="overflow-hidden rounded-2xl bg-white"
-        style={{ border: "1px solid #e5e5e5" }}
-      >
-        {loading ? (
-          <div className="flex justify-center py-12">
-            <Loader2 className="size-7 animate-spin text-[#c0c0c0]" />
+      {/* ── list ────────────────────────────────────────────────── */}
+      {loading ? (
+        <div className="flex justify-center py-12">
+          <Loader2 className="size-7 animate-spin text-[#c0c0c0]" />
+        </div>
+      ) : jobs.length === 0 ? (
+        <div
+          className="flex flex-col items-center gap-3 rounded-2xl bg-white py-14"
+          style={{ border: "1px solid #e5e5e5" }}
+        >
+          <div
+            className="flex size-14 items-center justify-center rounded-2xl"
+            style={{ backgroundColor: "#fff4f0", border: "1px solid rgba(255,79,18,0.15)" }}
+          >
+            <BriefcaseBusiness className="size-6 text-[#ff4f12]" />
           </div>
-        ) : jobs.length ? (
-          <ul className="divide-y divide-[#f0f0f0]">
-            {jobs.map((job) => (
-              <li key={job.id} className="flex items-start gap-3 px-4 py-3.5">
-                <div
-                  className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-xl bg-[#f7f7f7]"
-                  style={{ border: "1px solid #e8e8e8" }}
-                >
-                  <BriefcaseBusiness className="size-3.5 text-[#717171]" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-[13px] font-semibold text-[#222222]">{job.type}</p>
-                  <p className="text-[11px] font-medium text-[#a0a0a0]">{statusLabel(job.status)}</p>
-                  {job.progress > 0 && job.status === "ACTIVE" ? (
-                    <p className="mt-0.5 text-[12px] text-[#717171]">{job.progress}%</p>
-                  ) : null}
-                </div>
-                <span className="shrink-0 text-[11px] text-[#a0a0a0]">
-                  {formatRelativeDate(job.createdAt)}
-                </span>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="py-12 text-center text-[13px] text-[#a0a0a0]">No jobs yet</p>
-        )}
-      </div>
+          <div className="text-center">
+            <p className="text-[14px] font-semibold text-[#222222]">No jobs yet</p>
+            <p className="mt-0.5 text-[12px] text-[#a0a0a0]">
+              Background tasks will appear here when triggered.
+            </p>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div
+            className="overflow-hidden rounded-2xl bg-white"
+            style={{ border: "1px solid #e5e5e5" }}
+          >
+            <ul className="divide-y divide-[#f0f0f0]">
+              {pageItems.map((job) => (
+                <JobRow key={job.id} job={job} />
+              ))}
+            </ul>
+          </div>
+
+          {/* ── pagination ──────────────────────────────────────── */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between gap-3 rounded-2xl bg-white px-4 py-3" style={{ border: "1px solid #e5e5e5" }}>
+              <button
+                type="button"
+                disabled={page === 0}
+                onClick={() => setPage((p) => p - 1)}
+                className="flex size-9 items-center justify-center rounded-xl bg-[#f7f7f7] text-[#717171] transition-opacity disabled:opacity-30 active:bg-[#efefef]"
+                style={{ border: "1px solid #e5e5e5" }}
+                aria-label="Previous page"
+              >
+                <ChevronLeft className="size-4" />
+              </button>
+
+              <div className="flex items-center gap-1.5">
+                {Array.from({ length: totalPages }).map((_, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => setPage(i)}
+                    style={{
+                      width: page === i ? 20 : 8,
+                      height: 8,
+                      borderRadius: 99,
+                      transition: "width 0.2s, background-color 0.2s",
+                      backgroundColor: page === i ? "#ff4f12" : "#e0e0e0",
+                    }}
+                    aria-label={`Page ${i + 1}`}
+                  />
+                ))}
+              </div>
+
+              <button
+                type="button"
+                disabled={page === totalPages - 1}
+                onClick={() => setPage((p) => p + 1)}
+                className="flex size-9 items-center justify-center rounded-xl bg-[#f7f7f7] text-[#717171] transition-opacity disabled:opacity-30 active:bg-[#efefef]"
+                style={{ border: "1px solid #e5e5e5" }}
+                aria-label="Next page"
+              >
+                <ChevronRight className="size-4" />
+              </button>
+            </div>
+          )}
+        </>
+      )}
     </div>
   )
 }

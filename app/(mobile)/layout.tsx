@@ -6,7 +6,7 @@ export default function MobileRootLayout({ children }: { children: React.ReactNo
       <div className="hidden md:block">
         <DesktopUnavailable />
       </div>
-      <div className="md:hidden h-[100dvh] max-h-[100dvh] overflow-hidden">{children}</div>
+      <div className="md:hidden min-h-dvh bg-[#f7f7f7]">{children}</div>
     </>
   )
 }

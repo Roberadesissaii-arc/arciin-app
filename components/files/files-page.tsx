@@ -103,8 +103,8 @@ function FolderCard({
         <Folder className="size-5 text-[#ff4f12]" />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-[13px] font-semibold text-[#222222]">{folder.name}</p>
-        <p className="text-[11px] text-[#a0a0a0]">
+        <p className="truncate text-[14px] font-semibold leading-tight text-[#222222]">{folder.name}</p>
+        <p className="mt-1 text-[11px] leading-snug text-[#a0a0a0]">
           {folder.assetCount} file{folder.assetCount === 1 ? "" : "s"}
         </p>
       </div>
@@ -385,7 +385,7 @@ export function FilesPage() {
   ])
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="files-page-content flex flex-col gap-5">
       <input
         ref={inputRef}
         type="file"
@@ -418,7 +418,7 @@ export function FilesPage() {
 
         {error ? (
           <div
-            className="mt-3 rounded-xl px-4 py-3 text-[12px] text-[#b91c1c]"
+            className="rounded-xl px-4 py-3 text-[12px] text-[#b91c1c]"
             style={{ backgroundColor: "#fef2f2", border: "1px solid #fecaca" }}
             role="alert"
           >
@@ -427,7 +427,7 @@ export function FilesPage() {
         ) : null}
 
         {countMismatch ? (
-          <p className="mt-2 text-[11px] leading-relaxed text-[#717171]">
+          <p className="text-[11px] leading-snug text-[#a0a0a0]">
             Some files may still be processing. Tap refresh or check All files.
           </p>
         ) : null}
@@ -501,10 +501,10 @@ export function FilesPage() {
                       {connection ? (
                         <AssetThumbnail asset={asset} connection={connection} />
                       ) : null}
-                      <p className="mt-2 truncate px-0.5 text-[12px] font-semibold text-[#222222]">
+                      <p className="mt-2 truncate px-0.5 text-[14px] font-semibold leading-tight text-[#222222]">
                         {asset.title?.trim() || asset.originalFilename}
                       </p>
-                      <p className="truncate px-0.5 pb-0.5 text-[10px] text-[#a0a0a0]">
+                      <p className="mt-1 truncate px-0.5 pb-0.5 text-[11px] leading-snug text-[#a0a0a0]">
                         {formatBytes(asset.sizeBytes)}
                       </p>
                     </button>
