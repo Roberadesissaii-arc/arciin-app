@@ -77,6 +77,7 @@ export function SessionsInlinePanel({ enabled }: { enabled: boolean }) {
   const { data: sessions, loading, error, connection, reload } = useStablePanelLoad(
     enabled,
     load,
+    { cacheKey: "sessions" },
   )
   const [revokingId, setRevokingId] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)

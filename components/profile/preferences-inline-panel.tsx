@@ -58,7 +58,11 @@ export function PreferencesInlinePanel({ enabled }: { enabled: boolean }) {
     [],
   )
 
-  const { data: prefs, loading, error, connection, setData } = useStablePanelLoad(enabled, load)
+  const { data: prefs, loading, error, connection, setData } = useStablePanelLoad(
+    enabled,
+    load,
+    { cacheKey: "preferences" },
+  )
   const connectionRef = useRef(connection)
   connectionRef.current = connection
   const [saving, setSaving] = useState(false)

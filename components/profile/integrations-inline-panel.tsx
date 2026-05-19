@@ -111,7 +111,9 @@ export function IntegrationsInlinePanel({ enabled }: { enabled: boolean }) {
     [],
   )
 
-  const { data: integrations, loading, error } = useStablePanelLoad(enabled, load)
+  const { data: integrations, loading, error } = useStablePanelLoad(enabled, load, {
+    cacheKey: "integrations",
+  })
   const [openId, setOpenId] = useState<string | null>(null)
 
   if (!enabled) return null

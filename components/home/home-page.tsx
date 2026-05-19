@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useCallback, useEffect, useState } from "react"
+import { useState } from "react"
 import {
   Activity,
   BriefcaseBusiness,
@@ -12,15 +12,13 @@ import {
   Loader2,
 } from "lucide-react"
 
-import { fetchHomeOverview } from "@/lib/api/dashboard"
-import { formatApiError } from "@/lib/api/errors"
-import { ARCIIN_FOREGROUND_EVENT } from "@/lib/hooks/use-app-foreground"
+import { useCachedHomeOverview } from "@/lib/hooks/use-cached-home-overview"
+import { useConnection } from "@/components/providers/connection-provider"
 import {
   activityIconFor,
   activityTypeLabel,
   Clock3,
 } from "@/lib/activity/icons"
-import { useConnection } from "@/components/providers/connection-provider"
 import type { HomeOverview } from "@/lib/types/models"
 import { formatBytes } from "@/lib/utils/format-bytes"
 import { formatRelativeDate } from "@/lib/utils/format-date"
@@ -100,40 +98,8 @@ function storagePercent(storage: NonNullable<HomeOverview["storage"]>) {
 }
 
 export function HomePage() {
-  const { connection, ready } = useConnection()
-  const [data, setData] = useState<HomeOverview | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  const load = useCallback(async (signal?: AbortSignal) => {
-    if (!connection) return
-    setLoading(true)
-    setError(null)
-    try {
-      const overview = await fetchHomeOverview(connection, signal)
-      setData(overview)
-    } catch (err) {
-      if (!signal?.aborted) setError(formatApiError(err))
-    } finally {
-      if (!signal?.aborted) setLoading(false)
-    }
-  }, [connection])
-
-  useEffect(() => {
-    if (!ready || !connection) return
-    const controller = new AbortController()
-    void load(controller.signal)
-    return () => controller.abort()
-  }, [ready, connection, load])
-
-  useEffect(() => {
-    const onForeground = () => {
-      if (!connection) return
-      void load()
-    }
-    window.addEventListener(ARCIIN_FOREGROUND_EVENT, onForeground)
-    return () => window.removeEventListener(ARCIIN_FOREGROUND_EVENT, onForeground)
-  }, [connection, load])
+  const { connection } = useConnection()
+  const { data, loading, isRevalidating, error, reload } = useCachedHomeOverview()
 
   const storage = data?.storage
   const storagePct = storage ? storagePercent(storage) : null
@@ -183,7 +149,7 @@ export function HomePage() {
           <p>{error}</p>
           <button
             type="button"
-            onClick={() => void load()}
+            onClick={() => void reload()}
             className="mt-2 font-semibold text-[#ff4f12]"
           >
             Try again

@@ -25,7 +25,9 @@ export function StorageInlinePanel({ enabled }: { enabled: boolean }) {
     [],
   )
 
-  const { data, loading, error, connection } = useStablePanelLoad(enabled, load)
+  const { data, loading, error, connection } = useStablePanelLoad(enabled, load, {
+    cacheKey: "storage",
+  })
   const [path, setPath] = useState("")
   const [initialPath, setInitialPath] = useState("")
   const [saving, setSaving] = useState(false)

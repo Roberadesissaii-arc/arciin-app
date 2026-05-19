@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import {
   Bell,
   ChevronRight,
@@ -124,6 +124,11 @@ function MenuCard({ children }: { children: React.ReactNode }) {
 
 export function ProfilePage() {
   const { connection, ready, updateUser } = useConnection()
+  const PROFILE_STATS_STALE_MS = 90_000
+  const profileStatsCache = useRef(
+    new Map<string, { fileCount: number; libraryCount: number; fetchedAt: number }>(),
+  )
+
   const [fileCount, setFileCount] = useState<number | null>(null)
   const [libraryCount, setLibraryCount] = useState<number | null>(null)
   const [loadingStats, setLoadingStats] = useState(true)
@@ -154,17 +159,38 @@ export function ProfilePage() {
 
   useEffect(() => {
     if (!ready || !sessionKey || !connection) return
+
+    const cache = profileStatsCache.current.get(sessionKey)
+    const fresh = cache && Date.now() - cache.fetchedAt <= PROFILE_STATS_STALE_MS
+
+    if (cache) {
+      setLibraryCount(cache.libraryCount)
+      setFileCount(cache.fileCount)
+      setLoadingStats(false)
+    }
+
+    if (fresh) return
+
     let cancelled = false
     const ac = new AbortController()
 
     void (async () => {
-      setLoadingStats(true)
+      if (!cache) {
+        setLoadingStats(true)
+      }
       setError(null)
       try {
         const libraries = await listLibraries(connection, ac.signal)
         if (cancelled) return
-        setLibraryCount(libraries.length)
-        setFileCount(libraries.reduce((sum, lib) => sum + (lib.assetCount ?? 0), 0))
+        const libs = libraries.length
+        const files = libraries.reduce((sum, lib) => sum + (lib.assetCount ?? 0), 0)
+        setLibraryCount(libs)
+        setFileCount(files)
+        profileStatsCache.current.set(sessionKey, {
+          libraryCount: libs,
+          fileCount: files,
+          fetchedAt: Date.now(),
+        })
       } catch (err) {
         if (!cancelled) setError(formatApiError(err))
       } finally {
@@ -176,8 +202,7 @@ export function ProfilePage() {
       cancelled = true
       ac.abort()
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- connection read inside; sessionKey avoids reload loops
-  }, [ready, sessionKey])
+  }, [ready, sessionKey, connection])
 
   const user = connection?.user
   const roleLabel = user?.role ?? "Member"

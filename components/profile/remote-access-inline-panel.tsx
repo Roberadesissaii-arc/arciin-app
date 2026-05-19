@@ -44,7 +44,11 @@ export function RemoteAccessInlinePanel({ enabled }: { enabled: boolean }) {
     [],
   )
 
-  const { data, loading, error, reload } = useStablePanelLoad(enabled && Boolean(connection), load)
+  const { data, loading, error, reload } = useStablePanelLoad(
+    enabled && Boolean(connection),
+    load,
+    { cacheKey: "remote-access" },
+  )
 
   const [serverAddress, setServerAddress] = useState("")
   const [reconnecting, setReconnecting] = useState(false)

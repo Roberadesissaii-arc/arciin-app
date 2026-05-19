@@ -181,7 +181,8 @@ export function MobileEventsMonitor() {
     const resolvedUrl = getMobileSocketUrl(connection)
     const token = connection.sessionToken
     const socket: Socket = io(resolvedUrl, {
-      transports: ["websocket", "polling"],
+      path: "/socket.io",
+      transports: ["polling", "websocket"],
       auth: { token },
       extraHeaders: {
         Authorization: `Bearer ${token}`,
@@ -195,7 +196,12 @@ export function MobileEventsMonitor() {
     socket.on("disconnect", () => setConnected(false))
     socket.on("connect_error", (err) => {
       setConnected(false)
-      setError(err.message || "Could not connect to realtime server.")
+      const msg = err.message || "Could not connect to realtime server."
+      setError(
+        msg.includes("websocket") || msg.includes("xhr poll")
+          ? `${msg} — use the same URL you signed in with (tunnel or LAN). API and Redis must be running on the server.`
+          : msg,
+      )
     })
 
     socket.onAny((type: string, incoming: SocketEventPayload) => {

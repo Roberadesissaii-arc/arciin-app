@@ -35,7 +35,7 @@ export function VaultInlinePanel({ enabled }: { enabled: boolean }) {
   )
 
   const { data: vault, loading, error, connection, setData, reload } =
-    useStablePanelLoad<PasswordVaultList>(enabled, load)
+    useStablePanelLoad<PasswordVaultList>(enabled, load, { cacheKey: "vault" })
 
   const [saving, setSaving] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)

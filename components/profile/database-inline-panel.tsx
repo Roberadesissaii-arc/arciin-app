@@ -26,7 +26,9 @@ export function DatabaseInlinePanel({ enabled }: { enabled: boolean }) {
     [],
   )
 
-  const { data, loading, error } = useStablePanelLoad<DatabaseSummary>(enabled, load)
+  const { data, loading, error } = useStablePanelLoad<DatabaseSummary>(enabled, load, {
+    cacheKey: "database",
+  })
 
   if (!enabled) return null
 
