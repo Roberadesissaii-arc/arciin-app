@@ -4,10 +4,10 @@
 
   <!-- Full arch in orange -->
   <polyline
-    points="80,410 256,102 432,410"
+    points="152,400 256,108 360,400"
     fill="none"
     stroke="#FF4F12"
-    stroke-width="54"
+    stroke-width="70"
     stroke-linejoin="round"
     stroke-linecap="round"
   />
