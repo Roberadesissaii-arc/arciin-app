@@ -123,6 +123,8 @@ function HistoryDrawer({
   onSelect,
   onNew,
   onDelete,
+  deletingId,
+  historyError,
 }: {
   open: boolean
   onClose: () => void
@@ -130,6 +132,8 @@ function HistoryDrawer({
   activeId: string | null
   loading: boolean
   loadingId: string | null
+  deletingId: string | null
+  historyError: string | null
   onSelect: (id: string) => void
   onNew: () => void
   onDelete: (id: string) => void
@@ -188,6 +192,15 @@ function HistoryDrawer({
         </div>
 
         <div className="flex-1 overflow-y-auto px-3 pb-4 scrollbar-hide">
+          {historyError ? (
+            <p
+              className="mb-3 rounded-xl px-3 py-2 text-[11px] text-[#b91c1c]"
+              style={{ backgroundColor: "#fef2f2", border: "1px solid #fecaca" }}
+            >
+              {historyError}
+            </p>
+          ) : null}
+
           <p className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-wider text-[#a0a0a0]">
             Recent
           </p>
@@ -254,14 +267,21 @@ function HistoryDrawer({
                       </div>
                       <button
                         type="button"
+                        disabled={deletingId === convo.id}
+                        onPointerDown={(e) => e.stopPropagation()}
                         onClick={(e) => {
                           e.stopPropagation()
+                          e.preventDefault()
                           onDelete(convo.id)
                         }}
-                        className="absolute right-2 top-2 flex size-7 items-center justify-center rounded-lg text-[#c0c0c0] active:bg-[#fee2e2] active:text-[#b91c1c]"
+                        className="absolute right-2 top-2 flex size-7 items-center justify-center rounded-lg text-[#c0c0c0] active:bg-[#fee2e2] active:text-[#b91c1c] disabled:opacity-50"
                         aria-label="Delete conversation"
                       >
-                        <Trash2 className="size-3.5" />
+                        {deletingId === convo.id ? (
+                          <Loader2 className="size-3.5 animate-spin text-[#b91c1c]" />
+                        ) : (
+                          <Trash2 className="size-3.5" />
+                        )}
                       </button>
                     </div>
                   </li>
@@ -378,6 +398,8 @@ export function ChatPage() {
   const [streaming, setStreaming] = useState(false)
   const [statusNote, setStatusNote] = useState("Chat connects to your Arciin API")
   const [error, setError] = useState<string | null>(null)
+  const [historyError, setHistoryError] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const abortRef = useRef<AbortController | null>(null)
@@ -465,7 +487,10 @@ export function ChatPage() {
 
   useEffect(() => {
     setChrome({
-      onOpenHistory: () => setHistoryOpen(true),
+      onOpenHistory: () => {
+        setHistoryError(null)
+        setHistoryOpen(true)
+      },
     })
     return () => setChrome(null)
   }, [setChrome])
@@ -503,13 +528,22 @@ export function ChatPage() {
   }
 
   async function handleDeleteConversation(id: string) {
-    if (!connection) return
+    if (!connection || deletingId) return
+    const title = conversations.find((c) => c.id === id)?.title ?? "this chat"
+    if (!window.confirm(`Delete "${title}"? This cannot be undone.`)) return
+
+    setHistoryError(null)
+    setDeletingId(id)
     try {
       await deleteChatConversation(connection, id)
       setConversations((prev) => prev.filter((c) => c.id !== id))
       if (conversationId === id) startNewChat()
     } catch (err) {
-      setError(formatApiError(err, serverHint(connection)))
+      const message = formatApiError(err, serverHint(connection))
+      setHistoryError(message)
+      setError(message)
+    } finally {
+      setDeletingId(null)
     }
   }
 
@@ -686,6 +720,8 @@ export function ChatPage() {
         activeId={conversationId}
         loading={historyLoading}
         loadingId={loadingConvoId}
+        deletingId={deletingId}
+        historyError={historyError}
         onSelect={(id) => void openConversation(id)}
         onNew={startNewChat}
         onDelete={(id) => void handleDeleteConversation(id)}

@@ -5,7 +5,7 @@ import { CloudUpload, Folder, Loader2 } from "lucide-react"
 
 import { useFilesChrome } from "@/components/files/files-chrome-context"
 import { AssetThumbnail } from "@/components/files/asset-thumbnail"
-import { FolderTile } from "@/components/files/folder-tile"
+import { FolderTile, FolderGridTile } from "@/components/files/folder-tile"
 import { AssetViewer } from "@/components/files/asset-viewer"
 import { MobileCreateFolderSheet } from "@/components/files/mobile-create-folder-sheet"
 import { useConnection } from "@/components/providers/connection-provider"
@@ -102,6 +102,7 @@ export function FilesPage() {
   const [error, setError] = useState<string | null>(null)
   const [viewerIndex, setViewerIndex] = useState<number | null>(null)
   const [createFolderOpen, setCreateFolderOpen] = useState(false)
+  const [allFoldersOpen, setAllFoldersOpen] = useState(false)
   const [hasCache, setHasCache] = useState(false)
 
   const libraryScoped = filter !== "all"
@@ -474,15 +475,27 @@ export function FilesPage() {
           <div className={`flex flex-col gap-4 ${refreshing ? "opacity-80" : ""}`}>
             {showFoldersSection ? (
               <section className="flex flex-col gap-2">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-[#a0a0a0]">
-                  Folders
-                </p>
+                <div className="flex items-center justify-between">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-[#a0a0a0]">
+                    Folders
+                  </p>
+                  {visibleFolders.length > 2 && (
+                    <button
+                      type="button"
+                      onClick={() => setAllFoldersOpen(true)}
+                      className="text-[12px] font-semibold active:opacity-70"
+                      style={{ color: "#ff4f12" }}
+                    >
+                      View all ({visibleFolders.length})
+                    </button>
+                  )}
+                </div>
                 {visibleFolders.length > 0 ? (
                   <div
                     className="overflow-hidden rounded-2xl bg-white"
                     style={{ border: "1px solid #e5e5e5" }}
                   >
-                    {visibleFolders.map((folder, i) => (
+                    {visibleFolders.slice(0, 2).map((folder, i) => (
                       <div key={folder.id}>
                         {i > 0 ? <div className="mx-4 h-px bg-[#f5f5f5]" /> : null}
                         <FolderTile
@@ -493,6 +506,19 @@ export function FilesPage() {
                         />
                       </div>
                     ))}
+                    {visibleFolders.length > 2 && (
+                      <div>
+                        <div className="mx-4 h-px bg-[#f5f5f5]" />
+                        <button
+                          type="button"
+                          onClick={() => setAllFoldersOpen(true)}
+                          className="flex w-full items-center justify-center py-3 text-[13px] font-semibold active:bg-[#fafafa]"
+                          style={{ color: "#ff4f12" }}
+                        >
+                          View all {visibleFolders.length} folders
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <SectionPlaceholder
@@ -565,6 +591,76 @@ export function FilesPage() {
             ) : null}
           </div>
         )}
+      </div>
+
+      {/* ── all folders overlay ─────────────────────────────────── */}
+      {allFoldersOpen && (
+        <AllFoldersOverlay
+          folders={visibleFolders}
+          onClose={() => setAllFoldersOpen(false)}
+          onOpen={(id) => { setAllFoldersOpen(false); openFolder(id) }}
+          onDelete={(id) => handleDeleteFolder(id)}
+          onRename={(id, name) => handleRenameFolder(id, name)}
+        />
+      )}
+    </div>
+  )
+}
+
+/* ── all folders full-screen overlay ─────────────────────────── */
+
+function AllFoldersOverlay({
+  folders,
+  onClose,
+  onOpen,
+  onDelete,
+  onRename,
+}: {
+  folders: FolderSummary[]
+  onClose: () => void
+  onOpen: (id: string) => void
+  onDelete: (id: string) => Promise<void>
+  onRename: (id: string, name: string) => Promise<void>
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-[150] flex flex-col bg-[#f7f7f7]"
+      style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
+    >
+      {/* header */}
+      <div
+        className="flex shrink-0 items-center gap-3 border-b border-[#ebebeb] bg-white px-4 py-3"
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          className="flex size-9 items-center justify-center rounded-xl text-[#717171] active:bg-[#f7f7f7]"
+          style={{ border: "1px solid #e5e5e5" }}
+          aria-label="Back"
+        >
+          <svg className="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="m15 18-6-6 6-6" />
+          </svg>
+        </button>
+        <div className="min-w-0 flex-1">
+          <p className="text-[17px] font-bold text-[#222222]">Folders</p>
+          <p className="text-[11px] text-[#a0a0a0]">{folders.length} folder{folders.length !== 1 ? "s" : ""}</p>
+        </div>
+      </div>
+
+      {/* grid */}
+      <div className="flex-1 overflow-y-auto px-4 py-4">
+        <div className="grid grid-cols-2 gap-4">
+          {folders.map((folder) => (
+            <FolderGridTile
+              key={folder.id}
+              folder={folder}
+              onOpen={() => onOpen(folder.id)}
+              onDelete={() => onDelete(folder.id)}
+              onRename={(name) => onRename(folder.id, name)}
+            />
+          ))}
+        </div>
       </div>
     </div>
   )

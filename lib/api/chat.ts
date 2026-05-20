@@ -58,9 +58,9 @@ export function saveChatMessages(
 }
 
 export function deleteChatConversation(connection: MobileConnection, id: string) {
-  return fetchApi<{ success: true }>(`/chat/conversations/${id}`, {
+  return fetchApi<{ success: true }>(`/chat/conversations/${id}/delete`, {
     connection,
-    method: "DELETE",
+    method: "POST",
   })
 }
 
