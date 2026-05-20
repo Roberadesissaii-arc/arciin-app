@@ -637,19 +637,30 @@ export function ChatPage() {
 
   async function handleDeleteConversation(id: string) {
     if (!connection || deletingId) return
-    const title = conversations.find((c) => c.id === id)?.title ?? "this chat"
-    if (!window.confirm(`Delete "${title}"? This cannot be undone.`)) return
 
     setHistoryError(null)
     setDeletingId(id)
+
+    const prevConversations = conversations
+    const wasActive = conversationId === id
+
+    setConversations((prev) => prev.filter((c) => c.id !== id))
+    if (wasActive) {
+      setConversationId(null)
+      setMessages([])
+    }
+
     try {
       await deleteChatConversation(connection, id)
-      setConversations((prev) => prev.filter((c) => c.id !== id))
-      if (conversationId === id) startNewChat()
+      if (wasActive) setHistoryOpen(false)
     } catch (err) {
+      setConversations(prevConversations)
+      if (wasActive) {
+        setConversationId(id)
+        void openConversation(id)
+      }
       const message = formatApiError(err, serverHint(connection))
       setHistoryError(message)
-      setError(message)
     } finally {
       setDeletingId(null)
     }

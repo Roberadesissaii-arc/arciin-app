@@ -2,13 +2,10 @@
 
 import Link from "next/link"
 
-const MEDIA_HREF: Record<string, string> = {
-  images: "/files",
-  videos: "/files",
-  music: "/files",
-  documents: "/files",
-  all: "/files",
-}
+import {
+  ChatInlineAssetBlock,
+  ChatInlineAssetBlockByIds,
+} from "@/components/chat/chat-inline-assets"
 
 function parseInline(text: string): React.ReactNode {
   const pattern = /\*\*(.+?)\*\*|\*(.+?)\*|`([^`]+)`|\[([^\]]+)\]\(([^)]+)\)/g
@@ -69,46 +66,24 @@ function parseInline(text: string): React.ReactNode {
   return nodes.length === 1 ? nodes[0] : nodes
 }
 
-function AssetChip({ label, href }: { label: string; href: string }) {
-  return (
-    <Link
-      href={href}
-      className="my-2 flex items-center justify-center rounded-xl bg-[#fff7f4] px-4 py-3 text-[12px] font-semibold text-[#ff4f12] active:opacity-90"
-      style={{ border: "1px solid rgba(255, 79, 18, 0.25)" }}
-    >
-      {label}
-    </Link>
-  )
-}
-
 function renderAssetLine(line: string, key: number): React.ReactNode {
   const idsMatch = line.match(/\[\[ASSETS:ids:([^\]]+)\]\]/)
   if (idsMatch) {
-    return (
-      <AssetChip key={key} label="View matched files" href="/files" />
-    )
+    const ids = idsMatch[1].split(",").map((s) => s.trim()).filter(Boolean)
+    return <ChatInlineAssetBlockByIds key={key} assetIds={ids} />
   }
 
   const listMatch = line.match(/\[\[ASSET_LIST:([a-z]+)\]\]/)
   if (listMatch) {
     const type = listMatch[1]
-    return (
-      <AssetChip
-        key={key}
-        label={`Open ${type} in Files`}
-        href={MEDIA_HREF[type] ?? "/files"}
-      />
-    )
+    return <ChatInlineAssetBlock key={key} mediaType={type} limit={12} />
   }
 
   const assetMatch = line.match(/\[\[ASSETS:([a-z]+)(?::(\d+))?\]\]/)
   if (assetMatch) {
     const type = assetMatch[1]
-    const n = assetMatch[2]
-    const label = n
-      ? `View ${n} recent ${type}`
-      : `Browse ${type}`
-    return <AssetChip key={key} label={label} href={MEDIA_HREF[type] ?? "/files"} />
+    const limit = assetMatch[2] ? parseInt(assetMatch[2], 10) : 9
+    return <ChatInlineAssetBlock key={key} mediaType={type} limit={limit} />
   }
 
   return null

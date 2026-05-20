@@ -1,4 +1,5 @@
 import { buildApiUrl, fetchApi } from "@/lib/api/client"
+import { shouldUseArciinProxy } from "@/lib/api/proxy-fetch"
 import type { MobileConnection } from "@/lib/types/api"
 import type { AssetSummary, MediaType } from "@/lib/types/assets"
 
@@ -44,7 +45,14 @@ export async function searchAssets(
 }
 
 export function assetThumbnailUrl(connection: MobileConnection, assetId: string) {
-  return buildApiUrl(connection.apiBaseUrl, `/assets/${assetId}/thumbnail`)
+  const params = new URLSearchParams({ access_token: connection.sessionToken })
+  if (shouldUseArciinProxy(connection)) {
+    return `/api/arciin/assets/${encodeURIComponent(assetId)}/thumbnail?${params.toString()}`
+  }
+  return buildApiUrl(
+    connection.apiBaseUrl,
+    `/assets/${assetId}/thumbnail?${params.toString()}`,
+  )
 }
 
 export function assetDownloadUrl(

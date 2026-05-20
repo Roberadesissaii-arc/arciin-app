@@ -4,6 +4,7 @@ import {
 } from "@/lib/api/arciin-proxy"
 import { apiBaseCandidates, buildApiUrl, fetchApi } from "@/lib/api/client"
 import { ApiError, networkErrorMessage, parseApiError } from "@/lib/api/errors"
+import { fetchArciinProxied, shouldUseArciinProxy } from "@/lib/api/proxy-fetch"
 import type { MobileConnection } from "@/lib/types/api"
 import type {
   ChatConversationDetail,
@@ -117,11 +118,42 @@ export function getChatInstanceContext(connection: MobileConnection, signal?: Ab
   })
 }
 
-export function deleteChatConversation(connection: MobileConnection, id: string) {
-  return fetchApi<{ success: true }>(`/chat/conversations/${id}/delete`, {
-    connection,
-    method: "POST",
-  })
+export async function deleteChatConversation(connection: MobileConnection, id: string) {
+  const encoded = encodeURIComponent(id)
+
+  if (shouldUseArciinProxy(connection)) {
+    try {
+      return await fetchArciinProxied<{ success: true }>(
+        connection,
+        `chat/conversations/${encoded}/delete`,
+        { method: "POST" },
+      )
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) {
+        return fetchArciinProxied<{ success: true }>(
+          connection,
+          `chat/conversations/${encoded}`,
+          { method: "DELETE" },
+        )
+      }
+      throw err
+    }
+  }
+
+  try {
+    return await fetchApi<{ success: true }>(`/chat/conversations/${id}/delete`, {
+      connection,
+      method: "POST",
+    })
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) {
+      return fetchApi<{ success: true }>(`/chat/conversations/${id}`, {
+        connection,
+        method: "DELETE",
+      })
+    }
+    throw err
+  }
 }
 
 export type ChatSelection = {
