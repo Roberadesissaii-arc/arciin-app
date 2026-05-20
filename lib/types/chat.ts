@@ -50,6 +50,7 @@ export type ChatMessage = {
   dbId?: string
   role: "user" | "assistant"
   content: string
+  thinking?: string
   pending?: boolean
   feedback?: ChatMessageFeedbackRating | null
   usage?: TokenUsage

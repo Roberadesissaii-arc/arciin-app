@@ -322,26 +322,36 @@ export async function streamChat(
   }
 }
 
-/** Like `streamChat`, but throws if the model returns no text (common when the wrong URL is hit). */
+export type StreamChatResult = {
+  text: string
+  thinking: string
+}
+
+/** Like `streamChat`, but throws if the model returns no visible reply after reasoning split. */
 export async function streamChatWithCheck(
   connection: MobileConnection,
   body: Parameters<typeof streamChat>[1],
   handlers: StreamHandlers,
-): Promise<string> {
+): Promise<StreamChatResult> {
   let accumulated = ""
+  let thinkingAccum = ""
   await streamChat(connection, body, {
     ...handlers,
     onText: (chunk) => {
       accumulated += chunk
-      handlers.onText(chunk)
+      handlers.onText?.(chunk)
+    },
+    onThinking: (chunk) => {
+      thinkingAccum += chunk
+      handlers.onThinking?.(chunk)
     },
   })
-  if (!accumulated.trim()) {
+  if (!accumulated.trim() && !thinkingAccum.trim()) {
     throw new ApiError(
       502,
       "EMPTY_RESPONSE",
       "The model returned no reply. Check the model is configured and reachable on your Arciin server.",
     )
   }
-  return accumulated
+  return { text: accumulated, thinking: thinkingAccum }
 }

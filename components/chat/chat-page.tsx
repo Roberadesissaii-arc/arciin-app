@@ -21,6 +21,7 @@ import {
 
 import { ChatMarkdown } from "@/components/chat/chat-markdown"
 import { ChatModelBar } from "@/components/chat/chat-model-bar"
+import { ChatReasoningBlock } from "@/components/chat/chat-reasoning-block"
 import { ArciinMark } from "@/components/ui/arciin-mark"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useChatChrome } from "@/components/chat/chat-chrome-context"
@@ -43,6 +44,11 @@ import {
   type TokenUsage,
 } from "@/lib/api/chat"
 import { buildOutboundChatMessages } from "@/lib/chat/build-context"
+import {
+  deriveStreamingThinkingAndAnswer,
+  hasVisibleAssistantAnswer,
+  resolveFinalAssistantMessage,
+} from "@/lib/chat/reasoning"
 import { ARCIIN_MOBILE_SYSTEM_INSTRUCTION } from "@/lib/chat/system-prompt"
 import { formatApiError, isNetworkError } from "@/lib/api/errors"
 import type { MobileConnection } from "@/lib/types/api"
@@ -401,34 +407,53 @@ function MessageBubble({
   onFeedback?: (rating: ChatMessageFeedbackRating | null) => void
 }) {
   const isUser = msg.role === "user"
-  const hasContent = Boolean(msg.content.trim())
-  const showActions = !isUser && !msg.pending && !isStreaming && hasContent
+  const hasAnswer = hasVisibleAssistantAnswer(msg.content)
+  const hasThinkingText = Boolean((msg.thinking ?? "").trim())
+  const showReasoning =
+    !isUser && (hasThinkingText || isStreaming || msg.thinking !== undefined)
+  const liveReasoning = !isUser && isStreaming
+  const hideAnswerBubble =
+    !isUser && !hasAnswer && (showReasoning || (msg.pending && isStreaming))
+  const showWorking =
+    !isUser && msg.pending && !hasAnswer && !hasThinkingText && !isStreaming
+  const showActions = !isUser && !msg.pending && !isStreaming && hasAnswer
+  const hasAssetEmbed = /\[\[(?:ASSETS|ASSET_LIST)/i.test(msg.content)
+  const usePlainStream = isStreaming && !hasAssetEmbed
 
   return (
     <div className={cn("flex w-full flex-col", isUser ? "items-end" : "items-start")}>
-      <div
-        className={cn(
-          "max-w-[92%] rounded-2xl px-4 py-3 text-[14px] leading-relaxed",
-          isUser
-            ? "rounded-br-md bg-[#ff4f12] text-white shadow-sm"
-            : "rounded-bl-md bg-white text-[#222222] shadow-[0_1px_8px_rgba(0,0,0,0.04)]",
-        )}
-        style={isUser ? undefined : { border: "1px solid #e5e5e5" }}
-      >
-        {msg.pending && !hasContent ? (
-          <span className="flex items-center gap-2 text-[#717171]">
-            <Loader2 className="size-3.5 animate-spin text-[#ff4f12]" />
-            Thinking…
-          </span>
-        ) : isUser || isStreaming ? (
-          <p className="whitespace-pre-wrap break-words">
-            {msg.content}
-            {isStreaming && hasContent ? <span className="chat-stream-cursor" aria-hidden /> : null}
-          </p>
-        ) : (
-          <ChatMarkdown content={msg.content} />
-        )}
-      </div>
+      {showReasoning ? (
+        <ChatReasoningBlock content={msg.thinking ?? ""} live={liveReasoning} />
+      ) : null}
+
+      {!hideAnswerBubble ? (
+        <div
+          className={cn(
+            "max-w-[92%] rounded-2xl px-4 py-3 text-[14px] leading-relaxed",
+            isUser
+              ? "rounded-br-md bg-[#ff4f12] text-white shadow-sm"
+              : "rounded-bl-md bg-white text-[#222222] shadow-[0_1px_8px_rgba(0,0,0,0.04)]",
+          )}
+          style={isUser ? undefined : { border: "1px solid #e5e5e5" }}
+        >
+          {showWorking ? (
+            <span className="flex items-center gap-2 text-[#717171]">
+              <Loader2 className="size-3.5 animate-spin text-[#ff4f12]" />
+              Working…
+            </span>
+          ) : isUser || usePlainStream ? (
+            <p className="whitespace-pre-wrap break-words">
+              {msg.content}
+              {isStreaming && hasAnswer ? (
+                <span className="chat-stream-cursor" aria-hidden />
+              ) : null}
+            </p>
+          ) : (
+            <ChatMarkdown content={msg.content} />
+          )}
+        </div>
+      ) : null}
+
       {showActions ? (
         <MessageActions
           content={msg.content}
@@ -619,20 +644,30 @@ export function ChatPage() {
       setMessages(
         convo.messages
           .filter((m) => m.role === "user" || m.role === "assistant")
-          .map((m) => ({
-            id: m.id,
-            dbId: m.id,
-            role: m.role as "user" | "assistant",
-            content: m.content,
-            feedback: m.feedbackRating ?? null,
-            usage: m.totalTokens
-              ? {
-                  inputTokens: m.inputTokens ?? 0,
-                  outputTokens: m.outputTokens ?? 0,
-                  totalTokens: m.totalTokens,
-                }
-              : undefined,
-          })),
+          .map((m) => {
+            const base = {
+              id: m.id,
+              dbId: m.id,
+              role: m.role as "user" | "assistant",
+              feedback: m.feedbackRating ?? null,
+              usage: m.totalTokens
+                ? {
+                    inputTokens: m.inputTokens ?? 0,
+                    outputTokens: m.outputTokens ?? 0,
+                    totalTokens: m.totalTokens,
+                  }
+                : undefined,
+            }
+            if (m.role === "assistant") {
+              const resolved = resolveFinalAssistantMessage(m.content, "")
+              return {
+                ...base,
+                content: resolved.content,
+                thinking: resolved.thinking,
+              }
+            }
+            return { ...base, content: m.content }
+          }),
       )
       setHistoryOpen(false)
     } catch (err) {
@@ -733,8 +768,32 @@ export function ChatPage() {
 
       abortRef.current = new AbortController()
       let usage: TokenUsage | undefined
+      let textAccum = ""
+      let thinkingAccum = ""
 
-      const content = await streamChatWithCheck(
+      const pushStreamState = () => {
+        const derived = deriveStreamingThinkingAndAnswer(textAccum, thinkingAccum)
+        const thinking =
+          derived.thinking.length > 0 || derived.inReasoningBlock
+            ? derived.thinking
+            : undefined
+        flushSync(() => {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantId
+                ? {
+                    ...m,
+                    content: derived.answer,
+                    thinking,
+                    pending: false,
+                  }
+                : m,
+            ),
+          )
+        })
+      }
+
+      const streamResult = await streamChatWithCheck(
         connection,
         {
           profileId: profile.id,
@@ -744,15 +803,12 @@ export function ChatPage() {
         {
           signal: abortRef.current.signal,
           onText: (chunk) => {
-            flushSync(() => {
-              setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === assistantId
-                    ? { ...m, content: m.content + chunk, pending: false }
-                    : m,
-                ),
-              )
-            })
+            textAccum += chunk
+            pushStreamState()
+          },
+          onThinking: (chunk) => {
+            thinkingAccum += chunk
+            pushStreamState()
           },
           onUsage: (u) => {
             usage = u
@@ -762,6 +818,24 @@ export function ChatPage() {
           },
         },
       )
+
+      const final = resolveFinalAssistantMessage(streamResult.text, streamResult.thinking)
+      const content = final.content
+
+      flushSync(() => {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantId
+              ? {
+                  ...m,
+                  content: final.content,
+                  thinking: final.thinking,
+                  pending: false,
+                }
+              : m,
+          ),
+        )
+      })
 
       const convoId = opts?.conversationId ?? conversationId
       if (content.trim() && convoId) {
@@ -780,14 +854,20 @@ export function ChatPage() {
         setMessages((prev) =>
           applyPersistedMessageIds(prev, saved.messages, assistantId, opts?.pendingUserId).map((m) =>
             m.id === assistantId || m.dbId === saved.messages.find((r) => r.role === "assistant")?.id
-              ? { ...m, usage, pending: false }
+              ? {
+                  ...m,
+                  content: final.content,
+                  thinking: final.thinking,
+                  usage,
+                  pending: false,
+                }
               : m,
           ),
         )
         void loadHistory()
       }
 
-      return { content, usage }
+      return { content: final.content, usage }
     },
     [chatContext, connection, conversationId, loadChatContext, loadHistory, selectedModel, selectedProfile],
   )
@@ -802,6 +882,7 @@ export function ChatPage() {
       id: assistantId,
       role: "assistant",
       content: "",
+      thinking: "",
       pending: true,
     }
 
@@ -881,6 +962,7 @@ export function ChatPage() {
       id: assistantId,
       role: "assistant",
       content: "",
+      thinking: "",
       pending: true,
     }
 
