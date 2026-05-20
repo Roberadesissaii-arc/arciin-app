@@ -1,11 +1,12 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { CloudUpload, Folder, Loader2 } from "lucide-react"
+import { createPortal } from "react-dom"
+import { CloudUpload, Folder, Loader2, RefreshCw, Search, X } from "lucide-react"
 
 import { useFilesChrome } from "@/components/files/files-chrome-context"
 import { AssetThumbnail } from "@/components/files/asset-thumbnail"
-import { FolderTile, FolderGridTile } from "@/components/files/folder-tile"
+import { FolderTile } from "@/components/files/folder-tile"
 import { AssetViewer } from "@/components/files/asset-viewer"
 import { MobileCreateFolderSheet } from "@/components/files/mobile-create-folder-sheet"
 import { useConnection } from "@/components/providers/connection-provider"
@@ -436,11 +437,6 @@ export function FilesPage() {
           </div>
         ) : null}
 
-        {countMismatch ? (
-          <p className="text-[11px] leading-snug text-[#a0a0a0]">
-            Some files may still be processing. Tap refresh or check All files.
-          </p>
-        ) : null}
 
         {uploading && uploadName ? (
           <div
@@ -506,19 +502,6 @@ export function FilesPage() {
                         />
                       </div>
                     ))}
-                    {visibleFolders.length > 2 && (
-                      <div>
-                        <div className="mx-4 h-px bg-[#f5f5f5]" />
-                        <button
-                          type="button"
-                          onClick={() => setAllFoldersOpen(true)}
-                          className="flex w-full items-center justify-center py-3 text-[13px] font-semibold active:bg-[#fafafa]"
-                          style={{ color: "#ff4f12" }}
-                        >
-                          View all {visibleFolders.length} folders
-                        </button>
-                      </div>
-                    )}
                   </div>
                 ) : (
                   <SectionPlaceholder
@@ -597,10 +580,12 @@ export function FilesPage() {
       {allFoldersOpen && (
         <AllFoldersOverlay
           folders={visibleFolders}
+          refreshing={refreshing}
           onClose={() => setAllFoldersOpen(false)}
           onOpen={(id) => { setAllFoldersOpen(false); openFolder(id) }}
           onDelete={(id) => handleDeleteFolder(id)}
           onRename={(id, name) => handleRenameFolder(id, name)}
+          onRefresh={() => void load(undefined, true)}
         />
       )}
     </div>
@@ -611,57 +596,135 @@ export function FilesPage() {
 
 function AllFoldersOverlay({
   folders,
+  refreshing,
   onClose,
   onOpen,
   onDelete,
   onRename,
+  onRefresh,
 }: {
   folders: FolderSummary[]
+  refreshing: boolean
   onClose: () => void
   onOpen: (id: string) => void
   onDelete: (id: string) => Promise<void>
   onRename: (id: string, name: string) => Promise<void>
+  onRefresh: () => void
 }) {
-  return (
+  const [query, setQuery] = useState("")
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => { setMounted(true) }, [])
+
+  const filtered = query.trim()
+    ? folders.filter((f) => f.name.toLowerCase().includes(query.trim().toLowerCase()))
+    : folders
+
+  if (!mounted) return null
+
+  return createPortal(
     <div
       className="fixed inset-0 z-[150] flex flex-col bg-[#f7f7f7]"
       style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
     >
-      {/* header */}
-      <div
-        className="flex shrink-0 items-center gap-3 border-b border-[#ebebeb] bg-white px-4 py-3"
-      >
-        <button
-          type="button"
-          onClick={onClose}
-          className="flex size-9 items-center justify-center rounded-xl text-[#717171] active:bg-[#f7f7f7]"
-          style={{ border: "1px solid #e5e5e5" }}
-          aria-label="Back"
+      {/* sticky intro + search */}
+      <div className="shrink-0 px-4 pt-4 pb-3">
+        {/* orange intro card */}
+        <div
+          className="relative overflow-hidden rounded-2xl px-4 pb-4 pt-4"
+          style={{ background: "linear-gradient(155deg, #ff6a30 0%, #c82d00 100%)" }}
         >
-          <svg className="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="m15 18-6-6 6-6" />
-          </svg>
-        </button>
-        <div className="min-w-0 flex-1">
-          <p className="text-[17px] font-bold text-[#222222]">Folders</p>
-          <p className="text-[11px] text-[#a0a0a0]">{folders.length} folder{folders.length !== 1 ? "s" : ""}</p>
+          {/* back button */}
+          <button
+            type="button"
+            onClick={onClose}
+            className="absolute left-4 top-4 flex size-9 items-center justify-center rounded-full"
+            style={{ backgroundColor: "rgba(255,255,255,0.18)" }}
+            aria-label="Back"
+          >
+            <svg className="size-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="m15 18-6-6 6-6" />
+            </svg>
+          </button>
+          {/* refresh button */}
+          <button
+            type="button"
+            onClick={onRefresh}
+            className="absolute right-4 top-4 flex size-9 items-center justify-center rounded-full"
+            style={{ backgroundColor: "rgba(255,255,255,0.18)" }}
+            aria-label="Refresh"
+          >
+            <RefreshCw className={`size-4 text-white ${refreshing ? "animate-spin" : ""}`} />
+          </button>
+          {/* title */}
+          <div className="mt-10">
+            <p className="text-[22px] font-bold text-white">Folders</p>
+            <p className="mt-0.5 text-[13px]" style={{ color: "rgba(255,255,255,0.72)" }}>
+              {folders.length} folder{folders.length !== 1 ? "s" : ""}
+            </p>
+          </div>
+        </div>
+
+        {/* search */}
+        <div className="relative mt-3">
+          <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-[#a0a0a0]" />
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search folders…"
+            className="w-full rounded-2xl border border-[#e5e5e5] bg-white py-3 pl-10 pr-10 text-[14px] text-[#222222] outline-none placeholder:text-[#a0a0a0] focus:border-[#ff4f12]"
+            autoComplete="off"
+            aria-label="Search folders"
+          />
+          {query ? (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              className="absolute right-2 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-lg text-[#717171] active:bg-[#f7f7f7]"
+              aria-label="Clear search"
+            >
+              <X className="size-4" />
+            </button>
+          ) : null}
         </div>
       </div>
 
-      {/* grid */}
-      <div className="flex-1 overflow-y-auto px-4 py-4">
-        <div className="grid grid-cols-2 gap-4">
-          {folders.map((folder) => (
-            <FolderGridTile
-              key={folder.id}
-              folder={folder}
-              onOpen={() => onOpen(folder.id)}
-              onDelete={() => onDelete(folder.id)}
-              onRename={(name) => onRename(folder.id, name)}
-            />
-          ))}
-        </div>
+      {/* folder list */}
+      <div
+        className="flex-1 overflow-y-auto px-4"
+        style={{ paddingBottom: "max(2rem, env(safe-area-inset-bottom))" }}
+      >
+        {filtered.length === 0 ? (
+          <div
+            className="rounded-2xl bg-white px-4 py-10 text-center"
+            style={{ border: "1px dashed #e5e5e5" }}
+          >
+            <Folder className="mx-auto mb-3 size-7 text-[#e5e5e5]" />
+            <p className="text-[13px] font-medium text-[#222222]">
+              {query ? "No folders matched" : "No folders yet"}
+            </p>
+          </div>
+        ) : (
+          <div
+            className={`overflow-hidden rounded-2xl bg-white ${refreshing ? "opacity-70" : ""}`}
+            style={{ border: "1px solid #e5e5e5" }}
+          >
+            {filtered.map((folder, i) => (
+              <div key={folder.id}>
+                {i > 0 ? <div className="mx-4 h-px bg-[#f5f5f5]" /> : null}
+                <FolderTile
+                  folder={folder}
+                  onOpen={() => onOpen(folder.id)}
+                  onDelete={() => onDelete(folder.id)}
+                  onRename={(name) => onRename(folder.id, name)}
+                />
+              </div>
+            ))}
+          </div>
+        )}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

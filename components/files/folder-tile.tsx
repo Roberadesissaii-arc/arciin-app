@@ -6,6 +6,94 @@ import { createPortal } from "react-dom"
 
 import type { FolderSummary } from "@/lib/types/folders"
 
+/* ── delete confirmation sheet (shared) ──────────────────────── */
+
+function DeleteFolderSheet({
+  folder,
+  onClose,
+  onDelete,
+}: {
+  folder: FolderSummary
+  onClose: () => void
+  onDelete: () => Promise<void>
+}) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => { setMounted(true) }, [])
+
+  async function handleDelete() {
+    setBusy(true)
+    setError(null)
+    try {
+      await onDelete()
+      onClose()
+    } catch {
+      setError("Could not delete folder. Try again.")
+      setBusy(false)
+    }
+  }
+
+  if (!mounted) return null
+
+  return createPortal(
+    <div className="fixed inset-0 z-[300]" role="dialog" aria-modal="true">
+      <button type="button" className="absolute inset-0 bg-black/50" onClick={onClose} aria-label="Close" />
+      <div
+        className="absolute inset-x-0 bottom-0 rounded-t-3xl bg-white px-5 pt-5"
+        style={{ paddingBottom: "max(1.5rem, env(safe-area-inset-bottom))" }}
+      >
+        <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-[#e0e0e0]" />
+
+        {/* icon */}
+        <div className="mb-4 flex flex-col items-center gap-3 text-center">
+          <div
+            className="flex size-14 items-center justify-center rounded-2xl"
+            style={{ backgroundColor: "#fef2f2", border: "1px solid #fecaca" }}
+          >
+            <Trash2 className="size-6 text-[#dc2626]" />
+          </div>
+          <div>
+            <p className="text-[17px] font-bold text-[#222222]">Delete folder?</p>
+            <p className="mt-1 text-[13px] leading-relaxed text-[#717171]">
+              &ldquo;{folder.name}&rdquo; will be removed from the library.
+              Files inside will stay in the library.
+            </p>
+          </div>
+        </div>
+
+        {error ? (
+          <p className="mb-3 text-center text-[12px] text-[#b91c1c]">{error}</p>
+        ) : null}
+
+        <div className="flex flex-col gap-2">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void handleDelete()}
+            className="flex w-full items-center justify-center gap-2 rounded-xl py-3 text-[14px] font-semibold text-white disabled:opacity-50"
+            style={{ backgroundColor: "#dc2626" }}
+          >
+            {busy ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+            Delete folder
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onClose}
+            className="flex w-full items-center justify-center rounded-xl py-3 text-[14px] font-semibold text-[#717171] active:bg-[#f0f0f0]"
+            style={{ border: "1px solid #e5e5e5" }}
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  )
+}
+
 /* ── rename bottom sheet (shared) ────────────────────────────── */
 
 export function RenameFolderSheet({
@@ -98,16 +186,10 @@ export function FolderTile({
   onDelete: () => Promise<void>
   onRename: (newName: string) => Promise<void>
 }) {
-  const [mode, setMode] = useState<"idle" | "renaming" | "confirming">("idle")
-  const [busy, setBusy] = useState(false)
+  const [sheet, setSheet] = useState<"none" | "rename" | "delete">("none")
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => { setMounted(true) }, [])
-
-  async function commitDelete() {
-    setBusy(true)
-    try { await onDelete() } finally { setBusy(false); setMode("idle") }
-  }
 
   return (
     <>
@@ -123,37 +205,24 @@ export function FolderTile({
           <p className="text-[11px] text-[#a0a0a0]">{folder.assetCount} item{folder.assetCount !== 1 ? "s" : ""}</p>
         </button>
 
-        {mode === "idle" && (
-          <div className="flex shrink-0 items-center gap-1">
-            <button type="button" onClick={() => setMode("renaming")}
-              className="flex size-8 items-center justify-center rounded-xl text-[#a0a0a0] active:bg-[#f0f0f0] active:text-[#222222]" aria-label="Rename">
-              <Pencil className="size-3.5" />
-            </button>
-            <button type="button" onClick={() => setMode("confirming")}
-              className="flex size-8 items-center justify-center rounded-xl text-[#a0a0a0] active:bg-[#fef2f2] active:text-[#dc2626]" aria-label="Delete">
-              <Trash2 className="size-3.5" />
-            </button>
-          </div>
-        )}
-
-        {mode === "confirming" && (
-          <div className="flex shrink-0 items-center gap-1">
-            <button type="button" onClick={() => void commitDelete()} disabled={busy}
-              className="rounded-lg bg-[#dc2626] px-2.5 py-1 text-[11px] font-semibold text-white disabled:opacity-50 active:bg-[#b91c1c]">
-              {busy ? <Loader2 className="size-3 animate-spin" /> : "Delete"}
-            </button>
-            <button type="button" onClick={() => setMode("idle")} disabled={busy}
-              className="rounded-lg bg-[#f7f7f7] px-2.5 py-1 text-[11px] font-semibold text-[#717171] active:bg-[#ececec]"
-              style={{ border: "1px solid #e5e5e5" }}>
-              Cancel
-            </button>
-          </div>
-        )}
+        <div className="flex shrink-0 items-center gap-1">
+          <button type="button" onClick={() => setSheet("rename")}
+            className="flex size-8 items-center justify-center rounded-xl text-[#a0a0a0] active:bg-[#f0f0f0] active:text-[#222222]" aria-label="Rename">
+            <Pencil className="size-3.5" />
+          </button>
+          <button type="button" onClick={() => setSheet("delete")}
+            className="flex size-8 items-center justify-center rounded-xl text-[#a0a0a0] active:bg-[#fef2f2] active:text-[#dc2626]" aria-label="Delete">
+            <Trash2 className="size-3.5" />
+          </button>
+        </div>
       </div>
 
-      {mounted && mode === "renaming" ? (
-        <RenameFolderSheet folder={folder} onClose={() => setMode("idle")} onRename={onRename} />
-      ) : null}
+      {mounted && sheet === "rename" && (
+        <RenameFolderSheet folder={folder} onClose={() => setSheet("none")} onRename={onRename} />
+      )}
+      {mounted && sheet === "delete" && (
+        <DeleteFolderSheet folder={folder} onClose={() => setSheet("none")} onDelete={onDelete} />
+      )}
     </>
   )
 }
@@ -171,17 +240,10 @@ export function FolderGridTile({
   onDelete: () => Promise<void>
   onRename: (newName: string) => Promise<void>
 }) {
-  const [confirming, setConfirming] = useState(false)
-  const [renaming, setRenaming] = useState(false)
-  const [busy, setBusy] = useState(false)
+  const [sheet, setSheet] = useState<"none" | "rename" | "delete">("none")
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => { setMounted(true) }, [])
-
-  async function commitDelete() {
-    setBusy(true)
-    try { await onDelete() } finally { setBusy(false); setConfirming(false) }
-  }
 
   return (
     <>
@@ -243,35 +305,25 @@ export function FolderGridTile({
           <p className="truncate text-[11px] text-[#a0a0a0]">
             {folder.assetCount} item{folder.assetCount !== 1 ? "s" : ""}
           </p>
-          {!confirming ? (
-            <div className="flex items-center gap-0.5">
-              <button type="button" onClick={() => setRenaming(true)}
-                className="flex size-7 items-center justify-center rounded-lg text-[#b0b0b0] active:bg-[#f0f0f0] active:text-[#222222]" aria-label="Rename">
-                <Pencil className="size-3" />
-              </button>
-              <button type="button" onClick={() => setConfirming(true)}
-                className="flex size-7 items-center justify-center rounded-lg text-[#b0b0b0] active:bg-[#fef2f2] active:text-[#dc2626]" aria-label="Delete">
-                <Trash2 className="size-3" />
-              </button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-1">
-              <button type="button" onClick={() => void commitDelete()} disabled={busy}
-                className="rounded-md bg-[#dc2626] px-2 py-0.5 text-[10px] font-semibold text-white disabled:opacity-50">
-                {busy ? <Loader2 className="size-2.5 animate-spin" /> : "Delete"}
-              </button>
-              <button type="button" onClick={() => setConfirming(false)} disabled={busy}
-                className="rounded-md bg-[#f0f0f0] px-2 py-0.5 text-[10px] font-semibold text-[#717171]">
-                No
-              </button>
-            </div>
-          )}
+          <div className="flex items-center gap-0.5">
+            <button type="button" onClick={() => setSheet("rename")}
+              className="flex size-7 items-center justify-center rounded-lg text-[#b0b0b0] active:bg-[#f0f0f0] active:text-[#222222]" aria-label="Rename">
+              <Pencil className="size-3" />
+            </button>
+            <button type="button" onClick={() => setSheet("delete")}
+              className="flex size-7 items-center justify-center rounded-lg text-[#b0b0b0] active:bg-[#fef2f2] active:text-[#dc2626]" aria-label="Delete">
+              <Trash2 className="size-3" />
+            </button>
+          </div>
         </div>
       </div>
 
-      {mounted && renaming ? (
-        <RenameFolderSheet folder={folder} onClose={() => setRenaming(false)} onRename={onRename} />
-      ) : null}
+      {mounted && sheet === "rename" && (
+        <RenameFolderSheet folder={folder} onClose={() => setSheet("none")} onRename={onRename} />
+      )}
+      {mounted && sheet === "delete" && (
+        <DeleteFolderSheet folder={folder} onClose={() => setSheet("none")} onDelete={onDelete} />
+      )}
     </>
   )
 }
