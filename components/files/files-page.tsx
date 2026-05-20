@@ -1,8 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { createPortal } from "react-dom"
-import { CloudUpload, Folder, Loader2, RefreshCw, Search, X } from "lucide-react"
+import { ArrowLeft, CloudUpload, Folder, Loader2, RefreshCw, Search, X } from "lucide-react"
 
 import { useFilesChrome } from "@/components/files/files-chrome-context"
 import { AssetThumbnail } from "@/components/files/asset-thumbnail"
@@ -417,168 +416,9 @@ export function FilesPage() {
         onCreated={() => void load(undefined, true)}
       />
 
-
-      {uploadNotice ? (
-        <p
-          className="rounded-xl px-4 py-2.5 text-center text-[12px] font-medium text-[#15803d]"
-            style={{ backgroundColor: "#f0fdf4", border: "1px solid #bbf7d0" }}
-          >
-            {uploadNotice}
-          </p>
-        ) : null}
-
-        {error ? (
-          <div
-            className="rounded-xl px-4 py-3 text-[12px] text-[#b91c1c]"
-            style={{ backgroundColor: "#fef2f2", border: "1px solid #fecaca" }}
-            role="alert"
-          >
-            {error}
-          </div>
-        ) : null}
-
-
-        {uploading && uploadName ? (
-          <div
-            className="mt-3 rounded-2xl bg-white px-4 py-3"
-            style={{ border: "1px solid #e5e5e5" }}
-          >
-            <div className="flex items-center gap-2">
-              <CloudUpload className="size-4 shrink-0 text-[#ff4f12]" />
-              <p className="min-w-0 flex-1 truncate text-[12px] font-medium text-[#222222]">
-                {uploadName}
-              </p>
-              <span className="text-[11px] font-semibold tabular-nums text-[#717171]">
-                {uploadProgress ?? 0}%
-              </span>
-            </div>
-            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#f0f0f0]">
-              <div
-                className="h-full rounded-full transition-all"
-                style={{
-                  width: `${uploadProgress ?? 0}%`,
-                  backgroundColor: "#ff4f12",
-                }}
-              />
-            </div>
-          </div>
-        ) : null}
-
-      <div>
-        {showSkeleton ? (
-          <GridSkeleton />
-        ) : (
-          <div className={`flex flex-col gap-4 ${refreshing ? "opacity-80" : ""}`}>
-            {showFoldersSection ? (
-              <section className="flex flex-col gap-2">
-                <div className="flex items-center justify-between">
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-[#a0a0a0]">
-                    Folders
-                  </p>
-                  {visibleFolders.length > 2 && (
-                    <button
-                      type="button"
-                      onClick={() => setAllFoldersOpen(true)}
-                      className="text-[12px] font-semibold active:opacity-70"
-                      style={{ color: "#ff4f12" }}
-                    >
-                      View all ({visibleFolders.length})
-                    </button>
-                  )}
-                </div>
-                {visibleFolders.length > 0 ? (
-                  <div
-                    className="overflow-hidden rounded-2xl bg-white"
-                    style={{ border: "1px solid #e5e5e5" }}
-                  >
-                    {visibleFolders.slice(0, 2).map((folder, i) => (
-                      <div key={folder.id}>
-                        {i > 0 ? <div className="mx-4 h-px bg-[#f5f5f5]" /> : null}
-                        <FolderTile
-                          folder={folder}
-                          onOpen={() => openFolder(folder.id)}
-                          onDelete={() => handleDeleteFolder(folder.id)}
-                          onRename={(name) => handleRenameFolder(folder.id, name)}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <SectionPlaceholder
-                    icon={Folder}
-                    title="No folders yet"
-                    description="Tap the folder+ icon above to create one."
-                  />
-                )}
-              </section>
-            ) : null}
-
-            <section className="flex flex-col gap-2">
-              {(showFoldersSection || assets.length > 0) && (
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-[#a0a0a0]">
-                  {showFoldersSection ? "Files" : "Assets"}
-                </p>
-              )}
-              {assets.length > 0 ? (
-                <div className="grid grid-cols-2 gap-3">
-                  {assets.map((asset, i) => (
-                    <button
-                      key={asset.id}
-                      type="button"
-                      onClick={() => setViewerIndex(i)}
-                      className="overflow-hidden rounded-2xl bg-white p-2 text-left shadow-sm active:opacity-90"
-                      style={{ border: "1px solid #e5e5e5" }}
-                    >
-                      {connection ? (
-                        <AssetThumbnail asset={asset} connection={connection} />
-                      ) : null}
-                      <p className="mt-2 truncate px-0.5 text-[14px] font-semibold leading-tight text-[#222222]">
-                        {asset.title?.trim() || asset.originalFilename}
-                      </p>
-                      <p className="mt-1 truncate px-0.5 pb-0.5 text-[11px] leading-snug text-[#a0a0a0]">
-                        {formatBytes(asset.sizeBytes)}
-                      </p>
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <SectionPlaceholder
-                  icon={CloudUpload}
-                  title={
-                    currentFolder
-                      ? "No files in this folder"
-                      : filter === "all"
-                        ? "No files yet"
-                        : `No ${filterLabel.toLowerCase()} yet`
-                  }
-                  description={
-                    currentFolder
-                      ? "Upload files here or move items from another folder."
-                      : "Tap upload above to add files to this library."
-                  }
-                />
-              )}
-            </section>
-
-            {!showFoldersSection && assets.length === 0 && filter === "all" ? (
-              <button
-                type="button"
-                disabled={uploading}
-                onClick={() => inputRef.current?.click()}
-                className="flex items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-[13px] font-semibold text-white active:opacity-90 disabled:opacity-50"
-                style={{ backgroundColor: "#ff4f12" }}
-              >
-                <CloudUpload className="size-4" />
-                Upload files
-              </button>
-            ) : null}
-          </div>
-        )}
-      </div>
-
-      {/* ── all folders overlay ─────────────────────────────────── */}
-      {allFoldersOpen && (
-        <AllFoldersOverlay
+      {/* ── all folders inline view — swaps out main content ─── */}
+      {allFoldersOpen ? (
+        <AllFoldersList
           folders={visibleFolders}
           refreshing={refreshing}
           onClose={() => setAllFoldersOpen(false)}
@@ -587,14 +427,170 @@ export function FilesPage() {
           onRename={(id, name) => handleRenameFolder(id, name)}
           onRefresh={() => void load(undefined, true)}
         />
+      ) : (
+        <>
+          {uploadNotice ? (
+            <p
+              className="rounded-xl px-4 py-2.5 text-center text-[12px] font-medium text-[#15803d]"
+              style={{ backgroundColor: "#f0fdf4", border: "1px solid #bbf7d0" }}
+            >
+              {uploadNotice}
+            </p>
+          ) : null}
+
+          {error ? (
+            <div
+              className="rounded-xl px-4 py-3 text-[12px] text-[#b91c1c]"
+              style={{ backgroundColor: "#fef2f2", border: "1px solid #fecaca" }}
+              role="alert"
+            >
+              {error}
+            </div>
+          ) : null}
+
+          {uploading && uploadName ? (
+            <div
+              className="rounded-2xl bg-white px-4 py-3"
+              style={{ border: "1px solid #e5e5e5" }}
+            >
+              <div className="flex items-center gap-2">
+                <CloudUpload className="size-4 shrink-0 text-[#ff4f12]" />
+                <p className="min-w-0 flex-1 truncate text-[12px] font-medium text-[#222222]">
+                  {uploadName}
+                </p>
+                <span className="text-[11px] font-semibold tabular-nums text-[#717171]">
+                  {uploadProgress ?? 0}%
+                </span>
+              </div>
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#f0f0f0]">
+                <div
+                  className="h-full rounded-full transition-all"
+                  style={{ width: `${uploadProgress ?? 0}%`, backgroundColor: "#ff4f12" }}
+                />
+              </div>
+            </div>
+          ) : null}
+
+          <div>
+            {showSkeleton ? (
+              <GridSkeleton />
+            ) : (
+              <div className={`flex flex-col gap-4 ${refreshing ? "opacity-80" : ""}`}>
+                {showFoldersSection ? (
+                  <section className="flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-[#a0a0a0]">
+                        Folders
+                      </p>
+                      {visibleFolders.length > 2 && (
+                        <button
+                          type="button"
+                          onClick={() => setAllFoldersOpen(true)}
+                          className="text-[12px] font-semibold active:opacity-70"
+                          style={{ color: "#ff4f12" }}
+                        >
+                          View all ({visibleFolders.length})
+                        </button>
+                      )}
+                    </div>
+                    {visibleFolders.length > 0 ? (
+                      <div
+                        className="overflow-hidden rounded-2xl bg-white"
+                        style={{ border: "1px solid #e5e5e5" }}
+                      >
+                        {visibleFolders.slice(0, 2).map((folder, i) => (
+                          <div key={folder.id}>
+                            {i > 0 ? <div className="mx-4 h-px bg-[#f5f5f5]" /> : null}
+                            <FolderTile
+                              folder={folder}
+                              onOpen={() => openFolder(folder.id)}
+                              onDelete={() => handleDeleteFolder(folder.id)}
+                              onRename={(name) => handleRenameFolder(folder.id, name)}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <SectionPlaceholder
+                        icon={Folder}
+                        title="No folders yet"
+                        description="Tap the folder+ icon above to create one."
+                      />
+                    )}
+                  </section>
+                ) : null}
+
+                <section className="flex flex-col gap-2">
+                  {(showFoldersSection || assets.length > 0) && (
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-[#a0a0a0]">
+                      {showFoldersSection ? "Files" : "Assets"}
+                    </p>
+                  )}
+                  {assets.length > 0 ? (
+                    <div className="grid grid-cols-2 gap-3">
+                      {assets.map((asset, i) => (
+                        <button
+                          key={asset.id}
+                          type="button"
+                          onClick={() => setViewerIndex(i)}
+                          className="overflow-hidden rounded-2xl bg-white p-2 text-left shadow-sm active:opacity-90"
+                          style={{ border: "1px solid #e5e5e5" }}
+                        >
+                          {connection ? (
+                            <AssetThumbnail asset={asset} connection={connection} />
+                          ) : null}
+                          <p className="mt-2 truncate px-0.5 text-[14px] font-semibold leading-tight text-[#222222]">
+                            {asset.title?.trim() || asset.originalFilename}
+                          </p>
+                          <p className="mt-1 truncate px-0.5 pb-0.5 text-[11px] leading-snug text-[#a0a0a0]">
+                            {formatBytes(asset.sizeBytes)}
+                          </p>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <SectionPlaceholder
+                      icon={CloudUpload}
+                      title={
+                        currentFolder
+                          ? "No files in this folder"
+                          : filter === "all"
+                            ? "No files yet"
+                            : `No ${filterLabel.toLowerCase()} yet`
+                      }
+                      description={
+                        currentFolder
+                          ? "Upload files here or move items from another folder."
+                          : "Tap upload above to add files to this library."
+                      }
+                    />
+                  )}
+                </section>
+
+                {!showFoldersSection && assets.length === 0 && filter === "all" ? (
+                  <button
+                    type="button"
+                    disabled={uploading}
+                    onClick={() => inputRef.current?.click()}
+                    className="flex items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-[13px] font-semibold text-white active:opacity-90 disabled:opacity-50"
+                    style={{ backgroundColor: "#ff4f12" }}
+                  >
+                    <CloudUpload className="size-4" />
+                    Upload files
+                  </button>
+                ) : null}
+              </div>
+            )}
+          </div>
+        </>
       )}
     </div>
   )
 }
 
-/* ── all folders full-screen overlay ─────────────────────────── */
+/* ── all folders inline list — renders as normal page content ─── */
 
-function AllFoldersOverlay({
+function AllFoldersList({
   folders,
   refreshing,
   onClose,
@@ -612,28 +608,28 @@ function AllFoldersOverlay({
   onRefresh: () => void
 }) {
   const [query, setQuery] = useState("")
-  const [mounted, setMounted] = useState(false)
-
-  useEffect(() => { setMounted(true) }, [])
 
   const filtered = query.trim()
     ? folders.filter((f) => f.name.toLowerCase().includes(query.trim().toLowerCase()))
     : folders
 
-  if (!mounted) return null
-
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[20] flex flex-col bg-[#f7f7f7]"
-      style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
-    >
-      {/* sticky intro + search */}
-      <div className="shrink-0 px-4 pt-4 pb-3">
-        {/* orange intro card */}
-        <div
-          className="overflow-hidden rounded-2xl px-4 pb-4 pt-4"
-          style={{ background: "linear-gradient(155deg, #ff6a30 0%, #c82d00 100%)" }}
+  return (
+    <div className="flex flex-col gap-4">
+      {/* intro card */}
+      <div
+        className="relative overflow-hidden rounded-2xl px-4 pb-4 pt-4"
+        style={{ background: "linear-gradient(155deg, #ff6a30 0%, #c82d00 100%)" }}
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute left-4 top-4 flex size-9 items-center justify-center rounded-full"
+          style={{ backgroundColor: "rgba(255,255,255,0.18)" }}
+          aria-label="Back"
         >
+          <ArrowLeft className="size-4 text-white" />
+        </button>
+        <div className="mt-10">
           <p className="text-[22px] font-bold text-white">Folders</p>
           <p className="mt-0.5 text-[13px]" style={{ color: "rgba(255,255,255,0.72)" }}>
             {folders.length} folder{folders.length !== 1 ? "s" : ""}
@@ -642,75 +638,72 @@ function AllFoldersOverlay({
             Organize your files and assets with folders. Tap any folder to browse its contents.
           </p>
         </div>
+      </div>
 
-        {/* search + refresh row */}
-        <div className="mt-3 flex items-center gap-2">
-          <div className="relative flex-1">
-            <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-[#a0a0a0]" />
-            <input
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search folders…"
-              className="w-full rounded-2xl border border-[#e5e5e5] bg-white py-3 pl-10 pr-10 text-[14px] text-[#222222] outline-none placeholder:text-[#a0a0a0] focus:border-[#ff4f12]"
-              autoComplete="off"
-              aria-label="Search folders"
-            />
-            {query ? (
-              <button
-                type="button"
-                onClick={() => setQuery("")}
-                className="absolute right-2 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-lg text-[#717171] active:bg-[#f7f7f7]"
-                aria-label="Clear search"
-              >
-                <X className="size-4" />
-              </button>
-            ) : null}
-          </div>
-          <button
-            type="button"
-            onClick={onRefresh}
-            className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-white text-[#717171]"
-            style={{ border: "1px solid #e5e5e5" }}
-            aria-label="Refresh"
-          >
-            <RefreshCw className={`size-4 ${refreshing ? "animate-spin" : ""}`} />
-          </button>
+      {/* search + refresh */}
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1">
+          <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-[#a0a0a0]" />
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search folders…"
+            className="w-full rounded-2xl border border-[#e5e5e5] bg-white py-3 pl-10 pr-10 text-[14px] text-[#222222] outline-none placeholder:text-[#a0a0a0] focus:border-[#ff4f12]"
+            autoComplete="off"
+            aria-label="Search folders"
+          />
+          {query ? (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              className="absolute right-2 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-lg text-[#717171] active:bg-[#f7f7f7]"
+              aria-label="Clear search"
+            >
+              <X className="size-4" />
+            </button>
+          ) : null}
         </div>
+        <button
+          type="button"
+          onClick={onRefresh}
+          className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-white text-[#717171]"
+          style={{ border: "1px solid #e5e5e5" }}
+          aria-label="Refresh"
+        >
+          <RefreshCw className={`size-4 ${refreshing ? "animate-spin" : ""}`} />
+        </button>
       </div>
 
       {/* folder list */}
-      <div className="flex-1 overflow-y-auto px-4 pb-nav-safe">
-        {filtered.length === 0 ? (
-          <div
-            className="rounded-2xl bg-white px-4 py-10 text-center"
-            style={{ border: "1px dashed #e5e5e5" }}
-          >
-            <Folder className="mx-auto mb-3 size-7 text-[#e5e5e5]" />
-            <p className="text-[13px] font-medium text-[#222222]">
-              {query ? "No folders matched" : "No folders yet"}
-            </p>
-          </div>
-        ) : (
-          <div
-            className={`overflow-hidden rounded-2xl bg-white ${refreshing ? "opacity-70" : ""}`}
-            style={{ border: "1px solid #e5e5e5" }}
-          >
-            {filtered.map((folder, i) => (
-              <div key={folder.id}>
-                {i > 0 ? <div className="mx-4 h-px bg-[#f5f5f5]" /> : null}
-                <FolderTile
-                  folder={folder}
-                  onOpen={() => onOpen(folder.id)}
-                  onDelete={() => onDelete(folder.id)}
-                  onRename={(name) => onRename(folder.id, name)}
-                />
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>,
-    document.body,
+      {filtered.length === 0 ? (
+        <div
+          className="rounded-2xl bg-white px-4 py-10 text-center"
+          style={{ border: "1px dashed #e5e5e5" }}
+        >
+          <Folder className="mx-auto mb-3 size-7 text-[#e5e5e5]" />
+          <p className="text-[13px] font-medium text-[#222222]">
+            {query ? "No folders matched" : "No folders yet"}
+          </p>
+        </div>
+      ) : (
+        <div
+          className={`overflow-hidden rounded-2xl bg-white ${refreshing ? "opacity-70" : ""}`}
+          style={{ border: "1px solid #e5e5e5" }}
+        >
+          {filtered.map((folder, i) => (
+            <div key={folder.id}>
+              {i > 0 ? <div className="mx-4 h-px bg-[#f5f5f5]" /> : null}
+              <FolderTile
+                folder={folder}
+                onOpen={() => onOpen(folder.id)}
+                onDelete={() => onDelete(folder.id)}
+                onRename={(name) => onRename(folder.id, name)}
+              />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
