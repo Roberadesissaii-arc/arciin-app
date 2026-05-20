@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Check, ChevronLeft, Eye, EyeOff, Globe, Key, Lock, Mail, Server } from "lucide-react"
 
 import { formatApiError } from "@/lib/api/errors"
@@ -360,17 +360,13 @@ export function SignInPage() {
   const [connecting, setConnecting] = useState(false)
   const [verifiedApiBase, setVerifiedApiBase] = useState<string | null>(null)
   const [verifiedInstanceName, setVerifiedInstanceName] = useState<string | null>(null)
-  /** pair = new device (URL → Continue → 6-digit code). switch = change saved URL only. */
-  const [setupMode, setSetupMode] = useState<"pair" | "switch">("pair")
-
   const serverProfile = loadServerProfile()
-  const isPairingSetup = setupMode === "pair"
+  const searchParams = useSearchParams()
 
-  function goToPage(page: 0 | 1, mode?: "pair" | "switch") {
+  function goToPage(page: 0 | 1) {
     setActivePage(page)
     setError(null)
     if (page === 1) {
-      setSetupMode(mode ?? (hasStoredServer() ? "switch" : "pair"))
       setSetupStep(1)
       setServerUrl("")
       setServerAddressMode("local")
@@ -383,8 +379,12 @@ export function SignInPage() {
     if (!ready) return
     if (connection) {
       router.replace("/home")
+      return
     }
-  }, [ready, connection, router])
+    if (searchParams.get("new") === "1") {
+      goToPage(1)
+    }
+  }, [ready, connection, router, searchParams])
 
   async function handleSignIn(e: React.FormEvent) {
     e.preventDefault()
@@ -436,18 +436,12 @@ export function SignInPage() {
     }
   }
 
-  async function saveVerifiedServerAndFinishSetup(apiBase: string, instanceName: string) {
+  function saveVerifiedServerProfile(apiBase: string, instanceName: string) {
     const clientUrls = deriveMobileServerUrlsFromApiBase(apiBase)
     saveServerProfile({
       ...clientUrls,
       instanceName,
     })
-    if (setupMode === "switch") {
-      setError(null)
-      goToPage(0)
-      return true
-    }
-    return false
   }
 
   async function handleContinueSetup() {
@@ -456,29 +450,22 @@ export function SignInPage() {
       setError("Enter your server address.")
       return
     }
-    if (!verifiedApiBase) {
-      setSetupBusy("continue")
-      try {
+    setSetupBusy("continue")
+    try {
+      if (!verifiedApiBase) {
         const { discover, apiBaseUrl } = await discoverServer(serverUrl)
         setVerifiedApiBase(apiBaseUrl)
         setVerifiedInstanceName(discover.instanceName)
-        const finished = await saveVerifiedServerAndFinishSetup(
-          apiBaseUrl,
-          discover.instanceName,
-        )
-        if (!finished) setSetupStep(2)
-      } catch (err) {
-        setError(formatApiError(err, serverUrl))
-      } finally {
-        setSetupBusy(null)
+        saveVerifiedServerProfile(apiBaseUrl, discover.instanceName)
+      } else {
+        saveVerifiedServerProfile(verifiedApiBase, verifiedInstanceName ?? "Arciin")
       }
-      return
+      setSetupStep(2)
+    } catch (err) {
+      setError(formatApiError(err, serverUrl))
+    } finally {
+      setSetupBusy(null)
     }
-    const finished = await saveVerifiedServerAndFinishSetup(
-      verifiedApiBase,
-      verifiedInstanceName ?? "Arciin",
-    )
-    if (!finished) setSetupStep(2)
   }
 
   async function handleConnect(e: React.FormEvent) {
@@ -552,10 +539,7 @@ export function SignInPage() {
       className="flex min-h-[100dvh] flex-col pt-safe pb-safe"
       style={{ backgroundColor: "#f7f7f7" }}
     >
-      <BrandHeroCarousel
-        activePage={activePage as 0 | 1}
-        onSelectPage={(p) => goToPage(p, p === 1 ? "pair" : undefined)}
-      />
+      <BrandHeroCarousel activePage={activePage as 0 | 1} onSelectPage={goToPage} />
 
       {activePage === 0 ? (
         <AuthCard
@@ -568,18 +552,7 @@ export function SignInPage() {
           footer={
             <>
               <CardDivider />
-              <div className="flex flex-col gap-2">
-                <GhostButton
-                  label={hasStoredServer() ? "Change server" : "Connect to a server"}
-                  onClick={() => goToPage(1, hasStoredServer() ? "switch" : "pair")}
-                />
-                {hasStoredServer() ? (
-                  <GhostButton
-                    label="Connect to a new server"
-                    onClick={() => goToPage(1, "pair")}
-                  />
-                ) : null}
-              </div>
+              <GhostButton label="Create a new server" onClick={() => goToPage(1)} />
             </>
           }
         >
@@ -597,8 +570,7 @@ export function SignInPage() {
                 role="alert"
               >
                 This device saved <strong>localhost</strong>, which does not work on your
-                iPhone. Tap <strong>Change server</strong> and enter a LAN IP (e.g. 192.168.1.10)
-                or a public URL if you use a tunnel or domain.
+                phone. Tap <strong>Create a new server</strong> and enter your server’s LAN IP.
               </p>
             ) : null}
             {error ? <ErrorBanner message={error} /> : null}
@@ -630,21 +602,15 @@ export function SignInPage() {
             />
             <p className="text-[11.5px] leading-relaxed text-[#a0a0a0]">
               {hasStoredServer()
-                ? "No connection code needed — use your email and password. Change the server address below if you switched to a public URL."
-                : "First time on this phone? Tap Connect to a server and use the 6-digit code from your computer."}
+                ? "Already set up this phone? Sign in with your email and password."
+                : "First time? Tap Create a new server and use the 6-digit code from your Arciin desktop."}
             </p>
             <OrangeButton loading={signingIn} label="Sign in" loadingLabel="Signing in…" />
           </form>
         </AuthCard>
       ) : (
         <AuthCard
-          title={
-            setupStep === 1
-              ? isPairingSetup
-                ? "Connect a server"
-                : "Change server"
-              : "Pair this device"
-          }
+          title={setupStep === 1 ? "Create a new server" : "Pair this device"}
           subtitle={
             setupStep === 1
               ? serverAddressMode === "remote"
@@ -661,7 +627,7 @@ export function SignInPage() {
             </>
           }
         >
-          {isPairingSetup ? <SetupStepIndicator step={setupStep} /> : null}
+          <SetupStepIndicator step={setupStep} />
 
           {setupStep === 1 ? (
             <div className="flex flex-col gap-3.5">
@@ -709,8 +675,8 @@ export function SignInPage() {
               <OrangeButton
                 type="button"
                 loading={setupBusy === "continue"}
-                label={isPairingSetup ? "Continue" : "Save & sign in"}
-                loadingLabel={isPairingSetup ? "Continuing…" : "Saving…"}
+                label="Continue"
+                loadingLabel="Continuing…"
                 onClick={handleContinueSetup}
                 disabled={!serverUrl.trim() || setupBusy !== null}
               />

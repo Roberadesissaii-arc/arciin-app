@@ -54,9 +54,9 @@ export function ChangeServerInlinePanel({ enabled }: { enabled: boolean }) {
     }
   }
 
-  function handleStartOver() {
+  function handleSetupNewServer() {
     forgetServer()
-    router.push("/sign-in")
+    router.push("/sign-in?new=1")
   }
 
   if (!enabled) return null
@@ -66,7 +66,7 @@ export function ChangeServerInlinePanel({ enabled }: { enabled: boolean }) {
       <SettingsIntroCard
         icon={Server}
         title="Change server"
-        description="Point this app at a different Arciin instance. Use a LAN IP on Wi‑Fi or a public URL / tunnel when you are away from home."
+        description="Switch to another Arciin server you already use, or set up this phone again with a new server."
       />
 
       {serverReachable === false ? (
@@ -104,18 +104,17 @@ export function ChangeServerInlinePanel({ enabled }: { enabled: boolean }) {
         {error ? <p className="text-[12px] text-[#b91c1c]">{error}</p> : null}
         {message ? <p className="text-[12px] text-[#15803d]">{message}</p> : null}
         <p className="text-[11px] leading-relaxed text-[#a0a0a0]">
-          Same account on the new server? You will only need your email and password — no 6-digit
-          pairing code unless this phone has never been set up.
+          Updates the saved address. If your session is still valid, you stay signed in.
         </p>
       </div>
 
       <button
         type="button"
-        onClick={handleStartOver}
+        onClick={handleSetupNewServer}
         className="w-full rounded-xl py-3 text-center text-[13px] font-semibold text-[#717171] active:bg-[#f7f7f7]"
         style={{ border: "1px solid #e5e5e5" }}
       >
-        Remove saved server & set up again
+        Set up a new server
       </button>
     </div>
   )
