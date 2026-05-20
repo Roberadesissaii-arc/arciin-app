@@ -624,69 +624,61 @@ function AllFoldersOverlay({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[150] flex flex-col bg-[#f7f7f7]"
-      style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
+      className="fixed inset-x-0 top-0 z-[150] flex flex-col bg-[#f7f7f7]"
+      style={{
+        paddingTop: "env(safe-area-inset-top, 0px)",
+        bottom: "calc(4rem + max(0.5rem, env(safe-area-inset-bottom, 0px)) + 0.5rem)",
+      }}
     >
       {/* sticky intro + search */}
       <div className="shrink-0 px-4 pt-4 pb-3">
         {/* orange intro card */}
         <div
-          className="relative overflow-hidden rounded-2xl px-4 pb-4 pt-4"
+          className="overflow-hidden rounded-2xl px-4 pb-4 pt-4"
           style={{ background: "linear-gradient(155deg, #ff6a30 0%, #c82d00 100%)" }}
         >
-          {/* back button */}
-          <button
-            type="button"
-            onClick={onClose}
-            className="absolute left-4 top-4 flex size-9 items-center justify-center rounded-full"
-            style={{ backgroundColor: "rgba(255,255,255,0.18)" }}
-            aria-label="Back"
-          >
-            <svg className="size-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="m15 18-6-6 6-6" />
-            </svg>
-          </button>
-          {/* refresh button */}
+          <p className="text-[22px] font-bold text-white">Folders</p>
+          <p className="mt-0.5 text-[13px]" style={{ color: "rgba(255,255,255,0.72)" }}>
+            {folders.length} folder{folders.length !== 1 ? "s" : ""}
+          </p>
+          <p className="mt-2 text-[13px] leading-relaxed" style={{ color: "rgba(255,255,255,0.65)" }}>
+            Organize your files and assets with folders. Tap any folder to browse its contents.
+          </p>
+        </div>
+
+        {/* search + refresh row */}
+        <div className="mt-3 flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-[#a0a0a0]" />
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search folders…"
+              className="w-full rounded-2xl border border-[#e5e5e5] bg-white py-3 pl-10 pr-10 text-[14px] text-[#222222] outline-none placeholder:text-[#a0a0a0] focus:border-[#ff4f12]"
+              autoComplete="off"
+              aria-label="Search folders"
+            />
+            {query ? (
+              <button
+                type="button"
+                onClick={() => setQuery("")}
+                className="absolute right-2 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-lg text-[#717171] active:bg-[#f7f7f7]"
+                aria-label="Clear search"
+              >
+                <X className="size-4" />
+              </button>
+            ) : null}
+          </div>
           <button
             type="button"
             onClick={onRefresh}
-            className="absolute right-4 top-4 flex size-9 items-center justify-center rounded-full"
-            style={{ backgroundColor: "rgba(255,255,255,0.18)" }}
+            className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-white text-[#717171]"
+            style={{ border: "1px solid #e5e5e5" }}
             aria-label="Refresh"
           >
-            <RefreshCw className={`size-4 text-white ${refreshing ? "animate-spin" : ""}`} />
+            <RefreshCw className={`size-4 ${refreshing ? "animate-spin" : ""}`} />
           </button>
-          {/* title */}
-          <div className="mt-10">
-            <p className="text-[22px] font-bold text-white">Folders</p>
-            <p className="mt-0.5 text-[13px]" style={{ color: "rgba(255,255,255,0.72)" }}>
-              {folders.length} folder{folders.length !== 1 ? "s" : ""}
-            </p>
-          </div>
-        </div>
-
-        {/* search */}
-        <div className="relative mt-3">
-          <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-[#a0a0a0]" />
-          <input
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search folders…"
-            className="w-full rounded-2xl border border-[#e5e5e5] bg-white py-3 pl-10 pr-10 text-[14px] text-[#222222] outline-none placeholder:text-[#a0a0a0] focus:border-[#ff4f12]"
-            autoComplete="off"
-            aria-label="Search folders"
-          />
-          {query ? (
-            <button
-              type="button"
-              onClick={() => setQuery("")}
-              className="absolute right-2 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-lg text-[#717171] active:bg-[#f7f7f7]"
-              aria-label="Clear search"
-            >
-              <X className="size-4" />
-            </button>
-          ) : null}
         </div>
       </div>
 
