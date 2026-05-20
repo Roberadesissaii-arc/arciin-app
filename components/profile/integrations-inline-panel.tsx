@@ -32,7 +32,7 @@ const INTEGRATION_META: Record<
 
 function statusFor(integration: IntegrationSummary, comingSoon?: boolean) {
   if (comingSoon) return { label: "Coming soon", color: "#a0a0a0", bg: "#f7f7f7" }
-  if (integration.enabled) return { label: "Connected", color: "#22c55e", bg: "rgba(34,197,94,0.1)" }
+  if (integration.enabled) return { label: "Enabled", color: "#22c55e", bg: "rgba(34,197,94,0.1)" }
   return { label: "Not connected", color: "#a0a0a0", bg: "#f7f7f7" }
 }
 

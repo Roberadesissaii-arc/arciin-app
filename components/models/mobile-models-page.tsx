@@ -23,7 +23,8 @@ import { MODEL_PROVIDERS, type ProviderMeta } from "@/lib/models/provider-catalo
 import type { ModelProfile } from "@/lib/types/models"
 
 export function MobileModelsPage() {
-  const { connection, ready } = useConnection()
+  const { connection, ready, serverReachable } = useConnection()
+  const serverOnline = serverReachable !== false
   const setChrome = useModelsChromeOptional()?.setChrome
   const connectionRef = useRef(connection)
   connectionRef.current = connection
@@ -106,8 +107,9 @@ export function MobileModelsPage() {
   }, [])
 
   const onAddProvider = useCallback(() => {
+    if (!serverOnline) return
     setShowAddSheet(true)
-  }, [])
+  }, [serverOnline])
 
   useEffect(() => {
     if (!setChrome) return
@@ -118,6 +120,7 @@ export function MobileModelsPage() {
       totalCount: MODEL_PROVIDERS.length,
       loading,
       refreshing,
+      serverOnline,
       onRefresh,
       onChangeFilter,
       onAddProvider,
@@ -130,6 +133,7 @@ export function MobileModelsPage() {
     connectedCount,
     loading,
     refreshing,
+    serverOnline,
     onRefresh,
     onChangeFilter,
     onAddProvider,
@@ -164,6 +168,7 @@ export function MobileModelsPage() {
   }
 
   function openConnect(meta: ProviderMeta) {
+    if (!serverOnline) return
     setSheetMeta(meta)
   }
 
@@ -226,6 +231,7 @@ export function MobileModelsPage() {
                   isActive={Boolean(connected && profile?.id === activeProfileId)}
                   isBusy={profile ? busyId === profile.id : false}
                   onUse={() => profile && void pickForChat(profile)}
+                  serverOnline={serverOnline}
                   onConnect={() => openConnect(meta)}
                   onConfigure={() => openConnect(meta)}
                 />

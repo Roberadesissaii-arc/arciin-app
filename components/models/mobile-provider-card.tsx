@@ -15,11 +15,13 @@ export function MobileProviderCard({
   onUse,
   onConnect,
   onConfigure,
+  serverOnline = true,
 }: {
   meta: ProviderMeta
   profile: ModelProfile | undefined
   isActive: boolean
   isBusy: boolean
+  serverOnline?: boolean
   onUse: () => void
   onConnect: () => void
   onConfigure: () => void
@@ -36,8 +38,12 @@ export function MobileProviderCard({
     >
       <button
         type="button"
-        disabled={Boolean(isBusy)}
-        onClick={() => (connected ? onUse() : onConnect())}
+        disabled={Boolean(isBusy) || (!connected && !serverOnline)}
+        onClick={() => {
+          if (!connected && !serverOnline) return
+          if (connected) onUse()
+          else onConnect()
+        }}
         className="flex flex-col text-left active:opacity-95 disabled:opacity-70"
       >
         <div className="flex items-start justify-between gap-3 p-4 pb-2">
@@ -115,7 +121,7 @@ export function MobileProviderCard({
             <button
               type="button"
               onClick={onUse}
-              disabled={isBusy}
+              disabled={isBusy || !serverOnline}
               className="flex-1 rounded-xl py-2 text-[12px] font-semibold text-white disabled:opacity-50"
               style={{ backgroundColor: isActive ? "#ff4f12" : "#222222" }}
             >
@@ -124,8 +130,8 @@ export function MobileProviderCard({
             <button
               type="button"
               onClick={onConfigure}
-              disabled={isBusy}
-              className="flex items-center gap-1 rounded-xl px-3 py-2 text-[12px] font-medium text-[#717171] active:bg-[#f7f7f7]"
+              disabled={isBusy || !serverOnline}
+              className="flex items-center gap-1 rounded-xl px-3 py-2 text-[12px] font-medium text-[#717171] active:bg-[#f7f7f7] disabled:opacity-50"
               style={{ border: "1px solid #e5e5e5" }}
             >
               <Settings2 className="size-3.5" />
@@ -136,8 +142,9 @@ export function MobileProviderCard({
           <button
             type="button"
             onClick={onConnect}
-            className="w-full rounded-xl py-2.5 text-[12px] font-semibold text-white active:opacity-90"
-            style={{ backgroundColor: "#ff4f12" }}
+            disabled={!serverOnline}
+            className="w-full rounded-xl py-2.5 text-[12px] font-semibold text-white active:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+            style={{ backgroundColor: serverOnline ? "#ff4f12" : "#d4d4d4" }}
           >
             Connect
           </button>

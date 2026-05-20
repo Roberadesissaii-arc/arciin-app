@@ -5,7 +5,7 @@ import {
 import type { MobileConnection } from "@/lib/types/api"
 
 const memCache = new Map<string, string>()
-const MAX_MEM_CACHE = 120
+const MAX_MEM_CACHE = 160
 
 function memSet(key: string, value: string) {
   if (memCache.size >= MAX_MEM_CACHE) {
@@ -96,8 +96,49 @@ export function pdfThumbnailCacheKey(assetId: string, updatedAt: string) {
   return `${assetId}:${updatedAt}`
 }
 
+/** Stable key so cache survives updatedAt string/format differences across sessions. */
+export function pdfThumbnailStableKey(assetId: string) {
+  return `asset:${assetId}`
+}
+
 export function getCachedPdfThumbnail(assetId: string, updatedAt: string) {
   return memCache.get(pdfThumbnailCacheKey(assetId, updatedAt)) ?? null
+}
+
+/** Read memory + IndexedDB without downloading the PDF. */
+export async function readPdfThumbnailCache(
+  assetId: string,
+  updatedAt: string,
+): Promise<string | null> {
+  const versionedKey = pdfThumbnailCacheKey(assetId, updatedAt)
+  const memHit = memCache.get(versionedKey)
+  if (memHit) return memHit
+
+  const versionedIdb = await idbGet(versionedKey)
+  if (versionedIdb) {
+    memSet(versionedKey, versionedIdb)
+    return versionedIdb
+  }
+
+  const stableKey = pdfThumbnailStableKey(assetId)
+  const stableIdb = await idbGet(stableKey)
+  if (stableIdb) {
+    memSet(versionedKey, stableIdb)
+    return stableIdb
+  }
+
+  return null
+}
+
+async function persistPdfThumbnail(
+  assetId: string,
+  updatedAt: string,
+  dataUrl: string,
+) {
+  const versionedKey = pdfThumbnailCacheKey(assetId, updatedAt)
+  memSet(versionedKey, dataUrl)
+  await idbSet(versionedKey, dataUrl)
+  await idbSet(pdfThumbnailStableKey(assetId), dataUrl)
 }
 
 export function isPdfAsset(asset: {
@@ -136,10 +177,11 @@ async function renderPdfThumbDataUrl(
 
   try {
     const page = await pdf.getPage(1)
-    const viewport = page.getViewport({ scale: 1 })
-    const targetWidth = 320
-    const scale = targetWidth / viewport.width
-    const scaledViewport = page.getViewport({ scale })
+    const base = page.getViewport({ scale: 1 })
+    const targetCssWidth = 320
+    const pixelRatio = Math.min(typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1, 2.5)
+    const renderScale = (targetCssWidth / base.width) * pixelRatio
+    const scaledViewport = page.getViewport({ scale: renderScale })
 
     const canvas = document.createElement("canvas")
     canvas.width = Math.floor(scaledViewport.width)
@@ -148,7 +190,7 @@ async function renderPdfThumbDataUrl(
     if (!ctx) return null
 
     await page.render({ canvasContext: ctx, viewport: scaledViewport, canvas }).promise
-    const dataUrl = canvas.toDataURL("image/webp", 0.78)
+    const dataUrl = canvas.toDataURL("image/webp", 0.88)
     page.cleanup()
     return dataUrl
   } finally {
@@ -161,33 +203,28 @@ export function loadPdfThumbnail(
   assetId: string,
   updatedAt: string,
 ): Promise<string | null> {
-  const cacheKey = pdfThumbnailCacheKey(assetId, updatedAt)
-  const memHit = memCache.get(cacheKey)
-  if (memHit) return Promise.resolve(memHit)
-
   return new Promise((resolve) => {
-    enqueueRender(() =>
-      (async () => {
-        try {
-          const cached = await idbGet(cacheKey)
-          if (cached) {
-            memSet(cacheKey, cached)
-            resolve(cached)
-            return
-          }
+    void readPdfThumbnailCache(assetId, updatedAt).then((cached) => {
+      if (cached) {
+        resolve(cached)
+        return
+      }
 
-          const dataUrl = await renderPdfThumbDataUrl(connection, assetId)
-          if (dataUrl) {
-            memSet(cacheKey, dataUrl)
-            await idbSet(cacheKey, dataUrl)
-            resolve(dataUrl)
-            return
+      enqueueRender(() =>
+        (async () => {
+          try {
+            const dataUrl = await renderPdfThumbDataUrl(connection, assetId)
+            if (dataUrl) {
+              await persistPdfThumbnail(assetId, updatedAt, dataUrl)
+              resolve(dataUrl)
+              return
+            }
+            resolve(null)
+          } catch {
+            resolve(null)
           }
-          resolve(null)
-        } catch {
-          resolve(null)
-        }
-      })(),
-    )
+        })(),
+      )
+    })
   })
 }

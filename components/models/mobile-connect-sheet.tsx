@@ -28,7 +28,8 @@ export function MobileConnectSheet({
   onClose: () => void
   onSaved: () => void
 }) {
-  const { connection } = useConnection()
+  const { connection, serverReachable } = useConnection()
+  const serverOnline = serverReachable !== false
   const isEdit = Boolean(profile)
   const isOllamaLocal = meta.id === "ollama-local"
   const isOllamaCloud = meta.id === "ollama-cloud"
@@ -113,7 +114,7 @@ export function MobileConnectSheet({
   }
 
   async function handleSave() {
-    if (!connection) return
+    if (!connection || !serverOnline) return
     setSaving(true)
     setError(null)
     const resolvedBaseUrl = isOllamaLocal
@@ -372,10 +373,10 @@ export function MobileConnectSheet({
         <div className="shrink-0 border-t border-[#f0f0f0] px-5 py-4 pb-8">
           <button
             type="button"
-            disabled={saving}
+            disabled={saving || !serverOnline}
             onClick={() => void handleSave()}
-            className="flex w-full items-center justify-center gap-2 rounded-2xl py-3.5 text-[14px] font-semibold text-white disabled:opacity-50"
-            style={{ backgroundColor: "#ff4f12" }}
+            className="flex w-full items-center justify-center gap-2 rounded-2xl py-3.5 text-[14px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+            style={{ backgroundColor: serverOnline ? "#ff4f12" : "#d4d4d4" }}
           >
             {saving ? <Loader2 className="size-4 animate-spin" /> : null}
             {isEdit ? "Save changes" : "Connect"}

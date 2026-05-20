@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { ArrowLeft, CloudUpload, Folder, Loader2, RefreshCw, Search, X } from "lucide-react"
+import { ArrowLeft, CloudUpload, Folder, RefreshCw, Search, X } from "lucide-react"
 
 import { useFilesChrome } from "@/components/files/files-chrome-context"
 import { AssetThumbnail } from "@/components/files/asset-thumbnail"
@@ -156,7 +156,6 @@ export function FilesPage() {
       const activeFilter = opts?.filter ?? filter
       const activeFolderId = opts?.folderId !== undefined ? opts.folderId : folderId
       const scoped = activeFilter !== "all"
-      const libId = libraryIdForFilter(libraries, activeFilter)
 
       const cacheKey = filesCacheKey(connection.apiBaseUrl, activeFilter, activeFolderId)
       const cached = readFilesCache(cacheKey)
@@ -325,7 +324,6 @@ export function FilesPage() {
   const filterLabel = FILES_FILTERS.find((f) => f.id === filter)?.label ?? "files"
   const libraryTotal = useMemo(() => assetCountForFilter(libraries, filter), [libraries, filter])
   const showFoldersSection = libraryScoped && !folderId
-  const countMismatch = !loading && filter !== "all" && libraryTotal !== assets.length && !folderId
   const showSkeleton = loading && assets.length === 0 && visibleFolders.length === 0 && !hasCache
 
   const activeLibrary = libraryScoped

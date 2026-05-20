@@ -16,21 +16,24 @@ type MobilePdfViewerProps = {
 function PdfPageCanvas({
   pdf,
   pageNumber,
-  width,
+  cssWidth,
 }: {
   pdf: PDFDocumentProxy
   pageNumber: number
-  width: number
+  cssWidth: number
 }) {
   const hostRef = useRef<HTMLDivElement>(null)
   const [src, setSrc] = useState<string | null>(null)
+  const [cssHeight, setCssHeight] = useState<number | null>(null)
   const [rendering, setRendering] = useState(false)
   const startedRef = useRef(false)
 
   useEffect(() => {
     const host = hostRef.current
-    if (!host) return
+    if (!host || cssWidth < 1) return
     startedRef.current = false
+    setSrc(null)
+    setCssHeight(null)
 
     let cancelled = false
     let objectUrl: string | null = null
@@ -44,24 +47,27 @@ function PdfPageCanvas({
           try {
             const page = await pdf.getPage(pageNumber)
             const base = page.getViewport({ scale: 1 })
-            const scale = width / base.width
-            const viewport = page.getViewport({ scale })
+            const fitScale = cssWidth / base.width
+            const cssH = Math.floor(base.height * fitScale)
+            const pixelRatio = Math.min(typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1, 3)
+            const renderViewport = page.getViewport({ scale: fitScale * pixelRatio })
             const canvas = document.createElement("canvas")
-            canvas.width = Math.floor(viewport.width)
-            canvas.height = Math.floor(viewport.height)
+            canvas.width = Math.floor(renderViewport.width)
+            canvas.height = Math.floor(renderViewport.height)
             const ctx = canvas.getContext("2d")
             if (!ctx || cancelled) {
               page.cleanup()
               return
             }
-            await page.render({ canvasContext: ctx, viewport, canvas }).promise
+            await page.render({ canvasContext: ctx, viewport: renderViewport, canvas }).promise
             page.cleanup()
             if (cancelled) return
             const blob = await new Promise<Blob | null>((resolve) =>
-              canvas.toBlob((b) => resolve(b), "image/webp", 0.82),
+              canvas.toBlob((b) => resolve(b), "image/webp", 0.92),
             )
             if (!blob || cancelled) return
             objectUrl = URL.createObjectURL(blob)
+            setCssHeight(cssH)
             setSrc(objectUrl)
           } catch {
             /* best-effort */
@@ -79,7 +85,7 @@ function PdfPageCanvas({
       observer.disconnect()
       if (objectUrl) URL.revokeObjectURL(objectUrl)
     }
-  }, [pageNumber, pdf, width])
+  }, [pageNumber, pdf, cssWidth])
 
   return (
     <div
@@ -87,19 +93,21 @@ function PdfPageCanvas({
       className="flex w-full justify-center bg-[#18181b] py-1"
       data-pdf-page={pageNumber}
     >
-      {src ? (
+      {src && cssHeight ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={src}
           alt=""
-          className="max-w-full shadow-sm"
-          style={{ width: "100%", height: "auto" }}
+          width={cssWidth}
+          height={cssHeight}
+          className="block max-w-full shadow-sm"
+          style={{ width: cssWidth, height: cssHeight }}
           draggable={false}
         />
       ) : (
         <div
           className="flex w-full items-center justify-center bg-[#27272a] text-[11px] text-[#71717a]"
-          style={{ minHeight: Math.round(width * 1.3) }}
+          style={{ minHeight: Math.round(cssWidth * 1.3) }}
         >
           {rendering ? (
             <Loader2 className="size-5 animate-spin" />
@@ -223,7 +231,7 @@ export function MobilePdfViewer({
       data-scroll-lock-allow
     >
       {Array.from({ length: numPages }, (_, i) => i + 1).map((pageNumber) => (
-        <PdfPageCanvas key={pageNumber} pdf={pdf} pageNumber={pageNumber} width={viewWidth} />
+        <PdfPageCanvas key={`${pageNumber}-${viewWidth}`} pdf={pdf} pageNumber={pageNumber} cssWidth={viewWidth} />
       ))}
     </div>
   )

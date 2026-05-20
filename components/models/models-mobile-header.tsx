@@ -47,7 +47,7 @@ export function ModelsMobileHeader() {
             <button
               type="button"
               onClick={() => chrome?.onAddProvider()}
-              disabled={!chrome || chrome.loading}
+              disabled={!chrome || chrome.loading || !chrome.serverOnline}
               className="flex size-9 items-center justify-center rounded-xl text-white active:opacity-80 disabled:opacity-50"
               style={{ backgroundColor: "#ff4f12" }}
               aria-label="Add AI provider"

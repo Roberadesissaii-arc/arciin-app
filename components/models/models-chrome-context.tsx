@@ -11,6 +11,8 @@ export type ModelsChromeModel = {
   totalCount: number
   loading: boolean
   refreshing: boolean
+  /** False when Arciin API is unreachable — disable connect / add actions */
+  serverOnline: boolean
   onRefresh: () => void
   onChangeFilter: (id: ModelsFilterId) => void
   /** Open add-provider bottom sheet */

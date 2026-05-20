@@ -4,7 +4,11 @@ import { useEffect, useState } from "react"
 import { Clapperboard, FileText, Files, Image as ImageIcon, Loader2, Music4 } from "lucide-react"
 
 import { usePdfThumbnail } from "@/hooks/use-pdf-thumbnail"
-import { getCachedThumbnailUrl, loadThumbnail } from "@/lib/files/thumbnail-cache"
+import {
+  getCachedThumbnailUrl,
+  hydrateThumbnailFromCache,
+  loadThumbnail,
+} from "@/lib/files/thumbnail-cache"
 import { isPdfAsset } from "@/lib/files/pdf-thumbnail"
 import type { MobileConnection } from "@/lib/types/api"
 import type { AssetSummary } from "@/lib/types/assets"
@@ -57,7 +61,12 @@ function cornerBadgeLabel(asset: AssetSummary, thumbLoading: boolean, readyExt: 
 function PdfAssetThumbnail({ asset, connection, className = "", eager = false }: ThumbnailProps) {
   const [inView, setInView] = useState(Boolean(eager))
   const visible = eager || inView
-  const thumb = usePdfThumbnail(connection, asset.id, asset.updatedAt, visible)
+  const { thumb, isGenerating } = usePdfThumbnail(
+    connection,
+    asset.id,
+    asset.updatedAt,
+    visible,
+  )
 
   useEffect(() => {
     if (eager) return
@@ -80,7 +89,7 @@ function PdfAssetThumbnail({ asset, connection, className = "", eager = false }:
   }, [asset.id, eager])
 
   const ext = (asset.originalFilename.split(".").pop() ?? "pdf").toUpperCase()
-  const thumbLoading = visible && !thumb
+  const thumbLoading = visible && isGenerating
   const badge = cornerBadgeLabel(asset, thumbLoading, ext)
 
   return (
@@ -119,6 +128,22 @@ function ServerAssetThumbnail({ asset, connection, className = "", eager = false
       return
     }
 
+    let cancelled = false
+
+    async function fetchThumb() {
+      setLoading(true)
+      setFailed(false)
+      const url = await loadThumbnail(connection, asset.id)
+      if (cancelled) return
+      if (url) {
+        setSrc(url)
+        setLoading(false)
+      } else {
+        setFailed(true)
+        setLoading(false)
+      }
+    }
+
     const hit = getCachedThumbnailUrl(asset.id)
     if (hit) {
       setSrc(hit)
@@ -127,15 +152,25 @@ function ServerAssetThumbnail({ asset, connection, className = "", eager = false
       return
     }
 
+    void hydrateThumbnailFromCache(asset.id).then((url) => {
+      if (cancelled || !url) return
+      setSrc(url)
+      setLoading(false)
+      setFailed(false)
+    })
+
+    const startFetch = () => {
+      if (!cancelled) void fetchThumb()
+    }
+
     if (!eager) {
       const el = document.getElementById(`thumb-${asset.id}`)
       if (el && "IntersectionObserver" in window) {
-        let cancelled = false
         const observer = new IntersectionObserver(
           (entries) => {
             if (entries.some((e) => e.isIntersecting)) {
               observer.disconnect()
-              if (!cancelled) void fetchThumb()
+              startFetch()
             }
           },
           { rootMargin: "120px" },
@@ -148,19 +183,10 @@ function ServerAssetThumbnail({ asset, connection, className = "", eager = false
       }
     }
 
-    void fetchThumb()
+    startFetch()
 
-    async function fetchThumb() {
-      setLoading(true)
-      setFailed(false)
-      const url = await loadThumbnail(connection, asset.id)
-      if (url) {
-        setSrc(url)
-        setLoading(false)
-      } else {
-        setFailed(true)
-        setLoading(false)
-      }
+    return () => {
+      cancelled = true
     }
   }, [asset.id, connection, eager, wantsThumb])
 

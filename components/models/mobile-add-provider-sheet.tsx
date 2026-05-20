@@ -52,7 +52,8 @@ export function MobileAddProviderSheet({
   onClose: () => void
   onSaved: () => void
 }) {
-  const { connection } = useConnection()
+  const { connection, serverReachable } = useConnection()
+  const serverOnline = serverReachable !== false
 
   const [providerType, setProviderType] = useState<(typeof CUSTOM_PROVIDER_TYPES)[number]["id"]>("openai")
   const [displayName, setDisplayName] = useState("")
@@ -77,7 +78,7 @@ export function MobileAddProviderSheet({
   if (!open) return null
 
   async function handleCustomConnect() {
-    if (!connection) return
+    if (!connection || !serverOnline) return
     const name = displayName.trim() || "Custom API"
     const url = baseUrl.trim()
     if (!url) {
@@ -228,10 +229,10 @@ export function MobileAddProviderSheet({
         <div className="shrink-0 border-t border-[#f0f0f0] px-5 py-4 pb-8">
           <button
             type="button"
-            disabled={saving}
+            disabled={saving || !serverOnline}
             onClick={() => void handleCustomConnect()}
-            className="flex w-full items-center justify-center gap-2 rounded-2xl py-3.5 text-[14px] font-semibold text-white disabled:opacity-50"
-            style={{ backgroundColor: "#ff4f12" }}
+            className="flex w-full items-center justify-center gap-2 rounded-2xl py-3.5 text-[14px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+            style={{ backgroundColor: serverOnline ? "#ff4f12" : "#d4d4d4" }}
           >
             {saving ? <Loader2 className="size-4 animate-spin" /> : null}
             Connect custom API
