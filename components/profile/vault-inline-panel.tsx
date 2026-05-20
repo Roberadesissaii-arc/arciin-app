@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useState } from "react"
-import { FingerprintPattern, Loader2, Lock } from "lucide-react"
+import { FingerprintPattern, Loader2 } from "lucide-react"
 
 import { VaultAccountPasswordSheet } from "@/components/profile/vault-account-password-sheet"
 import { SettingsIntroCard } from "@/components/settings/settings-intro-card"
@@ -159,15 +159,15 @@ export function VaultInlinePanel({ enabled }: { enabled: boolean }) {
           className="flex size-10 items-center justify-center rounded-xl bg-white"
           style={{ border: "1px solid #e5e5e5" }}
         >
-          {lockRequired && !secretsVisible ? (
-            <Lock className="size-5 text-[#717171]" />
-          ) : (
-            <FingerprintPattern className="size-5 text-[#ff4f12]" />
-          )}
+          <FingerprintPattern className="size-5 text-[#ff4f12]" />
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-[13px] font-semibold text-[#222222]">
-            {lockRequired && !secretsVisible ? "Vault locked" : "Vault unlocked"}
+            {loading
+              ? "Loading…"
+              : lockRequired && !secretsVisible
+                ? "Vault locked"
+                : "Vault unlocked"}
           </p>
           <p className="text-[12px] text-[#717171]">
             {entryCount.toLocaleString()} entries

@@ -10,8 +10,9 @@ import {
   ExternalLink,
   FingerprintPattern,
   Loader2,
-  Lock,
   RefreshCw,
+  Search,
+  X,
 } from "lucide-react"
 
 import { useConnection } from "@/components/providers/connection-provider"
@@ -29,6 +30,16 @@ import {
 
 function entryHasPassword(entry: PasswordVaultEntry) {
   return Boolean(entry.hasPassword ?? entry.passwordLength ?? entry.password)
+}
+
+function entryMatchesQuery(entry: PasswordVaultEntry, query: string) {
+  const q = query.trim().toLowerCase()
+  if (!q) return true
+  const haystack = [entry.name, entry.username, entry.url, entry.notes, entry.category]
+    .filter((part): part is string => Boolean(part?.trim()))
+    .join(" ")
+    .toLowerCase()
+  return haystack.includes(q)
 }
 
 function maskPassword(entry: PasswordVaultEntry, style: "dots" | "asterisk" | "block" = "dots") {
@@ -193,6 +204,7 @@ export function PasswordsPage() {
   const [pendingRevealId, setPendingRevealId] = useState<string | null>(null)
   const [revealed, setRevealed] = useState<Record<string, boolean>>({})
   const [copyMsg, setCopyMsg] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState("")
 
   const load = useCallback(
     async (signal?: AbortSignal, isRefresh = false) => {
@@ -230,8 +242,11 @@ export function PasswordsPage() {
   const secretsVisible = vault?.secretsVisible ?? false
   const lockRequired = vault?.lockRequired ?? false
   const pinConfigured = vault?.pinConfigured ?? false
+  const statsLoading = loading && !vault
   const entries = vault?.entries ?? []
+  const filteredEntries = entries.filter((entry) => entryMatchesQuery(entry, searchQuery))
   const maskStyle = vault?.display?.maskStyle ?? "dots"
+  const vaultReady = Boolean(vault) && !statsLoading
 
   function openVaultUnlock(revealEntryId?: string) {
     setPendingRevealId(revealEntryId ?? null)
@@ -297,7 +312,6 @@ export function PasswordsPage() {
     }
   }
 
-  const statsLoading = loading && !vault
   const unlockTitle = pendingRevealId && !secretsVisible ? "Unlock to view" : "Unlock vault"
   const unlockDescription = pinConfigured
     ? "Enter your vault PIN. While unlocked, tap the eye on any entry without entering it again."
@@ -316,16 +330,24 @@ export function PasswordsPage() {
         >
           <ArrowLeft className="size-4" />
         </Link>
-        <div className="min-w-0 flex-1">
-          <h2
-            className="text-[20px] font-bold text-[#222222]"
-            style={{ fontFamily: "var(--font-space-grotesk, sans-serif)" }}
+        <div className="flex min-w-0 flex-1 items-center gap-2.5">
+          <div
+            className="flex size-9 shrink-0 items-center justify-center rounded-xl"
+            style={{ backgroundColor: "rgba(255,79,18,0.12)", border: "1px solid rgba(255,79,18,0.2)" }}
           >
-            Passwords
-          </h2>
-          <p className="text-[12px] text-[#717171]">
-            {statsLoading ? "Loading…" : `${vault?.total ?? 0} saved · instance vault`}
-          </p>
+            <FingerprintPattern className="size-[18px] text-[#ff4f12]" />
+          </div>
+          <div className="min-w-0">
+            <h2
+              className="text-[20px] font-bold text-[#222222]"
+              style={{ fontFamily: "var(--font-space-grotesk, sans-serif)" }}
+            >
+              Password vault
+            </h2>
+            <p className="text-[12px] text-[#717171]">
+              {statsLoading ? "Loading…" : `${vault?.total ?? 0} saved · instance vault`}
+            </p>
+          </div>
         </div>
         <button
           type="button"
@@ -365,18 +387,16 @@ export function PasswordsPage() {
           className="flex size-10 items-center justify-center rounded-xl"
           style={{ backgroundColor: "rgba(255,79,18,0.12)" }}
         >
-          {lockRequired && !secretsVisible ? (
-            <Lock className="size-5 text-[#717171]" />
-          ) : (
-            <FingerprintPattern className="size-5 text-[#ff4f12]" />
-          )}
+          <FingerprintPattern className="size-5 text-[#ff4f12]" />
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-[13px] font-semibold text-[#222222]">Password vault</p>
           <p className="text-[11px] text-[#717171]">
-            {lockRequired && !secretsVisible
-              ? "Locked — unlock once to use the eye on entries"
-              : "Unlocked — tap the eye to show or hide each password"}
+            {!vaultReady
+              ? "Loading vault status…"
+              : lockRequired && !secretsVisible
+                ? "Locked — unlock once to use the eye on entries"
+                : "Unlocked — tap the eye to show or hide each password"}
           </p>
         </div>
         {lockRequired ? (
@@ -402,6 +422,32 @@ export function PasswordsPage() {
         ) : null}
       </div>
 
+      {!statsLoading && entries.length > 0 ? (
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-[#a0a0a0]" />
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search by name, username, URL, or keyword…"
+            className="w-full rounded-2xl border border-[#e5e5e5] bg-white py-3 pl-10 pr-10 text-[14px] text-[#222222] outline-none placeholder:text-[#a0a0a0] focus:border-[#ff4f12]"
+            autoComplete="off"
+            aria-label="Search saved passwords"
+          />
+          {searchQuery ? (
+            <button
+              type="button"
+              onClick={() => setSearchQuery("")}
+              className="absolute right-2 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-lg text-[#717171] active:bg-[#f7f7f7]"
+              aria-label="Clear search"
+            >
+              <X className="size-4" />
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
+
       {statsLoading ? (
         <ul className="flex flex-col gap-3">
           {[0, 1, 2].map((i) => (
@@ -423,9 +469,19 @@ export function PasswordsPage() {
             Add entries from the desktop app under Settings → Passwords.
           </p>
         </div>
+      ) : filteredEntries.length === 0 ? (
+        <div
+          className="rounded-2xl bg-white px-4 py-10 text-center"
+          style={{ border: "1px dashed #e5e5e5" }}
+        >
+          <p className="text-[13px] font-medium text-[#222222]">No matches</p>
+          <p className="mt-1 text-[12px] text-[#a0a0a0]">
+            Nothing matched &ldquo;{searchQuery.trim()}&rdquo;. Try another keyword.
+          </p>
+        </div>
       ) : (
         <ul className={`flex flex-col gap-3 ${refreshing ? "opacity-60" : ""}`}>
-          {entries.map((entry) => (
+          {filteredEntries.map((entry) => (
             <EntryRow
               key={entry.id}
               entry={entry}
