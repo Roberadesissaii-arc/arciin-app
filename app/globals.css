@@ -97,20 +97,29 @@ body:has(.mobile-app-root) {
   padding-top: 0.75rem;
 }
 
-/* Chat: column layout inside the scrolling page */
+/* Chat: fixed shell — only messages scroll; composer stays above keyboard */
 .mobile-app-main:has(.chat-page) {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  overflow: hidden;
   padding-top: 0;
   padding-bottom: 0;
 }
 
+.mobile-app-root:has(.chat-page) {
+  overflow: hidden;
+  height: 100dvh;
+  max-height: 100dvh;
+}
+
 .chat-page {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
   display: flex;
-  min-height: 0;
-  flex: 1;
   flex-direction: column;
+  background-color: #f7f7f7;
 }
 
 .chat-page-messages {
@@ -118,19 +127,24 @@ body:has(.mobile-app-root) {
   flex: 1;
   overflow-y: auto;
   overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding-top: calc(3.5rem + env(safe-area-inset-top, 0px));
+  padding-bottom: calc(5.75rem + env(safe-area-inset-bottom, 0px));
 }
 
 .chat-welcome {
-  min-height: calc(
-    100dvh - 11.5rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)
-  );
+  min-height: calc(100% - 2rem);
 }
 
 .chat-page-composer {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--keyboard-inset, 0px));
+  z-index: 30;
   flex-shrink: 0;
-  padding-top: 0.5rem;
-  padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
-  background-color: #f7f7f7;
+  padding: 0.5rem 1rem max(0.75rem, env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(to top, #f7f7f7 85%, transparent);
 }
 
 .mobile-app-main:has(.chat-page) > .mobile-app-content {
@@ -139,6 +153,27 @@ body:has(.mobile-app-root) {
   flex: 1;
   flex-direction: column;
   gap: 0;
+  overflow: hidden;
+}
+
+.chat-stream-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  background-color: #ff4f12;
+  animation: chat-cursor-blink 0.9s step-end infinite;
+}
+
+@keyframes chat-cursor-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
 }
 
 /* Files empty state — fills viewport above bottom nav */

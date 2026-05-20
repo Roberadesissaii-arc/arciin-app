@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { useCallback, useEffect, useRef, useState } from "react"
+import { flushSync } from "react-dom"
 import {
   Clock,
   Copy,
@@ -11,32 +12,54 @@ import {
   RotateCcw,
   Send,
   Sparkles,
+  Square,
+  ThumbsDown,
+  ThumbsUp,
   Trash2,
   X,
 } from "lucide-react"
 
+import { ChatMarkdown } from "@/components/chat/chat-markdown"
 import { ChatModelBar } from "@/components/chat/chat-model-bar"
 import { ArciinMark } from "@/components/ui/arciin-mark"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useChatChrome } from "@/components/chat/chat-chrome-context"
 import { useConnection } from "@/components/providers/connection-provider"
+import { useKeyboardInset } from "@/hooks/use-keyboard-inset"
 import {
   createChatConversation,
   deleteChatConversation,
   getChatConversation,
   getChatConversations,
+  getChatInstanceContext,
   getChatProfiles,
   getChatSelection,
   saveChatMessages,
+  setChatMessageFeedback,
   streamChatWithCheck,
+  type ChatInstanceContext,
+  type TokenUsage,
 } from "@/lib/api/chat"
+import { buildOutboundChatMessages } from "@/lib/chat/build-context"
+import { ARCIIN_MOBILE_SYSTEM_INSTRUCTION } from "@/lib/chat/system-prompt"
 import { formatApiError, isNetworkError } from "@/lib/api/errors"
 import type { MobileConnection } from "@/lib/types/api"
-import type { ChatConversationSummary, ChatMessage, ChatProfile } from "@/lib/types/chat"
+import type {
+  ChatConversationSummary,
+  ChatMessage,
+  ChatMessageFeedbackRating,
+  ChatProfile,
+} from "@/lib/types/chat"
 import { relativeTime } from "@/lib/utils/relative-time"
 import { cn } from "@/lib/utils"
 
 import { createId } from "@/lib/utils/create-id"
+
+function messagePersistId(msg: ChatMessage): string | null {
+  if (msg.dbId) return msg.dbId
+  if (msg.role === "assistant" && /^c[a-z0-9]{20,}$/i.test(msg.id)) return msg.id
+  return null
+}
 
 function titleFromMessage(text: string) {
   const t = text.trim().replace(/\s+/g, " ")
@@ -299,19 +322,26 @@ function HistoryDrawer({
 
 function MessageActions({
   content,
+  feedback,
   canRegenerate,
   onRegenerate,
+  onFeedback,
 }: {
   content: string
+  feedback?: ChatMessageFeedbackRating | null
   canRegenerate: boolean
   onRegenerate?: () => void
+  onFeedback?: (rating: ChatMessageFeedbackRating | null) => void
 }) {
   const btn =
     "flex size-8 items-center justify-center rounded-lg text-[#717171] active:bg-[#f7f7f7]"
+  const [copied, setCopied] = useState(false)
 
   async function handleCopy() {
     try {
       await navigator.clipboard.writeText(content)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1500)
     } catch {
       /* clipboard denied */
     }
@@ -319,13 +349,37 @@ function MessageActions({
 
   return (
     <div className="mt-1.5 flex items-center gap-0.5">
+      {onFeedback ? (
+        <>
+          <button
+            type="button"
+            className={cn(btn, feedback === "LIKE" && "text-[#ff4f12]")}
+            aria-label="Good response"
+            onClick={() => onFeedback(feedback === "LIKE" ? null : "LIKE")}
+          >
+            <ThumbsUp className="size-3.5" />
+          </button>
+          <button
+            type="button"
+            className={cn(btn, feedback === "DISLIKE" && "text-[#b91c1c]")}
+            aria-label="Poor response"
+            onClick={() => onFeedback(feedback === "DISLIKE" ? null : "DISLIKE")}
+          >
+            <ThumbsDown className="size-3.5" />
+          </button>
+        </>
+      ) : null}
       {canRegenerate && onRegenerate ? (
         <button type="button" className={btn} aria-label="Regenerate" onClick={onRegenerate}>
           <RotateCcw className="size-3.5" />
         </button>
       ) : null}
       <button type="button" className={btn} aria-label="Copy" onClick={() => void handleCopy()}>
-        <Copy className="size-3.5" />
+        {copied ? (
+          <span className="text-[10px] font-semibold text-[#22c55e]">OK</span>
+        ) : (
+          <Copy className="size-3.5" />
+        )}
       </button>
     </div>
   )
@@ -336,41 +390,50 @@ function MessageBubble({
   isStreaming = false,
   canRegenerate = false,
   onRegenerate,
+  onFeedback,
 }: {
   msg: ChatMessage
   isStreaming?: boolean
   canRegenerate?: boolean
   onRegenerate?: () => void
+  onFeedback?: (rating: ChatMessageFeedbackRating | null) => void
 }) {
   const isUser = msg.role === "user"
-  const showActions =
-    !isUser && !msg.pending && !isStreaming && Boolean(msg.content.trim())
+  const hasContent = Boolean(msg.content.trim())
+  const showActions = !isUser && !msg.pending && !isStreaming && hasContent
 
   return (
     <div className={cn("flex w-full flex-col", isUser ? "items-end" : "items-start")}>
       <div
         className={cn(
-          "max-w-[88%] rounded-2xl px-4 py-3 text-[14px] leading-relaxed",
+          "max-w-[92%] rounded-2xl px-4 py-3 text-[14px] leading-relaxed",
           isUser
-            ? "rounded-br-md bg-[#ff4f12] text-white"
-            : "rounded-bl-md bg-white text-[#222222]",
+            ? "rounded-br-md bg-[#ff4f12] text-white shadow-sm"
+            : "rounded-bl-md bg-white text-[#222222] shadow-[0_1px_8px_rgba(0,0,0,0.04)]",
         )}
         style={isUser ? undefined : { border: "1px solid #e5e5e5" }}
       >
-        {msg.pending && !msg.content ? (
+        {msg.pending && !hasContent ? (
           <span className="flex items-center gap-2 text-[#717171]">
-            <Loader2 className="size-3.5 animate-spin" />
+            <Loader2 className="size-3.5 animate-spin text-[#ff4f12]" />
             Thinking…
           </span>
+        ) : isUser || isStreaming ? (
+          <p className="whitespace-pre-wrap break-words">
+            {msg.content}
+            {isStreaming && hasContent ? <span className="chat-stream-cursor" aria-hidden /> : null}
+          </p>
         ) : (
-          <p className="whitespace-pre-wrap break-words">{msg.content}</p>
+          <ChatMarkdown content={msg.content} />
         )}
       </div>
       {showActions ? (
         <MessageActions
           content={msg.content}
+          feedback={msg.feedback}
           canRegenerate={canRegenerate}
           onRegenerate={onRegenerate}
+          onFeedback={onFeedback}
         />
       ) : null}
     </div>
@@ -383,9 +446,29 @@ function serverHint(connection: MobileConnection | null) {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
+function applyPersistedMessageIds(
+  prev: ChatMessage[],
+  saved: { id: string; role: string }[],
+  pendingAssistantId: string,
+  pendingUserId?: string,
+) {
+  const userRow = saved.find((m) => m.role === "user")
+  const asstRow = saved.find((m) => m.role === "assistant")
+  return prev.map((m) => {
+    if (pendingUserId && m.id === pendingUserId && userRow) {
+      return { ...m, id: userRow.id, dbId: userRow.id }
+    }
+    if (m.id === pendingAssistantId && asstRow) {
+      return { ...m, id: asstRow.id, dbId: asstRow.id }
+    }
+    return m
+  })
+}
+
 export function ChatPage() {
   const { connection, ready } = useConnection()
   const { setChrome } = useChatChrome()
+  useKeyboardInset(true)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [profiles, setProfiles] = useState<ChatProfile[]>([])
   const [profilesLoading, setProfilesLoading] = useState(true)
@@ -401,9 +484,11 @@ export function ChatPage() {
   const [historyError, setHistoryError] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
+  const [chatContext, setChatContext] = useState<ChatInstanceContext | null>(null)
+
   const scrollRef = useRef<HTMLDivElement>(null)
   const abortRef = useRef<AbortController | null>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
 
   const [selectedProfile, setSelectedProfile] = useState<ChatProfile | null>(null)
   const [selectedModel, setSelectedModel] = useState("")
@@ -466,20 +551,34 @@ export function ChatPage() {
     }
   }, [connection])
 
+  const loadChatContext = useCallback(async () => {
+    if (!connection) return
+    try {
+      const ctx = await getChatInstanceContext(connection)
+      setChatContext(ctx)
+    } catch {
+      /* context is optional for send; tools work better with it */
+    }
+  }, [connection])
+
   useEffect(() => {
     if (!ready || !connection) return
     void loadProfiles()
     void loadHistory()
-  }, [ready, connection, loadProfiles, loadHistory])
+    void loadChatContext()
+  }, [ready, connection, loadProfiles, loadHistory, loadChatContext])
 
   useEffect(() => {
     if (!connection) return
     const onVisible = () => {
-      if (document.visibilityState === "visible") void loadProfiles()
+      if (document.visibilityState === "visible") {
+        void loadProfiles()
+        void loadChatContext()
+      }
     }
     document.addEventListener("visibilitychange", onVisible)
     return () => document.removeEventListener("visibilitychange", onVisible)
-  }, [connection, loadProfiles])
+  }, [connection, loadProfiles, loadChatContext])
 
   useEffect(() => {
     if (historyOpen && connection) void loadHistory()
@@ -515,8 +614,17 @@ export function ChatPage() {
           .filter((m) => m.role === "user" || m.role === "assistant")
           .map((m) => ({
             id: m.id,
+            dbId: m.id,
             role: m.role as "user" | "assistant",
             content: m.content,
+            feedback: m.feedbackRating ?? null,
+            usage: m.totalTokens
+              ? {
+                  inputTokens: m.inputTokens ?? 0,
+                  outputTokens: m.outputTokens ?? 0,
+                  totalTokens: m.totalTokens,
+                }
+              : undefined,
           })),
       )
       setHistoryOpen(false)
@@ -547,53 +655,115 @@ export function ChatPage() {
     }
   }
 
+  function stopGeneration() {
+    abortRef.current?.abort()
+  }
+
+  async function handleMessageFeedback(msg: ChatMessage, rating: ChatMessageFeedbackRating | null) {
+    if (!connection || msg.pending) return
+    const persistId = messagePersistId(msg)
+    if (!persistId) {
+      setStatusNote("Saving this reply… try again in a moment.")
+      return
+    }
+    const next = msg.feedback === rating ? null : rating
+    setMessages((prev) =>
+      prev.map((m) => (m.id === msg.id ? { ...m, feedback: next, dbId: persistId } : m)),
+    )
+    try {
+      const updated = await setChatMessageFeedback(connection, persistId, next)
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === msg.id
+            ? { ...m, feedback: updated.feedbackRating ?? null, dbId: updated.id }
+            : m,
+        ),
+      )
+    } catch {
+      setMessages((prev) =>
+        prev.map((m) => (m.id === msg.id ? { ...m, feedback: msg.feedback ?? null } : m)),
+      )
+      setStatusNote("Could not save feedback")
+    }
+  }
+
   const runAssistantStream = useCallback(
     async (
       assistantId: string,
       history: { role: string; content: string }[],
-      opts?: { conversationId?: string | null; saveUserTurn?: boolean },
+      opts?: { conversationId?: string | null; pendingUserId?: string },
     ) => {
-      if (!connection || !selectedProfile) return ""
+      if (!connection || !selectedProfile) return { content: "", usage: undefined as TokenUsage | undefined }
 
       const profile = selectedProfile
       const modelToSend = selectedModel.trim() || profile.defaultModel || undefined
-      abortRef.current = new AbortController()
-      let accumulated = ""
+      const apiBase = connection.apiBaseUrl ?? connection.webUrl ?? ""
+      const payload = buildOutboundChatMessages(
+        history,
+        ARCIIN_MOBILE_SYSTEM_INSTRUCTION,
+        chatContext,
+        apiBase,
+      )
 
-      accumulated = await streamChatWithCheck(
+      abortRef.current = new AbortController()
+      let usage: TokenUsage | undefined
+
+      const content = await streamChatWithCheck(
         connection,
         {
           profileId: profile.id,
           model: modelToSend,
-          messages: history,
+          messages: payload,
         },
         {
           signal: abortRef.current.signal,
           onText: (chunk) => {
-            accumulated += chunk
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === assistantId
-                  ? { ...m, content: accumulated, pending: false }
-                  : m,
-              ),
-            )
+            flushSync(() => {
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantId
+                    ? { ...m, content: m.content + chunk, pending: false }
+                    : m,
+                ),
+              )
+            })
+          },
+          onUsage: (u) => {
+            usage = u
+          },
+          onLibraryAction: () => {
+            void loadChatContext()
           },
         },
       )
 
       const convoId = opts?.conversationId ?? conversationId
-      if (accumulated.trim() && convoId) {
-        await saveChatMessages(connection, {
+      if (content.trim() && convoId) {
+        const saved = await saveChatMessages(connection, {
           conversationId: convoId,
-          messages: [{ role: "assistant", content: accumulated }],
+          messages: [
+            {
+              role: "assistant",
+              content,
+              inputTokens: usage?.inputTokens,
+              outputTokens: usage?.outputTokens,
+              totalTokens: usage?.totalTokens,
+            },
+          ],
         })
+        setMessages((prev) =>
+          applyPersistedMessageIds(prev, saved.messages, assistantId, opts?.pendingUserId).map((m) =>
+            m.id === assistantId || m.dbId === saved.messages.find((r) => r.role === "assistant")?.id
+              ? { ...m, usage, pending: false }
+              : m,
+          ),
+        )
         void loadHistory()
       }
 
-      return accumulated
+      return { content, usage }
     },
-    [connection, conversationId, loadHistory, selectedModel, selectedProfile],
+    [chatContext, connection, conversationId, loadChatContext, loadHistory, selectedModel, selectedProfile],
   )
 
   async function sendMessage() {
@@ -613,6 +783,9 @@ export function ChatPage() {
     if (!profile) return
 
     setInput("")
+    if (inputRef.current) {
+      inputRef.current.style.height = "auto"
+    }
     setError(null)
     const priorMessages = messages
     setMessages((prev) => [...prev, userMsg, pendingMsg])
@@ -629,17 +802,16 @@ export function ChatPage() {
         })
         activeConvoId = created.id
         setConversationId(created.id)
-        await saveChatMessages(connection, {
-          conversationId: created.id,
-          messages: [{ role: "user", content: text }],
-        })
-        void loadHistory()
-      } else {
-        await saveChatMessages(connection, {
-          conversationId: activeConvoId,
-          messages: [{ role: "user", content: text }],
-        })
       }
+
+      void saveChatMessages(connection, {
+        conversationId: activeConvoId,
+        messages: [{ role: "user", content: text }],
+      })
+        .then((saved) => {
+          setMessages((prev) => applyPersistedMessageIds(prev, saved.messages, assistantId, userMsg.id))
+        })
+        .finally(() => void loadHistory())
 
       const history = [...priorMessages, userMsg]
         .filter((m) => m.content.trim().length > 0)
@@ -648,7 +820,10 @@ export function ChatPage() {
           content: m.content.trim(),
         }))
 
-      await runAssistantStream(assistantId, history, { conversationId: activeConvoId })
+      await runAssistantStream(assistantId, history, {
+        conversationId: activeConvoId,
+        pendingUserId: userMsg.id,
+      })
       setStatusNote("Chat connects to your Arciin API")
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") {
@@ -710,6 +885,14 @@ export function ChatPage() {
   const showWelcome = messages.length === 0
   const needsModelSetup = !profilesLoading && profiles.length === 0
   const canSend = Boolean(input.trim()) && !streaming && selectedProfile && !profilesLoading
+  const canStop = streaming && Boolean(selectedProfile)
+
+  function handleInputChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    setInput(e.target.value)
+    const el = e.target
+    el.style.height = "auto"
+    el.style.height = `${Math.min(el.scrollHeight, 120)}px`
+  }
 
   return (
     <div className="chat-page px-4">
@@ -763,6 +946,11 @@ export function ChatPage() {
                       ? () => void regenerateAssistantMessage(msg.id)
                       : undefined
                   }
+                  onFeedback={
+                    msg.role === "assistant"
+                      ? (rating) => void handleMessageFeedback(msg, rating)
+                      : undefined
+                  }
                 />
               ))
             })()}
@@ -786,43 +974,51 @@ export function ChatPage() {
               onSelect={(profile, model) => applyProfileSelection(profiles, profile, model)}
             />
           ) : null}
-          <input
+          <textarea
             ref={inputRef}
-            type="text"
+            rows={1}
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={handleInputChange}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault()
-                void sendMessage()
+                if (streaming) stopGeneration()
+                else void sendMessage()
               }
             }}
             placeholder={
               streaming
-                ? "Generating…"
+                ? "Generating… tap Stop to interrupt"
                 : profilesLoading
                   ? "Loading…"
                   : !selectedProfile
                     ? "No AI model configured"
                     : "Ask anything…"
             }
-            disabled={streaming || profilesLoading || !selectedProfile}
-            className="min-w-0 flex-1 bg-transparent text-[14px] text-[#222222] outline-none placeholder:text-[#a0a0a0] disabled:opacity-50"
+            disabled={profilesLoading || !selectedProfile}
+            className="max-h-[120px] min-h-[24px] min-w-0 flex-1 resize-none bg-transparent py-1 text-[14px] leading-snug text-[#222222] outline-none placeholder:text-[#a0a0a0] disabled:opacity-50"
           />
-          <button
-            type="button"
-            disabled={!canSend}
-            onClick={() => void sendMessage()}
-            className="flex size-9 shrink-0 items-center justify-center rounded-xl transition-opacity disabled:opacity-40"
-            style={{ backgroundColor: "#ff4f12" }}
-            aria-label="Send"
-          >
-            {streaming ? (
-              <Loader2 className="size-4 animate-spin text-white" />
-            ) : (
+          {canStop ? (
+            <button
+              type="button"
+              onClick={stopGeneration}
+              className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[#ef4444] active:opacity-90"
+              aria-label="Stop generating"
+            >
+              <Square className="size-3.5 fill-white text-white" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled={!canSend}
+              onClick={() => void sendMessage()}
+              className="flex size-9 shrink-0 items-center justify-center rounded-xl transition-opacity disabled:opacity-40"
+              style={{ backgroundColor: "#ff4f12" }}
+              aria-label="Send"
+            >
               <Send className="size-[15px] text-white" />
-            )}
-          </button>
+            </button>
+          )}
         </div>
         <p className="mt-2 text-center text-[10px] text-[#a0a0a0]">
           {profilesLoading ? (

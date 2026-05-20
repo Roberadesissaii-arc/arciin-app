@@ -15,11 +15,24 @@ export type ChatConversationSummary = {
   messages: { role: string; content: string }[]
 }
 
+export type ChatMessageFeedbackRating = "LIKE" | "DISLIKE"
+
+export type TokenUsage = {
+  inputTokens: number
+  outputTokens: number
+  totalTokens: number
+}
+
 export type ChatMessageRecord = {
   id: string
   conversationId: string
   role: string
   content: string
+  inputTokens: number | null
+  outputTokens: number | null
+  totalTokens: number | null
+  feedbackRating: ChatMessageFeedbackRating | null
+  feedbackAt: string | null
   createdAt: string
 }
 
@@ -34,7 +47,10 @@ export type ChatConversationDetail = {
 
 export type ChatMessage = {
   id: string
+  dbId?: string
   role: "user" | "assistant"
   content: string
   pending?: boolean
+  feedback?: ChatMessageFeedbackRating | null
+  usage?: TokenUsage
 }

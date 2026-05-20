@@ -8,8 +8,33 @@ import type { MobileConnection } from "@/lib/types/api"
 import type {
   ChatConversationDetail,
   ChatConversationSummary,
+  ChatMessageFeedbackRating,
   ChatProfile,
 } from "@/lib/types/chat"
+
+export type ChatInstanceContext = {
+  libraries: { id: string; slug: string; name: string; kind: string; count: number }[]
+  folders: {
+    id: string
+    libraryId: string
+    librarySlug: string
+    name: string
+    pathCache: string
+    assetCount: number
+  }[]
+  appDatabases: {
+    id: string
+    name: string
+    slug: string
+    description: string | null
+    tableCount: number
+    createdAt: string
+  }[]
+  byMediaType: { type: string; count: number }[]
+  storageGb: number
+  lastUploadAt: string | null
+  passwordVaultLine?: string | null
+}
 
 export function getChatProfiles(connection: MobileConnection, signal?: AbortSignal) {
   return fetchApi<ChatProfile[]>("/chat/profiles", { connection, method: "GET", signal })
@@ -49,12 +74,47 @@ export function saveChatMessages(
   connection: MobileConnection,
   input: {
     conversationId: string
-    messages: { role: string; content: string }[]
+    messages: {
+      role: string
+      content: string
+      inputTokens?: number
+      outputTokens?: number
+      totalTokens?: number
+    }[]
   },
 ) {
   return fetchApi<{
-    messages: { id: string; role: string; createdAt: string }[]
+    messages: {
+      id: string
+      role: string
+      feedbackRating: ChatMessageFeedbackRating | null
+      createdAt: string
+    }[]
   }>("/chat/conversations/messages", { connection, method: "POST", body: input })
+}
+
+export function setChatMessageFeedback(
+  connection: MobileConnection,
+  messageId: string,
+  rating: ChatMessageFeedbackRating | null,
+) {
+  return fetchApi<{
+    id: string
+    feedbackRating: ChatMessageFeedbackRating | null
+    feedbackAt: string | null
+  }>(`/chat/messages/${messageId}/feedback`, {
+    connection,
+    method: "PATCH",
+    body: { rating },
+  })
+}
+
+export function getChatInstanceContext(connection: MobileConnection, signal?: AbortSignal) {
+  return fetchApi<ChatInstanceContext>("/chat/context", {
+    connection,
+    method: "GET",
+    signal,
+  })
 }
 
 export function deleteChatConversation(connection: MobileConnection, id: string) {
@@ -85,9 +145,17 @@ export function setChatSelection(connection: MobileConnection, input: ChatSelect
   })
 }
 
+export type TokenUsage = {
+  inputTokens: number
+  outputTokens: number
+  totalTokens: number
+}
+
 type StreamHandlers = {
   onText: (chunk: string) => void
   onThinking?: (chunk: string) => void
+  onUsage?: (usage: TokenUsage) => void
+  onLibraryAction?: (action: string) => void
   signal?: AbortSignal
 }
 
@@ -203,10 +271,14 @@ export async function streamChat(
           error?: string
           text?: string
           thinking?: string
+          usage?: TokenUsage
+          libraryAction?: string
         }
         if (json.error) throw new Error(json.error)
+        if (json.libraryAction) handlers.onLibraryAction?.(json.libraryAction)
         if (json.thinking) handlers.onThinking?.(json.thinking)
         if (json.text) handlers.onText(json.text)
+        if (json.usage) handlers.onUsage?.(json.usage)
       } catch (parseErr) {
         if (parseErr instanceof Error && parseErr.message !== "Unexpected end of JSON input") {
           throw parseErr
