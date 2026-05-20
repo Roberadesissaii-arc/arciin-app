@@ -89,10 +89,15 @@ export type AccessibilityPreferences = {
   keyboardNav: boolean
 }
 
+export type MediaPreferences = {
+  documentThumbnails: boolean
+}
+
 export type UserPreferences = {
   notifications: NotificationPreferences
   appearance: AppearancePreferences
   accessibility: AccessibilityPreferences
+  media: MediaPreferences
 }
 
 export type ApiKeySummary = {

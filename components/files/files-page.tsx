@@ -14,6 +14,7 @@ import { formatApiError } from "@/lib/api/errors"
 import { deleteFolder, listFolders, renameFolder } from "@/lib/api/folders"
 import { listLibraries } from "@/lib/api/libraries"
 import { uploadFile } from "@/lib/api/uploads"
+import { getUserPreferences } from "@/lib/api/user-preferences"
 import { classifyFile, filterIdForMediaType } from "@/lib/files/classify-file"
 import {
   filesCacheKey,
@@ -104,8 +105,24 @@ export function FilesPage() {
   const [createFolderOpen, setCreateFolderOpen] = useState(false)
   const [allFoldersOpen, setAllFoldersOpen] = useState(false)
   const [hasCache, setHasCache] = useState(false)
+  const [documentThumbnailsEnabled, setDocumentThumbnailsEnabled] = useState(false)
 
   const libraryScoped = filter !== "all"
+
+  useEffect(() => {
+    if (!connection) return
+    let cancelled = false
+    void getUserPreferences(connection)
+      .then((prefs) => {
+        if (!cancelled) {
+          setDocumentThumbnailsEnabled(prefs.media?.documentThumbnails ?? false)
+        }
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [connection])
 
   const currentFolder = useMemo(
     () => (folderId ? folders.find((f) => f.id === folderId) : null),
@@ -548,7 +565,11 @@ export function FilesPage() {
                           style={{ border: "1px solid #e5e5e5" }}
                         >
                           {connection ? (
-                            <AssetThumbnail asset={asset} connection={connection} />
+                            <AssetThumbnail
+                              asset={asset}
+                              connection={connection}
+                              documentThumbnailsEnabled={documentThumbnailsEnabled}
+                            />
                           ) : null}
                           <p className="mt-2 truncate px-0.5 text-[14px] font-semibold leading-tight text-[#222222]">
                             {asset.title?.trim() || asset.originalFilename}

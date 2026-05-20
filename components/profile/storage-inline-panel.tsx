@@ -6,6 +6,7 @@ import { FolderTree, HardDrive, Loader2, Save } from "lucide-react"
 import { SettingsIntroCard } from "@/components/settings/settings-intro-card"
 import { formatApiError } from "@/lib/api/errors"
 import { getStorageSettings, updateStorageSettings } from "@/lib/api/settings"
+import { getUserPreferences, updateUserPreferences } from "@/lib/api/user-preferences"
 import { useStablePanelLoad } from "@/lib/hooks/use-stable-panel-load"
 import { formatBytes } from "@/lib/utils/format-bytes"
 import type { StorageSettings } from "@/lib/types/models"
@@ -33,6 +34,9 @@ export function StorageInlinePanel({ enabled }: { enabled: boolean }) {
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
+  const [docThumbs, setDocThumbs] = useState(false)
+  const [prefsSaving, setPrefsSaving] = useState(false)
+  const [prefsError, setPrefsError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!data) return
@@ -40,6 +44,39 @@ export function StorageInlinePanel({ enabled }: { enabled: boolean }) {
     setPath(root)
     setInitialPath(root)
   }, [data])
+
+  useEffect(() => {
+    if (!enabled || !connection) return
+    let cancelled = false
+    void getUserPreferences(connection)
+      .then((prefs) => {
+        if (!cancelled) setDocThumbs(prefs.media?.documentThumbnails ?? false)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [enabled, connection])
+
+  async function toggleDocThumbs(next: boolean) {
+    if (!connection) return
+    setPrefsSaving(true)
+    setPrefsError(null)
+    const prev = docThumbs
+    setDocThumbs(next)
+    try {
+      const prefs = await updateUserPreferences(connection, {
+        media: { documentThumbnails: next },
+      })
+      setDocThumbs(prefs.media?.documentThumbnails ?? next)
+      setMessage(next ? "PDF previews enabled." : "PDF previews disabled.")
+    } catch (err) {
+      setDocThumbs(prev)
+      setPrefsError(formatApiError(err))
+    } finally {
+      setPrefsSaving(false)
+    }
+  }
 
   async function handleSave() {
     if (!connection || !path.trim() || path.trim() === initialPath) return
@@ -142,6 +179,45 @@ export function StorageInlinePanel({ enabled }: { enabled: boolean }) {
           ))}
         </div>
       </div>
+
+      <div className="rounded-xl bg-[#f7f7f7] px-3 py-1" style={{ border: "1px solid #e5e5e5" }}>
+        <p className="py-2 text-[11px] font-semibold uppercase tracking-wider text-[#a0a0a0]">
+          Technical
+        </p>
+        <div className="flex items-center justify-between gap-3 py-2.5">
+          <div className="min-w-0 flex-1">
+            <p className="text-[13px] font-medium text-[#222222]">PDF previews</p>
+            <p className="text-[11px] text-[#a0a0a0]">
+              First-page thumbnails for PDFs in file grids. Off by default.
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={docThumbs}
+            disabled={prefsSaving}
+            onClick={() => void toggleDocThumbs(!docThumbs)}
+            className="relative shrink-0 disabled:opacity-50"
+            style={{
+              width: 44,
+              height: 26,
+              borderRadius: 13,
+              backgroundColor: docThumbs ? "#ff4f12" : "#e5e5e5",
+            }}
+          >
+            <span
+              className="absolute top-[3px] size-5 rounded-full bg-white shadow-sm transition-transform"
+              style={{ left: 3, transform: docThumbs ? "translateX(18px)" : "translateX(0)" }}
+            />
+          </button>
+        </div>
+      </div>
+
+      {prefsError ? (
+        <p className="rounded-xl px-3 py-2 text-[12px] text-[#b91c1c] bg-[#fef2f2] border border-[#fecaca]">
+          {prefsError}
+        </p>
+      ) : null}
 
       {saveError ? (
         <p className="rounded-xl px-3 py-2 text-[12px] text-[#b91c1c] bg-[#fef2f2] border border-[#fecaca]">

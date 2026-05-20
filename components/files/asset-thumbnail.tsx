@@ -23,21 +23,33 @@ function FallbackIcon({ mediaType }: { mediaType: string }) {
   }
 }
 
+function assetWantsThumbnail(
+  asset: AssetSummary,
+  documentThumbnailsEnabled: boolean,
+): boolean {
+  if (asset.mediaType === "IMAGE" || asset.mediaType === "VIDEO") return true
+  if (!documentThumbnailsEnabled) return false
+  const mime = (asset.mimeType ?? "").toLowerCase()
+  if (mime === "application/pdf") return true
+  const name = (asset.originalFilename ?? "").toLowerCase()
+  return name.endsWith(".pdf")
+}
+
 export function AssetThumbnail({
   asset,
   connection,
   className = "",
   eager = false,
+  documentThumbnailsEnabled = false,
 }: {
   asset: AssetSummary
   connection: MobileConnection
   className?: string
   /** When true, fetch even if not in viewport (viewer). */
   eager?: boolean
+  documentThumbnailsEnabled?: boolean
 }) {
-  const isPdf = asset.mimeType === "application/pdf"
-  const wantsThumb =
-    asset.mediaType === "IMAGE" || asset.mediaType === "VIDEO" || isPdf
+  const wantsThumb = assetWantsThumbnail(asset, documentThumbnailsEnabled)
   const cached = wantsThumb ? getCachedThumbnailUrl(asset.id) : null
 
   const [src, setSrc] = useState<string | null>(cached)
