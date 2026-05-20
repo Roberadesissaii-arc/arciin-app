@@ -13,6 +13,24 @@ const MEDIA_TYPE_MAP: Record<string, MediaType> = {
   videos: "VIDEO",
   music: "AUDIO",
   documents: "DOCUMENT",
+  code: "CODE",
+  python: "CODE",
+  py: "CODE",
+  applications: "APPLICATION",
+  apps: "APPLICATION",
+}
+
+function chatListAssetFilters(
+  mediaType: string,
+): { mediaType?: MediaType; category?: "code" | "applications" } {
+  if (mediaType === "code" || mediaType === "python" || mediaType === "py") {
+    return { category: "code" }
+  }
+  if (mediaType === "applications" || mediaType === "apps") {
+    return { category: "applications" }
+  }
+  const mapped = MEDIA_TYPE_MAP[mediaType]
+  return mapped ? { mediaType: mapped } : {}
 }
 
 function fmtBytes(bytes: number) {
@@ -120,7 +138,7 @@ export function ChatInlineAssetBlock({
   const [assets, setAssets] = useState<AssetSummary[] | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const filterType = MEDIA_TYPE_MAP[mediaType]
+  const filters = chatListAssetFilters(mediaType)
 
   useEffect(() => {
     if (!connection) return
@@ -128,7 +146,7 @@ export function ChatInlineAssetBlock({
     setAssets(null)
     setError(null)
 
-    void getAssets(connection, filterType ? { mediaType: filterType } : {})
+    void getAssets(connection, filters)
       .then((list) => {
         if (!cancelled) {
           const sorted = [...list].sort(
@@ -144,7 +162,7 @@ export function ChatInlineAssetBlock({
     return () => {
       cancelled = true
     }
-  }, [connection, filterType, mediaType])
+  }, [connection, filters.category, filters.mediaType, mediaType])
 
   if (!connection) return null
   if (assets === null && !error) return <LoadingBlock label={mediaType} />

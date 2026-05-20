@@ -18,6 +18,7 @@ import {
   X,
 } from "lucide-react"
 
+import { syncChatKeyboardOffset, useChatKeyboard } from "@/hooks/use-chat-keyboard"
 import { ChatMarkdown } from "@/components/chat/chat-markdown"
 import { ChatModelBar } from "@/components/chat/chat-model-bar"
 import { ChatReasoningBlock } from "@/components/chat/chat-reasoning-block"
@@ -510,9 +511,12 @@ export function ChatPage() {
 
   const [chatContext, setChatContext] = useState<ChatInstanceContext | null>(null)
 
+  const pageRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const abortRef = useRef<AbortController | null>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+
+  useChatKeyboard(pageRef)
 
   const [selectedProfile, setSelectedProfile] = useState<ChatProfile | null>(null)
   const [selectedModel, setSelectedModel] = useState("")
@@ -890,6 +894,9 @@ export function ChatPage() {
       inputEl.style.height = "auto"
       inputEl.blur()
     }
+    syncChatKeyboardOffset(pageRef.current)
+    requestAnimationFrame(() => syncChatKeyboardOffset(pageRef.current))
+    window.setTimeout(() => syncChatKeyboardOffset(pageRef.current), 320)
     setError(null)
     const priorMessages = messages
     setMessages((prev) => [...prev, userMsg, pendingMsg])
@@ -1000,7 +1007,7 @@ export function ChatPage() {
   }
 
   return (
-    <div className="chat-page px-4">
+    <div ref={pageRef} className="chat-page px-4">
       <HistoryDrawer
         open={historyOpen}
         onClose={() => setHistoryOpen(false)}
@@ -1065,7 +1072,7 @@ export function ChatPage() {
 
       <div className="chat-page-composer">
         <div
-          className="flex items-center gap-2 rounded-2xl bg-white px-2 py-2.5 shadow-[0_2px_12px_rgba(0,0,0,0.06)]"
+          className="flex items-center gap-2 rounded-2xl bg-white px-2 py-2 shadow-[0_2px_12px_rgba(0,0,0,0.06)]"
           style={{ border: "1px solid #e5e5e5" }}
         >
           {connection && profiles.length > 0 ? (
@@ -1085,7 +1092,11 @@ export function ChatPage() {
             value={input}
             onChange={handleInputChange}
             onFocus={() => {
-              requestAnimationFrame(() => scrollToBottom())
+              syncChatKeyboardOffset(pageRef.current)
+              requestAnimationFrame(() => {
+                syncChatKeyboardOffset(pageRef.current)
+                scrollToBottom()
+              })
             }}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
@@ -1128,7 +1139,7 @@ export function ChatPage() {
             </button>
           )}
         </div>
-        <p className="mt-2 text-center text-[10px] text-[#a0a0a0]">
+        <p className="mt-1.5 text-center text-[10px] text-[#a0a0a0]">
           {profilesLoading ? (
             <span className="inline-flex items-center gap-1">
               <Loader2 className="size-2.5 animate-spin" />

@@ -32,6 +32,14 @@ export type ChatInstanceContext = {
     createdAt: string
   }[]
   byMediaType: { type: string; count: number }[]
+  codeFiles?: {
+    id: string
+    filename: string
+    mediaType: string
+    sizeBytes: number
+    librarySlug: string
+    libraryName: string
+  }[]
   storageGb: number
   lastUploadAt: string | null
   passwordVaultLine?: string | null

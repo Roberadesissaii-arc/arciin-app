@@ -5,26 +5,23 @@ import { usePathname } from "next/navigation"
 import { BottomNav } from "@/components/shell/bottom-nav"
 import { MobileTopChrome } from "@/components/shell/mobile-top-chrome"
 import { ServerReconnectBanner } from "@/components/shell/server-reconnect-banner"
-import { useMobileVisualViewport } from "@/hooks/use-mobile-visual-viewport"
 import { cn } from "@/lib/utils"
 
 /**
- * iOS PWA shell: pinned to visualViewport; main scrolls inside flex column (not document).
+ * iOS PWA shell: natural page scroll, fixed top chrome, floating bottom nav.
  */
 export function MobileShellViewport({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const isChat = pathname === "/chat" || pathname.startsWith("/chat/")
 
-  useMobileVisualViewport()
-
   return (
-    <div className="mobile-app-root">
+    <div className="mobile-app-root flex min-h-dvh flex-col bg-[#f7f7f7]">
       <MobileTopChrome />
 
       <main
         className={cn(
           "mobile-app-main flex-1 scrollbar-hide",
-          isChat ? "px-0 pt-0 pb-0" : "px-4 pt-4 pb-2",
+          isChat ? "px-0 pt-0 pb-0" : "px-4 pt-4 pb-nav-safe",
         )}
       >
         <div

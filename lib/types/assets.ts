@@ -1,4 +1,12 @@
-export type MediaType = "VIDEO" | "IMAGE" | "AUDIO" | "DOCUMENT" | "ARCHIVE" | "OTHER"
+export type MediaType =
+  | "VIDEO"
+  | "IMAGE"
+  | "AUDIO"
+  | "DOCUMENT"
+  | "ARCHIVE"
+  | "APPLICATION"
+  | "CODE"
+  | "OTHER"
 
 export type AssetSummary = {
   id: string

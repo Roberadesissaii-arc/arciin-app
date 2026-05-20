@@ -64,6 +64,18 @@ export function buildContextBlock(ctx: ChatInstanceContext, apiBaseUrl: string):
     "Listing these MUST NOT use [[ASSET_LIST:documents]] or Documents library filenames.",
   ].join("\n")
 
+  const codeFiles = ctx.codeFiles ?? []
+  const codeBlock =
+    codeFiles.length === 0
+      ? "Code files (source scripts — .py, .js, .ts, etc.; often in Inbox): none in snapshot"
+      : [
+          `Code files (${codeFiles.length} recent — use read_text_asset to read contents; list with [[ASSET_LIST:code]]):`,
+          ...codeFiles.map(
+            (f) =>
+              `  - ${f.filename} id=${f.id} type=${f.mediaType} library=${f.librarySlug} size=${f.sizeBytes}B`,
+          ),
+        ].join("\n")
+
   return [
     "--- Current Instance Data ---",
     `REST API base (use this exact prefix in examples): ${restBase}`,
@@ -72,6 +84,7 @@ export function buildContextBlock(ctx: ChatInstanceContext, apiBaseUrl: string):
     `Libraries (summary): ${libs || "none"}`,
     folderBlock,
     appDbBlock,
+    codeBlock,
     `Total assets: ${total} (${byType || "none"})`,
     `Storage used: ${storageStr}`,
     lastUpload,

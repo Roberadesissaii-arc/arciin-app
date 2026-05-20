@@ -14,6 +14,7 @@ export type AssetFilters = {
   libraryId?: string
   folderId?: string
   mediaType?: MediaType
+  category?: "code" | "applications"
   search?: string
 }
 
@@ -26,6 +27,7 @@ export function getAssets(
   if (filters.libraryId) params.set("libraryId", filters.libraryId)
   if (filters.folderId) params.set("folderId", filters.folderId)
   if (filters.mediaType) params.set("mediaType", filters.mediaType)
+  if (filters.category) params.set("category", filters.category)
   if (filters.search) params.set("search", filters.search)
   const query = params.size ? `?${params.toString()}` : ""
 
