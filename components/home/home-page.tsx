@@ -1,7 +1,6 @@
 "use client"
 
 import Link from "next/link"
-import { useState } from "react"
 import {
   Activity,
   BriefcaseBusiness,
@@ -9,9 +8,9 @@ import {
   FingerprintPattern,
   GalleryVerticalEnd,
   HardDrive,
-  Loader2,
 } from "lucide-react"
 
+import { HomePageSkeleton } from "@/components/home/home-page-skeleton"
 import { useCachedHomeOverview } from "@/lib/hooks/use-cached-home-overview"
 import { useConnection } from "@/components/providers/connection-provider"
 import {
@@ -28,14 +27,12 @@ function StatCard({
   value,
   sub,
   icon: Icon,
-  loading,
   href,
 }: {
   label: string
   value: string
   sub?: string
   icon: React.ElementType
-  loading?: boolean
   href?: string
 }) {
   const body = (
@@ -50,16 +47,10 @@ function StatCard({
         </div>
       </div>
       <div>
-        {loading ? (
-          <Loader2 className="size-6 animate-spin text-[#c0c0c0]" />
-        ) : (
-          <p className="text-[22px] font-bold leading-none tracking-tight text-[#222222]">
-            {value}
-          </p>
-        )}
-        {sub && !loading ? (
-          <p className="mt-1 text-[11px] text-[#a0a0a0]">{sub}</p>
-        ) : null}
+        <p className="text-[22px] font-bold leading-none tracking-tight text-[#222222]">
+          {value}
+        </p>
+        {sub ? <p className="mt-1 text-[11px] text-[#a0a0a0]">{sub}</p> : null}
       </div>
     </>
   )
@@ -99,7 +90,7 @@ function storagePercent(storage: NonNullable<HomeOverview["storage"]>) {
 
 export function HomePage() {
   const { connection } = useConnection()
-  const { data, loading, isRevalidating, error, reload } = useCachedHomeOverview()
+  const { data, error, reload } = useCachedHomeOverview()
 
   const storage = data?.storage
   const storagePct = storage ? storagePercent(storage) : null
@@ -121,6 +112,30 @@ export function HomePage() {
         : data.passwordVaultCount === 1
           ? "saved entry"
           : "saved entries"
+
+  if (!data) {
+    return (
+      <div className="flex flex-col gap-5">
+        {error ? (
+          <div
+            className="rounded-xl px-4 py-3 text-[12px] text-[#b91c1c]"
+            style={{ backgroundColor: "#fef2f2", border: "1px solid #fecaca" }}
+            role="alert"
+          >
+            <p>{error}</p>
+            <button
+              type="button"
+              onClick={() => void reload()}
+              className="mt-2 font-semibold text-[#ff4f12]"
+            >
+              Try again
+            </button>
+          </div>
+        ) : null}
+        <HomePageSkeleton userName={connection?.user.name} />
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col gap-5">
@@ -160,24 +175,20 @@ export function HomePage() {
       <div className="grid grid-cols-2 gap-3">
         <StatCard
           label="Active jobs"
-          value={data ? String(data.activeJobs) : "—"}
-          sub={data?.activeJobs ? "queued or running" : "none right now"}
+          value={String(data.activeJobs)}
+          sub={data.activeJobs ? "queued or running" : "none right now"}
           icon={BriefcaseBusiness}
-          loading={loading}
           href="/jobs"
         />
         <StatCard
           label="Uploads"
-          value={data ? String(data.uploadInProgress) : "—"}
+          value={String(data.uploadInProgress)}
           sub={
-            data
-              ? data.uploadInProgress > 0
-                ? "in progress"
-                : `${data.uploadCount} recent`
-              : "queued / recent"
+            data.uploadInProgress > 0
+              ? "in progress"
+              : `${data.uploadCount} recent`
           }
           icon={CloudUpload}
-          loading={loading}
           href="/files"
         />
         <StatCard
@@ -185,7 +196,6 @@ export function HomePage() {
           value={passwordsValue}
           sub={passwordsSub}
           icon={FingerprintPattern}
-          loading={loading}
           href="/profile/passwords"
         />
         <StatCard
@@ -212,7 +222,7 @@ export function HomePage() {
             <span className="text-[13px] font-semibold text-[#222222]">Storage</span>
           </div>
           <span className="max-w-[55%] truncate text-right text-[12px] font-medium text-[#a0a0a0]">
-            {loading ? "…" : storageLabel}
+            {storageLabel}
           </span>
         </div>
 
@@ -228,7 +238,7 @@ export function HomePage() {
 
         <div className="flex items-center justify-between text-[11px]">
           <span className="text-[#a0a0a0]">
-            {storage ? `${formatBytes(storage.usageBytes)} used` : loading ? "…" : "Unavailable"}
+            {storage ? `${formatBytes(storage.usageBytes)} used` : "Unavailable"}
           </span>
           <span className="font-medium text-[#717171]">
             {storagePct != null ? `${storagePct}% full` : storage ? "—" : ""}
@@ -245,11 +255,7 @@ export function HomePage() {
           className="overflow-hidden rounded-2xl bg-white"
           style={{ border: "1px solid #e5e5e5" }}
         >
-          {loading ? (
-            <div className="flex justify-center py-10">
-              <Loader2 className="size-7 animate-spin text-[#c0c0c0]" />
-            </div>
-          ) : data?.recentActivity.length ? (
+          {data?.recentActivity.length ? (
             <ul className="divide-y divide-[#f0f0f0]">
               {data.recentActivity.map((event) => {
                 const Icon = activityIconFor(event)

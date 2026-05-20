@@ -1,9 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import Link from "next/link"
 import {
-  ArrowLeft,
   Copy,
   Eye,
   EyeOff,
@@ -16,7 +14,10 @@ import {
 } from "lucide-react"
 
 import { useConnection } from "@/components/providers/connection-provider"
+import { PasswordVaultEntryListSkeleton } from "@/components/profile/password-vault-entry-skeleton"
+import { PasswordVaultIntroSkeleton } from "@/components/profile/password-vault-intro-skeleton"
 import { MobileBottomSheet } from "@/components/shell/mobile-bottom-sheet"
+import { Skeleton } from "@/components/ui/skeleton"
 import { formatApiError } from "@/lib/api/errors"
 import {
   getPasswordVault,
@@ -246,7 +247,6 @@ export function PasswordsPage() {
   const entries = vault?.entries ?? []
   const filteredEntries = entries.filter((entry) => entryMatchesQuery(entry, searchQuery))
   const maskStyle = vault?.display?.maskStyle ?? "dots"
-  const vaultReady = Boolean(vault) && !statsLoading
 
   function openVaultUnlock(revealEntryId?: string) {
     setPendingRevealId(revealEntryId ?? null)
@@ -321,39 +321,27 @@ export function PasswordsPage() {
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="flex items-center gap-2">
-        <Link
-          href="/profile"
-          className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white text-[#717171]"
-          style={{ border: "1px solid #e5e5e5" }}
-          aria-label="Back"
-        >
-          <ArrowLeft className="size-4" />
-        </Link>
-        <div className="flex min-w-0 flex-1 items-center gap-2.5">
-          <div
-            className="flex size-9 shrink-0 items-center justify-center rounded-xl"
-            style={{ backgroundColor: "rgba(255,79,18,0.12)", border: "1px solid rgba(255,79,18,0.2)" }}
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <h2
+            className="text-[20px] font-bold text-[#222222]"
+            style={{ fontFamily: "var(--font-space-grotesk, sans-serif)" }}
           >
-            <FingerprintPattern className="size-[18px] text-[#ff4f12]" />
-          </div>
-          <div className="min-w-0">
-            <h2
-              className="text-[20px] font-bold text-[#222222]"
-              style={{ fontFamily: "var(--font-space-grotesk, sans-serif)" }}
-            >
-              Password vault
-            </h2>
+            Password vault
+          </h2>
+          {statsLoading ? (
+            <Skeleton className="mt-1.5 h-3 w-36 max-w-full rounded-md" />
+          ) : (
             <p className="text-[12px] text-[#717171]">
-              {statsLoading ? "Loading…" : `${vault?.total ?? 0} saved · instance vault`}
+              {vault?.total ?? 0} saved · instance vault
             </p>
-          </div>
+          )}
         </div>
         <button
           type="button"
           onClick={() => void load(undefined, true)}
           disabled={loading}
-          className="flex size-9 items-center justify-center rounded-xl bg-white text-[#717171]"
+          className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white text-[#717171]"
           style={{ border: "1px solid #e5e5e5" }}
           aria-label="Refresh"
         >
@@ -376,51 +364,53 @@ export function PasswordsPage() {
         </div>
       ) : null}
 
-      <div
-        className="flex items-center gap-3 rounded-2xl p-4"
-        style={{
-          border: "1px solid rgba(255,79,18,0.25)",
-          background: "linear-gradient(135deg, #fff7f4 0%, #ffffff 70%)",
-        }}
-      >
+      {statsLoading ? (
+        <PasswordVaultIntroSkeleton />
+      ) : (
         <div
-          className="flex size-10 items-center justify-center rounded-xl"
-          style={{ backgroundColor: "rgba(255,79,18,0.12)" }}
+          className="flex items-center gap-3 rounded-2xl p-4"
+          style={{
+            border: "1px solid rgba(255,79,18,0.25)",
+            background: "linear-gradient(135deg, #fff7f4 0%, #ffffff 70%)",
+          }}
         >
-          <FingerprintPattern className="size-5 text-[#ff4f12]" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-[13px] font-semibold text-[#222222]">Password vault</p>
-          <p className="text-[11px] text-[#717171]">
-            {!vaultReady
-              ? "Loading vault status…"
-              : lockRequired && !secretsVisible
+          <div
+            className="flex size-10 items-center justify-center rounded-xl"
+            style={{ backgroundColor: "rgba(255,79,18,0.12)" }}
+          >
+            <FingerprintPattern className="size-5 text-[#ff4f12]" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[13px] font-semibold text-[#222222]">Password vault</p>
+            <p className="text-[11px] text-[#717171]">
+              {lockRequired && !secretsVisible
                 ? "Locked — unlock once to use the eye on entries"
                 : "Unlocked — tap the eye to show or hide each password"}
-          </p>
+            </p>
+          </div>
+          {lockRequired ? (
+            secretsVisible ? (
+              <button
+                type="button"
+                onClick={() => void handleLock()}
+                className="shrink-0 rounded-xl px-3 py-1.5 text-[12px] font-semibold text-[#717171]"
+                style={{ border: "1px solid #e5e5e5", background: "#fff" }}
+              >
+                Lock
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => openVaultUnlock()}
+                className="shrink-0 rounded-xl px-3 py-1.5 text-[12px] font-semibold text-white"
+                style={{ backgroundColor: "#ff4f12" }}
+              >
+                Unlock
+              </button>
+            )
+          ) : null}
         </div>
-        {lockRequired ? (
-          secretsVisible ? (
-            <button
-              type="button"
-              onClick={() => void handleLock()}
-              className="shrink-0 rounded-xl px-3 py-1.5 text-[12px] font-semibold text-[#717171]"
-              style={{ border: "1px solid #e5e5e5", background: "#fff" }}
-            >
-              Lock
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => openVaultUnlock()}
-              className="shrink-0 rounded-xl px-3 py-1.5 text-[12px] font-semibold text-white"
-              style={{ backgroundColor: "#ff4f12" }}
-            >
-              Unlock
-            </button>
-          )
-        ) : null}
-      </div>
+      )}
 
       {!statsLoading && entries.length > 0 ? (
         <div className="relative">
@@ -449,15 +439,7 @@ export function PasswordsPage() {
 
 
       {statsLoading ? (
-        <ul className="flex flex-col gap-3">
-          {[0, 1, 2].map((i) => (
-            <li
-              key={i}
-              className="h-28 animate-pulse rounded-2xl bg-white"
-              style={{ border: "1px solid #e5e5e5" }}
-            />
-          ))}
-        </ul>
+        <PasswordVaultEntryListSkeleton count={3} />
       ) : entries.length === 0 ? (
         <div
           className="rounded-2xl bg-white px-4 py-14 text-center"
