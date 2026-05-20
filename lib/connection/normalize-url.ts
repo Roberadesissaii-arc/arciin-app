@@ -227,27 +227,32 @@ export function displayServerLabel(apiBaseUrl: string, instanceName?: string) {
   }
 }
 
-export type ServerAddressDisplayKind = "localhost" | "local" | "domain"
+export type ServerAddressDisplayKind =
+  | "localhost"
+  | "local"
+  | "tunnel"
+  | "public"
+  | "app_host"
 
 export type ServerAddressDisplay = {
   kind: ServerAddressDisplayKind
   kindLabel: string
   host: string
+  /** Shown under the chip when the saved address needs attention. */
+  hint?: string
 }
 
-/** Short host line for login UI (domain vs LAN vs localhost). */
-export function getServerAddressDisplay(
-  apiBaseUrl: string,
-  webUrl?: string | null,
-): ServerAddressDisplay {
-  const display = (webUrl ?? apiBaseUrl.replace(/\/api\/?$/i, "")).trim()
+export function isTryCloudflareHostname(hostname: string): boolean {
+  return hostname.toLowerCase().endsWith(".trycloudflare.com")
+}
 
-  if (isLoopbackApiBase(apiBaseUrl)) {
-    return { kind: "localhost", kindLabel: "Localhost", host: "127.0.0.1" }
-  }
+/** Vercel / app host — not the user's self-hosted Arciin server. */
+export function isMobileAppHost(hostname: string): boolean {
+  const h = hostname.toLowerCase()
+  return h.endsWith(".vercel.app") || h === "vercel.app" || h.includes(".vercel.")
+}
 
-  const isPublic = isPublicServerAddress(display)
-  let host = display
+function hostnameFromServerDisplay(display: string): string {
   try {
     const url = new URL(/^https?:\/\//i.test(display) ? display : `http://${display.split("/")[0]}`)
     const port = url.port
@@ -257,14 +262,52 @@ export function getServerAddressDisplay(
         (url.protocol === "https:" && port === "443") ||
         (url.protocol === "http:" && port === "80")
       )
-    host = showPort ? `${url.hostname}:${port}` : url.hostname
+    return showPort ? `${url.hostname}:${port}` : url.hostname
   } catch {
-    host = display.replace(/^https?:\/\//i, "").split("/")[0] ?? display
+    return display.replace(/^https?:\/\//i, "").split("/")[0] ?? display
+  }
+}
+
+/** Short host line for login / settings (where the saved Arciin server points). */
+export function getServerAddressDisplay(
+  apiBaseUrl: string,
+  webUrl?: string | null,
+): ServerAddressDisplay {
+  const display = (webUrl ?? apiBaseUrl.replace(/\/api\/?$/i, "")).trim()
+
+  if (isLoopbackApiBase(apiBaseUrl)) {
+    return {
+      kind: "localhost",
+      kindLabel: "Localhost",
+      host: "127.0.0.1",
+      hint: "localhost does not work on a phone. Use Change server and enter your server’s LAN IP.",
+    }
   }
 
-  if (isPublic) {
-    return { kind: "domain", kindLabel: "Domain", host }
+  const host = hostnameFromServerDisplay(display)
+
+  if (isMobileAppHost(host)) {
+    return {
+      kind: "app_host",
+      kindLabel: "Mobile app only",
+      host,
+      hint: "This is the Vercel app URL, not your home Arciin server. Tap Change server and enter your server address.",
+    }
   }
+
+  if (isTryCloudflareHostname(host)) {
+    return {
+      kind: "tunnel",
+      kindLabel: "Cloudflare quick tunnel",
+      host,
+      hint: "Temporary link from desktop Settings → Domain. Generate a new one on the server if it stopped working.",
+    }
+  }
+
+  if (isPublicServerAddress(display)) {
+    return { kind: "public", kindLabel: "Public URL", host }
+  }
+
   return { kind: "local", kindLabel: "Local network", host }
 }
 

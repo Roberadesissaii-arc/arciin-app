@@ -7,7 +7,7 @@ import { Loader2, Server } from "lucide-react"
 import { SettingsIntroCard } from "@/components/settings/settings-intro-card"
 import { useConnection } from "@/components/providers/connection-provider"
 import { formatApiError } from "@/lib/api/errors"
-import { displayServerLabel } from "@/lib/connection/normalize-url"
+import { SavedServerChip } from "@/components/connection/saved-server-chip"
 import { serverAddressFromProfile } from "@/lib/connection/reconnect-server"
 import { loadServerProfile } from "@/lib/connection/storage"
 import { dispatchAppForeground } from "@/lib/hooks/use-app-foreground"
@@ -22,12 +22,6 @@ export function ChangeServerInlinePanel({ enabled }: { enabled: boolean }) {
   const [error, setError] = useState<string | null>(null)
 
   const profile = loadServerProfile()
-  const currentLabel = profile
-    ? displayServerLabel(profile.apiBaseUrl, profile.instanceName)
-    : null
-  const currentUrl = profile
-    ? profile.webUrl ?? profile.apiBaseUrl.replace(/\/api\/?$/i, "")
-    : null
 
   useEffect(() => {
     if (!enabled) return
@@ -76,24 +70,19 @@ export function ChangeServerInlinePanel({ enabled }: { enabled: boolean }) {
         description="Point this app at a different Arciin instance. Use a LAN IP on Wi‑Fi or a public URL / tunnel when you are away from home."
       />
 
-      {currentLabel ? (
-        <div
-          className="rounded-xl px-4 py-3"
-          style={{ backgroundColor: "#f7f7f7", border: "1px solid #e5e5e5" }}
-        >
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-[#a0a0a0]">
-            Current server
-          </p>
-          <p className="mt-1 text-[14px] font-semibold text-[#222222]">{currentLabel}</p>
-          {currentUrl ? (
-            <p className="mt-1 break-all font-mono text-[11px] text-[#717171]">{currentUrl}</p>
-          ) : null}
+      {profile?.apiBaseUrl ? (
+        <>
+          <SavedServerChip
+            apiBaseUrl={profile.apiBaseUrl}
+            webUrl={profile.webUrl}
+            caption="Current server"
+          />
           {serverReachable === false ? (
-            <p className="mt-2 text-[12px] text-[#b45309]">
+            <p className="text-[12px] text-[#b45309]">
               Cannot reach this server right now. Paste an updated URL below.
             </p>
           ) : null}
-        </div>
+        </>
       ) : null}
 
       <div className="space-y-3">
@@ -106,7 +95,7 @@ export function ChangeServerInlinePanel({ enabled }: { enabled: boolean }) {
             type="url"
             value={serverAddress}
             onChange={(e) => setServerAddress(e.target.value)}
-            placeholder="http://192.168.1.10:3004 or https://your-tunnel.trycloudflare.com"
+            placeholder="http://192.168.1.10:3004 or https://your-server.example.com"
             className="mt-1.5 w-full rounded-xl bg-[#f7f7f7] px-4 py-3 font-mono text-[13px] text-[#222222] outline-none focus:ring-2 focus:ring-[#ff4f12]/30"
             style={{ border: "1px solid #e5e5e5" }}
             autoComplete="url"

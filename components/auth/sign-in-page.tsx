@@ -9,7 +9,6 @@ import { discoverServer, pairMobileDevice, loginMobileDevice } from "@/lib/api/m
 import {
   deriveMobileServerUrlsFromApiBase,
   displayServerLabel,
-  getServerAddressDisplay,
   isLoopbackApiBase,
   isPublicServerAddress,
 } from "@/lib/connection/normalize-url"
@@ -20,6 +19,7 @@ import {
   saveServerProfile,
 } from "@/lib/connection/storage"
 import { BrandHeroCarousel } from "@/components/auth/brand-hero"
+import { SavedServerChip } from "@/components/connection/saved-server-chip"
 import { useConnection } from "@/components/providers/connection-provider"
 
 function SuccessScreen({ serverUrl }: { serverUrl: string }) {
@@ -324,33 +324,6 @@ function AuthCard({
 }
 
 
-function CurrentServerChip({
-  apiBaseUrl,
-  webUrl,
-}: {
-  apiBaseUrl: string
-  webUrl?: string | null
-}) {
-  const { kindLabel, host } = getServerAddressDisplay(apiBaseUrl, webUrl)
-
-  return (
-    <div
-      className="flex min-w-0 items-center gap-2.5 rounded-xl px-3 py-2.5"
-      style={{ backgroundColor: "#f7f7f7", border: "1px solid #efefef" }}
-    >
-      <Server className="size-3.5 shrink-0 text-[#ff4f12]" aria-hidden />
-      <p
-        className="min-w-0 flex-1 truncate text-[13px] font-medium text-[#222222]"
-        title={`${kindLabel}: ${host}`}
-      >
-        <span className="text-[#a0a0a0]">{kindLabel}</span>
-        <span className="text-[#c0c0c0]"> · </span>
-        <span className="font-mono text-[12px]">{host}</span>
-      </p>
-    </div>
-  )
-}
-
 function CardDivider() {
   return (
     <div className="my-1 flex items-center gap-3">
@@ -601,7 +574,7 @@ export function SignInPage() {
         >
           <form onSubmit={handleSignIn} className="flex flex-col gap-3.5">
             {serverProfile?.apiBaseUrl ? (
-              <CurrentServerChip
+              <SavedServerChip
                 apiBaseUrl={serverProfile.apiBaseUrl}
                 webUrl={serverProfile.webUrl}
               />
