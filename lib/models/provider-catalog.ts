@@ -130,5 +130,6 @@ export const MODEL_PROVIDERS: ProviderMeta[] = [
 ]
 
 export function providerMetaFor(id: string): ProviderMeta | undefined {
-  return MODEL_PROVIDERS.find((p) => p.id === id)
+  const normalized = id === "ollama" ? "ollama-local" : id
+  return MODEL_PROVIDERS.find((p) => p.id === normalized)
 }

@@ -1,25 +1,114 @@
 "use client"
 
-import { useState } from "react"
-import { Boxes, ChevronDown, Loader2, X } from "lucide-react"
+import { useEffect, useState } from "react"
+import { Boxes, ChevronDown, Cloud, Loader2, X } from "lucide-react"
 
 import { MobileOverlay } from "@/components/shell/mobile-bottom-sheet"
 import { setChatSelection } from "@/lib/api/chat"
+import { getAvailableModels } from "@/lib/api/models"
 import { chatModelForProfile } from "@/lib/models/model-helpers"
 import { providerMetaFor } from "@/lib/models/provider-catalog"
+import { isOllamaProvider, normalizeProviderId } from "@/lib/models/ollama-providers"
 import type { MobileConnection } from "@/lib/types/api"
 import type { ChatProfile } from "@/lib/types/chat"
-import type { ModelProfile } from "@/lib/types/models"
 import { cn } from "@/lib/utils"
 
-function modelForChatProfile(profile: ChatProfile): string {
-  const meta = providerMetaFor(profile.provider)
-  return chatModelForProfile(profile as ModelProfile, meta)
+function modelForNonOllamaProfile(profile: ChatProfile): string {
+  const meta = providerMetaFor(normalizeProviderId(profile.provider))
+  return chatModelForProfile({ defaultModel: profile.defaultModel }, meta)
+}
+
+function OllamaModelsSection({
+  connection,
+  profile,
+  selectedProfile,
+  selectedModel,
+  onPickModel,
+}: {
+  connection: MobileConnection
+  profile: ChatProfile
+  selectedProfile: ChatProfile | null
+  selectedModel: string
+  onPickModel: (profile: ChatProfile, model: string) => void
+}) {
+  const [models, setModels] = useState<string[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const isCloud = profile.provider === "ollama-cloud"
+
+  useEffect(() => {
+    let cancelled = false
+    setModels(null)
+    setError(null)
+    void getAvailableModels(connection, profile.id)
+      .then((result) => {
+        if (!cancelled) {
+          setModels(result.models.length > 0 ? result.models : profile.defaultModel ? [profile.defaultModel] : [])
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Could not load models")
+          setModels(profile.defaultModel ? [profile.defaultModel] : [])
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [connection, profile.defaultModel, profile.id])
+
+  if (models === null) {
+    return (
+      <div className="flex items-center gap-2 py-2 pl-2 text-[11px] text-[#717171]">
+        <Loader2 className="size-3 animate-spin text-[#ff4f12]" />
+        {isCloud ? "Loading cloud models…" : "Fetching Ollama models…"}
+      </div>
+    )
+  }
+
+  if (models.length === 0) {
+    return (
+      <p className="py-2 pl-2 text-[11px] leading-relaxed text-[#717171]">
+        {error ??
+          (isCloud
+            ? "No cloud models found. Check your API key under Models."
+            : "No models on your server. Run ollama pull on the Arciin host.")}
+      </p>
+    )
+  }
+
+  return (
+    <ul className="mb-2 space-y-0.5 border-l-2 border-[#ff4f12]/20 pl-2">
+      {error && models.length > 0 ? (
+        <li className="py-1 text-[10px] text-amber-700">{error}</li>
+      ) : null}
+      {models.map((model) => {
+        const active =
+          selectedProfile?.id === profile.id &&
+          (selectedModel === model || (!selectedModel.trim() && model === profile.defaultModel))
+        return (
+          <li key={model}>
+            <button
+              type="button"
+              onClick={() => onPickModel(profile, model)}
+              className={cn(
+                "flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left font-mono text-[11px] active:opacity-90",
+                active ? "bg-[#fff7f4] text-[#ff4f12]" : "text-[#444444] active:bg-[#f7f7f7]",
+              )}
+            >
+              <span className="min-w-0 flex-1 truncate">{model}</span>
+              {isCloud ? <Cloud className="size-3 shrink-0 opacity-50" aria-hidden /> : null}
+            </button>
+          </li>
+        )
+      })}
+    </ul>
+  )
 }
 
 function ChatModelPickerSheet({
   open,
   onClose,
+  connection,
   profiles,
   selectedProfile,
   selectedModel,
@@ -27,6 +116,7 @@ function ChatModelPickerSheet({
 }: {
   open: boolean
   onClose: () => void
+  connection: MobileConnection
   profiles: ChatProfile[]
   selectedProfile: ChatProfile | null
   selectedModel: string
@@ -46,7 +136,7 @@ function ChatModelPickerSheet({
           <div className="min-w-0">
             <p className="text-[16px] font-bold text-[#222222]">Chat model</p>
             <p className="mt-1 text-[12px] leading-relaxed text-[#717171]">
-              Synced with desktop — same model on all devices
+              Pick a provider, then an Ollama model if applicable
             </p>
           </div>
           <button
@@ -61,34 +151,61 @@ function ChatModelPickerSheet({
 
         <ul className="scrollbar-hide min-h-0 flex-1 overflow-y-auto px-5 py-3">
           {profiles.map((profile) => {
+            const ollama = isOllamaProvider(profile.provider)
             const active = selectedProfile?.id === profile.id
-            const modelLabel =
-              active && selectedModel
-                ? selectedModel
-                : profile.defaultModel || profile.provider
             return (
-              <li key={profile.id} className="mb-1.5 last:mb-0">
-                <button
-                  type="button"
-                  onClick={() => onPick(profile, modelForChatProfile(profile))}
-                  className={cn(
-                    "flex w-full flex-col rounded-xl px-3 py-3 text-left active:opacity-90",
-                    active ? "bg-[#fff7f4] ring-1 ring-[#ff4f12]/30" : "active:bg-[#f7f7f7]",
-                  )}
-                >
-                  <span
+              <li key={profile.id} className="mb-3 last:mb-0">
+                {ollama ? (
+                  <>
+                    <div
+                      className={cn(
+                        "flex items-center justify-between rounded-xl px-3 py-2.5",
+                        active ? "bg-[#fff7f4]" : "bg-[#f7f7f7]",
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "text-[14px] font-semibold",
+                          active ? "text-[#ff4f12]" : "text-[#222222]",
+                        )}
+                      >
+                        {profile.displayName}
+                        {profile.isDefault ? " · default" : ""}
+                      </span>
+                    </div>
+                    <OllamaModelsSection
+                      connection={connection}
+                      profile={profile}
+                      selectedProfile={selectedProfile}
+                      selectedModel={selectedModel}
+                      onPickModel={onPick}
+                    />
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => onPick(profile, modelForNonOllamaProfile(profile))}
                     className={cn(
-                      "text-[14px] font-semibold",
-                      active ? "text-[#ff4f12]" : "text-[#222222]",
+                      "flex w-full flex-col rounded-xl px-3 py-3 text-left active:opacity-90",
+                      active ? "bg-[#fff7f4] ring-1 ring-[#ff4f12]/30" : "active:bg-[#f7f7f7]",
                     )}
                   >
-                    {profile.displayName}
-                  </span>
-                  <span className="mt-0.5 truncate font-mono text-[11px] text-[#717171]">
-                    {modelLabel}
-                    {profile.isDefault ? " · default" : ""}
-                  </span>
-                </button>
+                    <span
+                      className={cn(
+                        "text-[14px] font-semibold",
+                        active ? "text-[#ff4f12]" : "text-[#222222]",
+                      )}
+                    >
+                      {profile.displayName}
+                    </span>
+                    <span className="mt-0.5 truncate font-mono text-[11px] text-[#717171]">
+                      {active && selectedModel
+                        ? selectedModel
+                        : modelForNonOllamaProfile(profile) || profile.provider}
+                      {profile.isDefault ? " · default" : ""}
+                    </span>
+                  </button>
+                )}
               </li>
             )
           })}
@@ -113,29 +230,26 @@ export function ChatModelBar({
   selectedModel: string
   loading?: boolean
   onSelect: (profile: ChatProfile, model: string) => void
-  /** `composer` — icon button in the chat input row */
   variant?: "bar" | "composer"
 }) {
   const [open, setOpen] = useState(false)
 
   const label =
-    selectedModel ||
+    selectedModel.trim() ||
     selectedProfile?.defaultModel ||
     selectedProfile?.displayName ||
     (loading ? "…" : "Model")
 
-  async function pick(profile: ChatProfile, modelOverride?: string) {
-    const model =
-      modelOverride ??
-      (selectedProfile?.id === profile.id && selectedModel
-        ? selectedModel
-        : modelForChatProfile(profile))
-    onSelect(profile, model)
+  async function pick(profile: ChatProfile, model: string) {
+    const resolved = model.trim() || profile.defaultModel?.trim() || ""
+    onSelect(profile, resolved)
     setOpen(false)
-    try {
-      await setChatSelection(connection, { profileId: profile.id, model })
-    } catch {
-      /* parent keeps local selection */
+    if (resolved) {
+      try {
+        await setChatSelection(connection, { profileId: profile.id, model: resolved })
+      } catch {
+        /* keep local selection */
+      }
     }
   }
 
@@ -195,6 +309,7 @@ export function ChatModelBar({
       <ChatModelPickerSheet
         open={open}
         onClose={() => setOpen(false)}
+        connection={connection}
         profiles={profiles}
         selectedProfile={selectedProfile}
         selectedModel={selectedModel}

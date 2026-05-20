@@ -115,10 +115,14 @@ body:has(.mobile-app-root) {
 
 .chat-page {
   position: fixed;
-  inset: 0;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 100dvh;
   z-index: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
   background-color: #f7f7f7;
 }
 
@@ -129,7 +133,7 @@ body:has(.mobile-app-root) {
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
   padding-top: calc(3.5rem + env(safe-area-inset-top, 0px));
-  padding-bottom: calc(5.75rem + env(safe-area-inset-bottom, 0px));
+  padding-bottom: 0.5rem;
 }
 
 .chat-welcome {
@@ -137,14 +141,12 @@ body:has(.mobile-app-root) {
 }
 
 .chat-page-composer {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: calc(var(--keyboard-inset, 0px));
-  z-index: 30;
+  position: relative;
+  z-index: 10;
   flex-shrink: 0;
   padding: 0.5rem 1rem max(0.75rem, env(safe-area-inset-bottom, 0px));
-  background: linear-gradient(to top, #f7f7f7 85%, transparent);
+  background-color: #f7f7f7;
+  border-top: 1px solid rgba(0, 0, 0, 0.04);
 }
 
 .mobile-app-main:has(.chat-page) > .mobile-app-content {

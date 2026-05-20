@@ -25,7 +25,9 @@ import { ArciinMark } from "@/components/ui/arciin-mark"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useChatChrome } from "@/components/chat/chat-chrome-context"
 import { useConnection } from "@/components/providers/connection-provider"
-import { useKeyboardInset } from "@/hooks/use-keyboard-inset"
+import { useChatViewport } from "@/hooks/use-chat-viewport"
+import { isOllamaProvider } from "@/lib/models/ollama-providers"
+import { resolveChatModelForProfile } from "@/lib/models/resolve-chat-model"
 import {
   createChatConversation,
   deleteChatConversation,
@@ -468,7 +470,6 @@ function applyPersistedMessageIds(
 export function ChatPage() {
   const { connection, ready } = useConnection()
   const { setChrome } = useChatChrome()
-  useKeyboardInset(true)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [profiles, setProfiles] = useState<ChatProfile[]>([])
   const [profilesLoading, setProfilesLoading] = useState(true)
@@ -486,9 +487,12 @@ export function ChatPage() {
 
   const [chatContext, setChatContext] = useState<ChatInstanceContext | null>(null)
 
+  const pageRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const abortRef = useRef<AbortController | null>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+
+  useChatViewport(pageRef)
 
   const [selectedProfile, setSelectedProfile] = useState<ChatProfile | null>(null)
   const [selectedModel, setSelectedModel] = useState("")
@@ -527,8 +531,11 @@ export function ChatPage() {
         ? list.find((p) => p.id === remote.profileId)
         : null
       const profile = remoteProfile ?? list.find((p) => p.isDefault) ?? list[0]
-      const model = remote?.model || profile.defaultModel || ""
+      const model = await resolveChatModelForProfile(connection, profile, remote?.model)
       applyProfileSelection(list, profile, model)
+      if (!model.trim() && isOllamaProvider(profile.provider)) {
+        setStatusNote("Open the model picker and choose an Ollama model")
+      }
       setStatusNote("Chat connects to your Arciin API")
     } catch (err) {
       setError(formatApiError(err, serverHint(connection)))
@@ -707,7 +714,15 @@ export function ChatPage() {
       if (!connection || !selectedProfile) return { content: "", usage: undefined as TokenUsage | undefined }
 
       const profile = selectedProfile
-      const modelToSend = selectedModel.trim() || profile.defaultModel || undefined
+      const modelToSend =
+        selectedModel.trim() || profile.defaultModel?.trim() || undefined
+      if (!modelToSend) {
+        throw new Error(
+          isOllamaProvider(profile.provider)
+            ? "Choose an Ollama model from the model picker (boxes icon)."
+            : "No model configured for this provider.",
+        )
+      }
       const apiBase = connection.apiBaseUrl ?? connection.webUrl ?? ""
       const payload = buildOutboundChatMessages(
         history,
@@ -794,8 +809,10 @@ export function ChatPage() {
     if (!profile) return
 
     setInput("")
-    if (inputRef.current) {
-      inputRef.current.style.height = "auto"
+    const inputEl = inputRef.current
+    if (inputEl) {
+      inputEl.style.height = "auto"
+      inputEl.blur()
     }
     setError(null)
     const priorMessages = messages
@@ -906,7 +923,7 @@ export function ChatPage() {
   }
 
   return (
-    <div className="chat-page px-4">
+    <div ref={pageRef} className="chat-page px-4">
       <HistoryDrawer
         open={historyOpen}
         onClose={() => setHistoryOpen(false)}

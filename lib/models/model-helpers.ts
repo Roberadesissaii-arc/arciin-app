@@ -17,7 +17,7 @@ export function profileForProvider(
 
 /** Model id sent to chat — profile default or catalogue fallback. */
 export function chatModelForProfile(
-  profile: ModelProfile,
+  profile: Pick<ModelProfile, "defaultModel">,
   providerMeta?: ProviderMeta,
 ): string {
   const fromProfile = profile.defaultModel?.trim()
