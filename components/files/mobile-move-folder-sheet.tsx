@@ -69,9 +69,9 @@ export function MobileMoveFolderSheet({
       <MobileBottomSheet
         open={open}
         onClose={onClose}
-        title="Move to folder"
-        description={`Stay in ${libraryName} — pick a folder or the library root.`}
-        ariaLabel="Move to folder"
+        title={`Move within ${libraryName}`}
+        description="Files stay in this library. Choose a folder here, or create one below."
+        ariaLabel="Move within library"
       >
         <div className="flex flex-col gap-2">
           {loading ? (
@@ -122,21 +122,31 @@ export function MobileMoveFolderSheet({
                     )
                   })}
                 </ul>
-              ) : !showLibraryRoot ? (
-                <p className="py-4 text-center text-[13px] text-[#717171]">
-                  No folders in this library yet.
-                </p>
-              ) : null}
+              ) : (
+                <div
+                  className="rounded-xl px-4 py-5 text-center"
+                  style={{ backgroundColor: "#f7f7f7", border: "1px solid #e5e5e5" }}
+                >
+                  <p className="text-[13px] font-semibold text-[#222222]">No folders yet</p>
+                  <p className="mt-1 text-[12px] leading-relaxed text-[#717171]">
+                    {currentFolderId
+                      ? "No subfolders here. Use library root above, or create a subfolder below."
+                      : `There are no folders in ${libraryName}. Create one below, then your file will move into it.`}
+                  </p>
+                </div>
+              )}
 
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => setCreateOpen(true)}
-                className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-dashed border-[#ff4f12]/40 bg-[#fff7f4] text-[14px] font-semibold text-[#ff4f12] active:opacity-80 disabled:opacity-50"
-              >
-                <Plus className="size-4" />
-                Create folder
-              </button>
+              <div className="mt-2 border-t border-[#ececec] pt-3">
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => setCreateOpen(true)}
+                  className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-dashed border-[#ff4f12]/40 bg-[#fff7f4] text-[14px] font-semibold text-[#ff4f12] active:opacity-80 disabled:opacity-50"
+                >
+                  <Plus className="size-4" />
+                  Create folder
+                </button>
+              </div>
             </>
           ) : null}
 
