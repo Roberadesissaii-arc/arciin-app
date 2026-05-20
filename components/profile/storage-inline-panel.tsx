@@ -9,7 +9,7 @@ import { getStorageSettings, getStorageVolumes, updateStorageSettings } from "@/
 import { getUserPreferences, updateUserPreferences } from "@/lib/api/user-preferences"
 import { useStablePanelLoad } from "@/lib/hooks/use-stable-panel-load"
 import { formatBytes } from "@/lib/utils/format-bytes"
-import type { StorageSettings, StorageVolumeOption } from "@/lib/types/models"
+import type { StorageSettings, StorageVolumeOption, StorageVolumesResponse } from "@/lib/types/models"
 
 function formatVolumeFree(option: StorageVolumeOption) {
   if (option.availableBytes == null) return "Space unknown"
@@ -25,16 +25,46 @@ const LAYOUT_HINTS = [
   { label: "logs", hint: "Optional local logs" },
 ]
 
+function DrivesSkeleton() {
+  return (
+    <div className="flex flex-col gap-2 py-1" aria-hidden>
+      <div className="h-14 animate-pulse rounded-lg bg-[#ececec]" />
+      <div className="h-14 animate-pulse rounded-lg bg-[#ececec]" />
+    </div>
+  )
+}
+
 export function StorageInlinePanel({ enabled }: { enabled: boolean }) {
-  const load = useCallback(
+  const settingsLoader = useCallback(
     (connection: Parameters<typeof getStorageSettings>[0], signal: AbortSignal) =>
       getStorageSettings(connection, signal),
     [],
   )
 
-  const { data, loading, error, connection } = useStablePanelLoad(enabled, load, {
-    cacheKey: "storage",
+  const volumesLoader = useCallback(
+    (conn: Parameters<typeof getStorageVolumes>[0], signal: AbortSignal) =>
+      getStorageVolumes(conn, signal),
+    [],
+  )
+
+  const {
+    data,
+    loading: settingsLoading,
+    error: settingsError,
+    connection,
+  } = useStablePanelLoad(enabled, settingsLoader, { cacheKey: "storage" })
+
+  const {
+    data: volumesData,
+    loading: volumesWaiting,
+    isRevalidating: volumesRefreshing,
+    error: volumesError,
+    reload: reloadVolumes,
+  } = useStablePanelLoad<StorageVolumesResponse>(enabled, volumesLoader, {
+    cacheKey: "storage-volumes",
+    staleTimeMs: 120_000,
   })
+
   const [path, setPath] = useState("")
   const [initialPath, setInitialPath] = useState("")
   const [saving, setSaving] = useState(false)
@@ -43,10 +73,6 @@ export function StorageInlinePanel({ enabled }: { enabled: boolean }) {
   const [docThumbs, setDocThumbs] = useState(false)
   const [prefsSaving, setPrefsSaving] = useState(false)
   const [prefsError, setPrefsError] = useState<string | null>(null)
-  const [volumes, setVolumes] = useState<StorageVolumeOption[]>([])
-  const [volumesLoading, setVolumesLoading] = useState(false)
-  const [volumesError, setVolumesError] = useState<string | null>(null)
-  const [volumesNote, setVolumesNote] = useState<string | null>(null)
 
   useEffect(() => {
     if (!data) return
@@ -54,27 +80,6 @@ export function StorageInlinePanel({ enabled }: { enabled: boolean }) {
     setPath(root)
     setInitialPath(root)
   }, [data])
-
-  const loadVolumes = useCallback(async () => {
-    if (!connection) return
-    setVolumesLoading(true)
-    setVolumesError(null)
-    try {
-      const res = await getStorageVolumes(connection)
-      setVolumes(res.volumes ?? [])
-      setVolumesNote(res.installNotes?.[0] ?? null)
-    } catch (err) {
-      setVolumes([])
-      setVolumesError(formatApiError(err))
-    } finally {
-      setVolumesLoading(false)
-    }
-  }, [connection])
-
-  useEffect(() => {
-    if (!enabled || !connection) return
-    void loadVolumes()
-  }, [enabled, connection, loadVolumes])
 
   useEffect(() => {
     if (!enabled || !connection) return
@@ -129,23 +134,18 @@ export function StorageInlinePanel({ enabled }: { enabled: boolean }) {
 
   if (!enabled) return null
 
-  if (loading) {
-    return (
-      <div className="flex justify-center py-8">
-        <Loader2 className="size-6 animate-spin text-[#c0c0c0]" />
-      </div>
-    )
-  }
-
-  if (error && !data) {
-    return <p className="text-[12px] text-[#b91c1c]">{error}</p>
-  }
-
-  const usage = data as StorageSettings | null
+  const usage = data
   const usagePct =
     usage?.totalBytes && usage.totalBytes > 0
       ? Math.min(100, Math.round((usage.usageBytes / usage.totalBytes) * 100))
       : null
+
+  const volumes = volumesData?.volumes ?? []
+  const volumesNote = volumesData?.installNotes?.[0] ?? null
+  const showVolumesSkeleton = volumesWaiting && volumes.length === 0
+  const volumesErrorText = volumesError
+    ? volumesError
+    : null
 
   return (
     <div className="flex flex-col gap-4">
@@ -155,50 +155,75 @@ export function StorageInlinePanel({ enabled }: { enabled: boolean }) {
         description="Files and libraries are stored on disk under your configured root path on this server."
       />
 
+      {settingsError && !usage ? (
+        <p className="text-[12px] text-[#b91c1c]">{settingsError}</p>
+      ) : null}
+
       <div className="rounded-xl bg-[#f7f7f7] p-3" style={{ border: "1px solid #e5e5e5" }}>
         <div className="mb-2 flex items-center gap-2">
           <HardDrive className="size-4 text-[#717171]" />
           <span className="text-[13px] font-semibold text-[#222222]">Volume usage</span>
-          <span className="ml-auto text-[11px] text-[#a0a0a0]">
-            {usage?.totalBytes
-              ? `${formatBytes(usage.usageBytes)} / ${formatBytes(usage.totalBytes)}`
-              : formatBytes(usage?.usageBytes ?? 0)}
-          </span>
+          {settingsLoading && !usage ? (
+            <Loader2 className="ml-auto size-3.5 animate-spin text-[#c0c0c0]" />
+          ) : (
+            <span className="ml-auto text-[11px] text-[#a0a0a0]">
+              {usage?.totalBytes
+                ? `${formatBytes(usage.usageBytes)} / ${formatBytes(usage.totalBytes)}`
+                : formatBytes(usage?.usageBytes ?? 0)}
+            </span>
+          )}
         </div>
-        {usagePct !== null ? (
+        {settingsLoading && !usage ? (
+          <div className="mt-2 h-2 animate-pulse rounded-full bg-[#ececec]" />
+        ) : usagePct !== null ? (
           <div className="h-2 overflow-hidden rounded-full bg-[#ececec]">
             <div className="h-full rounded-full bg-[#ff4f12]" style={{ width: `${usagePct}%` }} />
           </div>
-        ) : null}
+        ) : (
+          <div className="h-2 rounded-full bg-[#ececec]" />
+        )}
         <div className="mt-2 flex justify-between text-[11px] text-[#a0a0a0]">
-          <span>{(usage?.objectCount ?? 0).toLocaleString()} objects</span>
-          <span>{usagePct != null ? `${usagePct}% full` : usage?.writable === false ? "Read-only" : ""}</span>
+          <span>
+            {settingsLoading && !usage
+              ? "Loading…"
+              : `${(usage?.objectCount ?? 0).toLocaleString()} objects`}
+          </span>
+          <span>
+            {usagePct != null
+              ? `${usagePct}% full`
+              : usage?.writable === false
+                ? "Read-only"
+                : ""}
+          </span>
         </div>
       </div>
 
-      <div className="rounded-xl bg-[#f7f7f7] p-3" style={{ border: "1px solid #e5e5e5" }}>
+      <div
+        className="rounded-xl bg-[#f7f7f7] p-3"
+        style={{ border: "1px solid #e5e5e5", minHeight: showVolumesSkeleton ? 140 : undefined }}
+      >
         <div className="mb-2 flex items-center justify-between gap-2">
           <p className="text-[12px] font-semibold text-[#222222]">Detected drives</p>
           <button
             type="button"
-            disabled={volumesLoading}
-            onClick={() => void loadVolumes()}
+            disabled={volumesRefreshing}
+            onClick={() => reloadVolumes()}
             className="flex items-center gap-1 text-[11px] font-medium text-[#717171] disabled:opacity-50"
           >
-            <RefreshCw className={`size-3.5 ${volumesLoading ? "animate-spin" : ""}`} />
-            Rescan
+            <RefreshCw
+              className={`size-3.5 ${volumesRefreshing ? "animate-spin" : ""}`}
+            />
+            {volumesRefreshing ? "Updating…" : "Rescan"}
           </button>
         </div>
-        {volumesLoading && volumes.length === 0 ? (
-          <div className="flex items-center gap-2 py-4 text-[12px] text-[#a0a0a0]">
-            <Loader2 className="size-4 animate-spin" />
-            Scanning server volumes…
-          </div>
-        ) : volumesError ? (
-          <p className="py-2 text-[12px] text-[#a0a0a0]">{volumesError}</p>
+
+        {showVolumesSkeleton ? (
+          <DrivesSkeleton />
+        ) : volumesErrorText ? (
+          <p className="py-2 text-[12px] text-[#a0a0a0]">{volumesErrorText}</p>
         ) : volumes.length === 0 ? (
           <p className="py-2 text-[12px] text-[#a0a0a0]">
-            No volumes reported. Use Arciin on desktop to move storage or rescan after mounting a drive.
+            No volumes reported. Mount a drive on the server, then rescan.
           </p>
         ) : (
           <ul className="flex flex-col gap-2">
@@ -234,7 +259,8 @@ export function StorageInlinePanel({ enabled }: { enabled: boolean }) {
             ))}
           </ul>
         )}
-        {volumesNote ? (
+
+        {volumesNote && !showVolumesSkeleton ? (
           <p className="mt-2 text-[10px] leading-relaxed text-[#a0a0a0]">{volumesNote}</p>
         ) : null}
         <p className="mt-2 text-[10px] text-[#a0a0a0]">
@@ -259,7 +285,8 @@ export function StorageInlinePanel({ enabled }: { enabled: boolean }) {
           value={path}
           onChange={(e) => setPath(e.target.value)}
           placeholder="/data/arciin"
-          className="rounded-xl bg-[#f7f7f7] px-4 py-3 font-mono text-[13px] text-[#222222] outline-none focus:bg-white"
+          disabled={settingsLoading && !usage}
+          className="rounded-xl bg-[#f7f7f7] px-4 py-3 font-mono text-[13px] text-[#222222] outline-none focus:bg-white disabled:opacity-60"
           style={{ border: "1px solid #e5e5e5" }}
         />
       </div>
@@ -318,25 +345,25 @@ export function StorageInlinePanel({ enabled }: { enabled: boolean }) {
       </div>
 
       {prefsError ? (
-        <p className="rounded-xl px-3 py-2 text-[12px] text-[#b91c1c] bg-[#fef2f2] border border-[#fecaca]">
+        <p className="rounded-xl border border-[#fecaca] bg-[#fef2f2] px-3 py-2 text-[12px] text-[#b91c1c]">
           {prefsError}
         </p>
       ) : null}
 
       {saveError ? (
-        <p className="rounded-xl px-3 py-2 text-[12px] text-[#b91c1c] bg-[#fef2f2] border border-[#fecaca]">
+        <p className="rounded-xl border border-[#fecaca] bg-[#fef2f2] px-3 py-2 text-[12px] text-[#b91c1c]">
           {saveError}
         </p>
       ) : null}
       {message ? (
-        <p className="rounded-xl px-3 py-2 text-[12px] text-[#15803d] bg-[#f0fdf4] border border-[#bbf7d0]">
+        <p className="rounded-xl border border-[#bbf7d0] bg-[#f0fdf4] px-3 py-2 text-[12px] text-[#15803d]">
           {message}
         </p>
       ) : null}
 
       <button
         type="button"
-        disabled={!path.trim() || path.trim() === initialPath || saving}
+        disabled={!path.trim() || path.trim() === initialPath || saving || (settingsLoading && !usage)}
         onClick={() => void handleSave()}
         className="flex h-11 items-center justify-center gap-2 rounded-xl bg-[#ff4f12] text-[14px] font-semibold text-white disabled:opacity-50"
       >
