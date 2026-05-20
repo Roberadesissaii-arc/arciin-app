@@ -36,3 +36,11 @@ export function deleteFolder(connection: MobileConnection, folderId: string) {
     body: {},
   })
 }
+
+export function renameFolder(connection: MobileConnection, folderId: string, name: string) {
+  return fetchApi<FolderSummary>(`/folders/${folderId}`, {
+    connection,
+    method: "PATCH",
+    body: { name },
+  })
+}

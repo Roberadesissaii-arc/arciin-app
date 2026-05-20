@@ -8,11 +8,10 @@ import { AssetThumbnail } from "@/components/files/asset-thumbnail"
 import { FolderTile } from "@/components/files/folder-tile"
 import { AssetViewer } from "@/components/files/asset-viewer"
 import { MobileCreateFolderSheet } from "@/components/files/mobile-create-folder-sheet"
-import { MobileFolderActionsSheet } from "@/components/files/mobile-folder-actions-sheet"
 import { useConnection } from "@/components/providers/connection-provider"
 import { getAssets } from "@/lib/api/assets"
 import { formatApiError } from "@/lib/api/errors"
-import { deleteFolder, listFolders } from "@/lib/api/folders"
+import { deleteFolder, listFolders, renameFolder } from "@/lib/api/folders"
 import { listLibraries } from "@/lib/api/libraries"
 import { uploadFile } from "@/lib/api/uploads"
 import { classifyFile, filterIdForMediaType } from "@/lib/files/classify-file"
@@ -101,9 +100,8 @@ export function FilesPage() {
   const [uploadName, setUploadName] = useState<string | null>(null)
   const [uploadNotice, setUploadNotice] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [viewerAsset, setViewerAsset] = useState<AssetSummary | null>(null)
+  const [viewerIndex, setViewerIndex] = useState<number | null>(null)
   const [createFolderOpen, setCreateFolderOpen] = useState(false)
-  const [folderActionsTarget, setFolderActionsTarget] = useState<FolderSummary | null>(null)
   const [hasCache, setHasCache] = useState(false)
 
   const libraryScoped = filter !== "all"
@@ -221,14 +219,19 @@ export function FilesPage() {
     [load],
   )
 
-  const handleDeleteFolder = useCallback(async () => {
-    if (!connection || !folderActionsTarget) return
-    await deleteFolder(connection, folderActionsTarget.id)
-    setFolders((prev) => prev.filter((f) => f.id !== folderActionsTarget.id))
-    if (folderId === folderActionsTarget.id) setFolderId(null)
-    setFolderActionsTarget(null)
+  const handleDeleteFolder = useCallback(async (id: string) => {
+    if (!connection) return
+    await deleteFolder(connection, id)
+    setFolders((prev) => prev.filter((f) => f.id !== id))
+    if (folderId === id) setFolderId(null)
     void load(undefined, true)
-  }, [connection, folderActionsTarget, folderId, load])
+  }, [connection, folderId, load])
+
+  const handleRenameFolder = useCallback(async (id: string, name: string) => {
+    if (!connection) return
+    const updated = await renameFolder(connection, id, name)
+    setFolders((prev) => prev.map((f) => f.id === id ? { ...f, name: updated.name } : f))
+  }, [connection])
 
   const goToLibraryRoot = useCallback(() => {
     setFolderId(null)
@@ -389,27 +392,18 @@ export function FilesPage() {
         onChange={(e) => void handleFilesSelected(e.target.files)}
       />
 
-      {viewerAsset && connection ? (
+      {viewerIndex !== null && connection ? (
         <AssetViewer
-          asset={viewerAsset}
+          assets={assets}
+          initialIndex={viewerIndex}
           libraries={libraries}
           connection={connection}
           browseFolderId={folderId}
-          onClose={() => setViewerAsset(null)}
+          onClose={() => setViewerIndex(null)}
           onChanged={() => void load(undefined, true)}
           onDeleted={handleAssetDeleted}
         />
       ) : null}
-
-      <MobileFolderActionsSheet
-        open={Boolean(folderActionsTarget)}
-        folder={folderActionsTarget}
-        onClose={() => setFolderActionsTarget(null)}
-        onOpen={() => {
-          if (folderActionsTarget) openFolder(folderActionsTarget.id)
-        }}
-        onDelete={handleDeleteFolder}
-      />
 
       <MobileCreateFolderSheet
         open={createFolderOpen}
@@ -484,21 +478,27 @@ export function FilesPage() {
                   Folders
                 </p>
                 {visibleFolders.length > 0 ? (
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                    {visibleFolders.map((folder) => (
-                      <FolderTile
-                        key={folder.id}
-                        folder={folder}
-                        onOpen={() => openFolder(folder.id)}
-                        onLongPress={() => setFolderActionsTarget(folder)}
-                      />
+                  <div
+                    className="overflow-hidden rounded-2xl bg-white"
+                    style={{ border: "1px solid #e5e5e5" }}
+                  >
+                    {visibleFolders.map((folder, i) => (
+                      <div key={folder.id}>
+                        {i > 0 ? <div className="mx-4 h-px bg-[#f5f5f5]" /> : null}
+                        <FolderTile
+                          folder={folder}
+                          onOpen={() => openFolder(folder.id)}
+                          onDelete={() => handleDeleteFolder(folder.id)}
+                          onRename={(name) => handleRenameFolder(folder.id, name)}
+                        />
+                      </div>
                     ))}
                   </div>
                 ) : (
                   <SectionPlaceholder
                     icon={Folder}
                     title="No folders yet"
-                    description="Tap the folder icon above to create one, or press and hold a folder to delete it."
+                    description="Tap the folder+ icon above to create one."
                   />
                 )}
               </section>
@@ -512,11 +512,11 @@ export function FilesPage() {
               )}
               {assets.length > 0 ? (
                 <div className="grid grid-cols-2 gap-3">
-                  {assets.map((asset) => (
+                  {assets.map((asset, i) => (
                     <button
                       key={asset.id}
                       type="button"
-                      onClick={() => setViewerAsset(asset)}
+                      onClick={() => setViewerIndex(i)}
                       className="overflow-hidden rounded-2xl bg-white p-2 text-left shadow-sm active:opacity-90"
                       style={{ border: "1px solid #e5e5e5" }}
                     >
