@@ -13,13 +13,16 @@ import {
 import { DeleteAssetDialog } from "@/components/files/delete-asset-dialog"
 import { MobileMoveFolderSheet } from "@/components/files/mobile-move-folder-sheet"
 import {
-  assetDownloadUrl,
+  assetDownloadFetchUrl,
+  assetDownloadRequestInit,
   assetStreamUrl,
   deleteAsset,
   downloadAssetFile,
+  fetchAssetTextContent,
   moveAsset,
 } from "@/lib/api/assets"
 import { formatApiError } from "@/lib/api/errors"
+import { isTextPreviewableAsset } from "@/lib/files/is-text-previewable"
 import { loadThumbnail } from "@/lib/files/thumbnail-cache"
 import type { MobileConnection } from "@/lib/types/api"
 import type { AssetSummary, LibrarySummary } from "@/lib/types/assets"
@@ -82,6 +85,10 @@ export function AssetViewer({
   const [busy, setBusy] = useState<"download" | "delete" | "move" | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [previewSrc, setPreviewSrc] = useState<string | null>(null)
+  const [textPreview, setTextPreview] = useState<{ content: string; truncated: boolean } | null>(
+    null,
+  )
+  const [textPreviewError, setTextPreviewError] = useState<string | null>(null)
   const pointerStart = useRef<{ x: number; y: number } | null>(null)
 
   const asset = assets[currentIndex] ?? assets[0]!
@@ -90,8 +97,11 @@ export function AssetViewer({
 
   const isPdf = asset.mimeType === "application/pdf"
   const streamsInline = asset.mediaType === "VIDEO" || asset.mediaType === "AUDIO"
+  const loadsTextPreview = isTextPreviewableAsset(asset)
   const loadsMediaBlob = asset.mediaType === "IMAGE" || isPdf
-  const [previewLoading, setPreviewLoading] = useState(loadsMediaBlob)
+  const [previewLoading, setPreviewLoading] = useState(
+    loadsMediaBlob || loadsTextPreview,
+  )
 
   const title = asset.title?.trim() || asset.originalFilename
   const currentLibrary = libraries.find((l) => l.id === asset.libraryId)
@@ -114,7 +124,9 @@ export function AssetViewer({
   // reset preview when asset changes
   useEffect(() => {
     setPreviewSrc(null)
-    setPreviewLoading(loadsMediaBlob)
+    setTextPreview(null)
+    setTextPreviewError(null)
+    setPreviewLoading(loadsMediaBlob || loadsTextPreview)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [asset.id])
 
@@ -123,6 +135,35 @@ export function AssetViewer({
       setPreviewSrc(assetStreamUrl(connection, asset.id))
       setPreviewLoading(false)
       return
+    }
+
+    if (loadsTextPreview) {
+      let cancelled = false
+      setPreviewLoading(true)
+      setTextPreview(null)
+      setTextPreviewError(null)
+      setPreviewSrc(null)
+
+      void fetchAssetTextContent(connection, asset)
+        .then((result) => {
+          if (!cancelled) setTextPreview({ content: result.text, truncated: result.truncated })
+        })
+        .catch((err) => {
+          if (!cancelled) {
+            const msg =
+              err instanceof Error && err.message === "too_large"
+                ? "File is too large to preview on device. Use Download."
+                : "Could not load file contents."
+            setTextPreviewError(msg)
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setPreviewLoading(false)
+        })
+
+      return () => {
+        cancelled = true
+      }
     }
 
     if (!loadsMediaBlob) {
@@ -138,11 +179,8 @@ export function AssetViewer({
     setPreviewLoading(true)
     setPreviewSrc(null)
 
-    const url = assetDownloadUrl(connection, asset.id, true)
-    void fetch(url, {
-      headers: { Authorization: `Bearer ${connection.sessionToken}` },
-      credentials: "include",
-    })
+    const url = assetDownloadFetchUrl(connection, asset.id, true)
+    void fetch(url, assetDownloadRequestInit(connection))
       .then((res) => { if (!res.ok) throw new Error("preview"); return res.blob() })
       .then((blob) => {
         if (cancelled) return
@@ -159,7 +197,7 @@ export function AssetViewer({
       .finally(() => { if (!cancelled) setPreviewLoading(false) })
 
     return () => { cancelled = true; if (objectUrl) URL.revokeObjectURL(objectUrl) }
-  }, [asset.id, loadsMediaBlob, streamsInline, connection])
+  }, [asset, loadsMediaBlob, loadsTextPreview, streamsInline, connection])
 
   const handleSwipeEnd = useCallback(
     (dx: number, dy: number) => {
@@ -295,6 +333,22 @@ export function AssetViewer({
         <div className="absolute inset-0 flex items-center justify-center p-2">
           {previewLoading ? (
             <Loader2 className="size-8 animate-spin text-[#71717a]" />
+          ) : textPreview ? (
+            <div className="flex h-full w-full max-w-lg flex-col gap-2">
+              <pre
+                className="min-h-0 flex-1 overflow-auto rounded-xl border border-[#27272a] bg-[#18181b] p-3 font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-words text-[#e4e4e7]"
+                data-scroll-lock-allow
+              >
+                {textPreview.content}
+              </pre>
+              {textPreview.truncated ? (
+                <p className="shrink-0 text-center text-[10px] text-[#71717a]">
+                  Preview truncated — download for the full file.
+                </p>
+              ) : null}
+            </div>
+          ) : textPreviewError ? (
+            <p className="px-4 text-center text-[13px] text-[#a1a1aa]">{textPreviewError}</p>
           ) : asset.mediaType === "VIDEO" && previewSrc ? (
             <video src={previewSrc} controls playsInline className="max-h-full max-w-full object-contain" />
           ) : asset.mediaType === "AUDIO" && previewSrc ? (

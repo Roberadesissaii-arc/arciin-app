@@ -1,5 +1,10 @@
+import { arciinProxyHeaders, needsArciinSameOriginProxy } from "@/lib/api/arciin-proxy"
 import { buildApiUrl, fetchApi } from "@/lib/api/client"
 import { shouldUseArciinProxy } from "@/lib/api/proxy-fetch"
+import {
+  TEXT_PREVIEW_MAX_BYTES,
+  TEXT_PREVIEW_MAX_CHARS,
+} from "@/lib/files/is-text-previewable"
 import type { MobileConnection } from "@/lib/types/api"
 import type { AssetSummary, MediaType } from "@/lib/types/assets"
 
@@ -62,10 +67,59 @@ export function assetDownloadUrl(
   assetId: string,
   inline = false,
 ) {
+  return assetDownloadFetchUrl(connection, assetId, inline)
+}
+
+/** URL for authenticated fetch (supports Vercel same-origin proxy). */
+export function assetDownloadFetchUrl(
+  connection: MobileConnection,
+  assetId: string,
+  inline = false,
+) {
   const params = new URLSearchParams()
   if (inline) params.set("inline", "1")
   const q = params.size ? `?${params.toString()}` : ""
+  if (shouldUseArciinProxy(connection)) {
+    return `/api/arciin/assets/${encodeURIComponent(assetId)}/download${q}`
+  }
   return buildApiUrl(connection.apiBaseUrl, `/assets/${assetId}/download${q}`)
+}
+
+export function assetDownloadRequestInit(connection: MobileConnection): RequestInit {
+  const useProxy = needsArciinSameOriginProxy(connection.apiBaseUrl)
+  return {
+    headers: {
+      Authorization: `Bearer ${connection.sessionToken}`,
+      ...(useProxy ? arciinProxyHeaders(connection) : {}),
+    },
+    credentials: useProxy ? "same-origin" : "include",
+    cache: "no-store",
+  }
+}
+
+export async function fetchAssetTextContent(
+  connection: MobileConnection,
+  asset: Pick<AssetSummary, "id" | "sizeBytes">,
+): Promise<{ text: string; truncated: boolean }> {
+  if (asset.sizeBytes > TEXT_PREVIEW_MAX_BYTES) {
+    throw new Error("too_large")
+  }
+
+  const res = await fetch(
+    assetDownloadFetchUrl(connection, asset.id, true),
+    assetDownloadRequestInit(connection),
+  )
+  if (!res.ok) throw new Error("fetch_failed")
+
+  const buf = await res.arrayBuffer()
+  if (buf.byteLength > TEXT_PREVIEW_MAX_BYTES) throw new Error("too_large")
+
+  const text = new TextDecoder("utf-8", { fatal: false }).decode(buf)
+  const truncated = text.length > TEXT_PREVIEW_MAX_CHARS
+  return {
+    text: truncated ? text.slice(0, TEXT_PREVIEW_MAX_CHARS) : text,
+    truncated,
+  }
 }
 
 /** Stream URL for `<audio>` / `<video>` — browser cannot send Bearer headers on media elements. */
