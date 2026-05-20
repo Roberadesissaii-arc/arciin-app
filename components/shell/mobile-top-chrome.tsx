@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation"
 
+import { ChatMobileHeader } from "@/components/chat/chat-mobile-header"
 import { FilesMobileHeader } from "@/components/files/files-mobile-header"
 import { ModelsMobileHeader } from "@/components/models/models-mobile-header"
 import { MobileHeader } from "@/components/shell/mobile-header"
@@ -35,7 +36,11 @@ export function MobileTopChrome() {
   }
 
   if (pathname === "/chat" || pathname.startsWith("/chat/")) {
-    return null
+    return (
+      <div className="sticky top-0 z-40 shrink-0">
+        <ChatMobileHeader />
+      </div>
+    )
   }
 
   return <div className="shrink-0 bg-[#f7f7f7] pt-safe" aria-hidden />

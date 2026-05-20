@@ -1,4 +1,8 @@
 import { ApiError, networkErrorMessage, parseApiError } from "@/lib/api/errors"
+import {
+  deriveMobileServerUrlsFromApiBase,
+  normalizeApiBase,
+} from "@/lib/connection/normalize-url"
 import type { MobileConnection } from "@/lib/types/api"
 
 type FetchOptions = {
@@ -16,16 +20,46 @@ function isJsonBody(body: FetchOptions["body"]): body is Record<string, unknown>
   return typeof body === "object"
 }
 
+/** Resolved API URL for a path (always under …/api). */
+export function buildApiUrl(
+  apiBaseUrl: string,
+  path: string,
+): string {
+  const base = normalizeApiBase(apiBaseUrl).replace(/\/+$/, "")
+  const segment = path.startsWith("/") ? path : `/${path}`
+  return `${base}${segment}`
+}
+
+function apiBaseCandidates(
+  primary: string,
+  connection?: MobileConnection | null,
+): string[] {
+  const out = new Set<string>()
+  const normalized = normalizeApiBase(primary)
+  if (normalized) out.add(normalized)
+
+  try {
+    const derived = deriveMobileServerUrlsFromApiBase(primary)
+    if (derived.apiBaseUrl) out.add(normalizeApiBase(derived.apiBaseUrl))
+    if (connection?.webUrl) {
+      out.add(normalizeApiBase(connection.webUrl))
+    }
+  } catch {
+    /* keep primary */
+  }
+
+  return [...out]
+}
+
 export async function fetchApi<T>(path: string, options: FetchOptions = {}): Promise<T> {
-  const apiBase =
+  const rawBase =
     options.apiBaseUrl?.replace(/\/+$/, "") ??
     options.connection?.apiBaseUrl?.replace(/\/+$/, "")
 
-  if (!apiBase) {
+  if (!rawBase) {
     throw new ApiError(0, "NO_SERVER", "No server configured.")
   }
 
-  const url = `${apiBase}${path.startsWith("/") ? path : `/${path}`}`
   const headers: Record<string, string> = {
     Accept: "application/json",
   }
@@ -39,31 +73,48 @@ export async function fetchApi<T>(path: string, options: FetchOptions = {}): Pro
     headers.Authorization = `Bearer ${token}`
   }
 
-  let response: Response
-  try {
-    response = await fetch(url, {
-      method: options.method ?? (options.body !== undefined ? "POST" : "GET"),
-      headers,
-      body:
-        options.body === undefined
-          ? undefined
-          : isJsonBody(options.body)
-            ? JSON.stringify(options.body)
-            : (options.body as BodyInit),
-      signal: options.signal,
-      cache: "no-store",
-    })
-  } catch (err) {
-    if (err instanceof Error && err.name === "AbortError") {
-      throw err
+  const method = options.method ?? (options.body !== undefined ? "POST" : "GET")
+  const body =
+    options.body === undefined
+      ? undefined
+      : isJsonBody(options.body)
+        ? JSON.stringify(options.body)
+        : (options.body as BodyInit)
+
+  const serverHint =
+    options.apiBaseUrl ?? options.connection?.apiBaseUrl ?? options.connection?.webUrl
+
+  let response: Response | null = null
+  let lastFailed: Response | null = null
+
+  for (const base of apiBaseCandidates(rawBase, options.connection)) {
+    const url = buildApiUrl(base, path)
+    try {
+      const attempt = await fetch(url, {
+        method,
+        headers,
+        body,
+        signal: options.signal,
+        cache: "no-store",
+        credentials: token ? "include" : "same-origin",
+      })
+      if (attempt.ok) {
+        response = attempt
+        break
+      }
+      lastFailed = attempt
+    } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") {
+        throw err
+      }
     }
-    throw new ApiError(
-      0,
-      "NETWORK_ERROR",
-      networkErrorMessage(
-        options.apiBaseUrl ?? options.connection?.apiBaseUrl ?? options.connection?.webUrl,
-      ),
-    )
+  }
+
+  if (!response) {
+    if (lastFailed) {
+      throw await parseApiError(lastFailed)
+    }
+    throw new ApiError(0, "NETWORK_ERROR", networkErrorMessage(serverHint))
   }
 
   if (!response.ok) {

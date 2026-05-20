@@ -1,9 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
-import { useRouter } from "next/navigation"
 import {
-  ChevronLeft,
   Clock,
   Loader2,
   MessageSquare,
@@ -14,6 +12,7 @@ import {
   X,
 } from "lucide-react"
 
+import { useChatChrome } from "@/components/chat/chat-chrome-context"
 import { useConnection } from "@/components/providers/connection-provider"
 import {
   createChatConversation,
@@ -233,8 +232,8 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export function ChatPage() {
-  const router = useRouter()
   const { connection, ready } = useConnection()
+  const { setChrome } = useChatChrome()
   const [historyOpen, setHistoryOpen] = useState(false)
   const [profiles, setProfiles] = useState<ChatProfile[]>([])
   const [profilesLoading, setProfilesLoading] = useState(true)
@@ -322,6 +321,13 @@ export function ChatPage() {
   useEffect(() => {
     if (historyOpen && connection) void loadHistory()
   }, [historyOpen, connection, loadHistory])
+
+  useEffect(() => {
+    setChrome({
+      onOpenHistory: () => setHistoryOpen(true),
+    })
+    return () => setChrome(null)
+  }, [setChrome])
 
   function startNewChat() {
     setConversationId(null)
@@ -478,14 +484,6 @@ export function ChatPage() {
   const showWelcome = messages.length === 0
   const canSend = Boolean(input.trim()) && !streaming && selectedProfile && !profilesLoading
 
-  function goBack() {
-    if (typeof window !== "undefined" && window.history.length > 1) {
-      router.back()
-    } else {
-      router.push("/home")
-    }
-  }
-
   return (
     <div className="chat-page px-4">
       <HistoryDrawer
@@ -499,33 +497,6 @@ export function ChatPage() {
         onNew={startNewChat}
         onDelete={(id) => void handleDeleteConversation(id)}
       />
-
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[#ececec] pb-3 pt-1">
-        <button
-          type="button"
-          onClick={goBack}
-          className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white text-[#222222] active:opacity-70"
-          style={{ border: "1px solid #e5e5e5" }}
-          aria-label="Go back"
-        >
-          <ChevronLeft className="size-5" />
-        </button>
-        <p
-          className="min-w-0 flex-1 truncate text-center text-[16px] font-bold text-[#222222]"
-          style={{ fontFamily: "var(--font-space-grotesk, sans-serif)" }}
-        >
-          Chat
-        </p>
-        <button
-          type="button"
-          onClick={() => setHistoryOpen(true)}
-          className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white text-[#717171] active:opacity-70"
-          style={{ border: "1px solid #e5e5e5" }}
-          aria-label="Chat history"
-        >
-          <Clock className="size-4" />
-        </button>
-      </div>
 
       {error ? (
         <div

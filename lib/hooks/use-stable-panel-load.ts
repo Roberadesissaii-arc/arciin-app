@@ -86,7 +86,12 @@ export function useStablePanelLoad<T>(
         setData(result)
         writeCache(storageKey, result)
       } catch (err) {
-        if (!cancelled) setError(formatApiError(err))
+        if (!cancelled) {
+          const conn = connectionRef.current
+          setError(
+            formatApiError(err, conn?.webUrl ?? conn?.apiBaseUrl),
+          )
+        }
       } finally {
         if (!cancelled) {
           setLoading(false)

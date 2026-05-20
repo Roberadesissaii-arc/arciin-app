@@ -1,6 +1,6 @@
-import { fetchApi } from "@/lib/api/client"
-import { ApiError, parseApiError } from "@/lib/api/errors"
-import { normalizeApiBase } from "@/lib/connection/normalize-url"
+import { buildApiUrl, fetchApi } from "@/lib/api/client"
+import { ApiError, networkErrorMessage, parseApiError } from "@/lib/api/errors"
+import { deriveMobileServerUrlsFromApiBase } from "@/lib/connection/normalize-url"
 import type { MobileConnection } from "@/lib/types/api"
 import type {
   ChatConversationDetail,
@@ -97,32 +97,57 @@ export async function streamChat(
   },
   handlers: StreamHandlers,
 ): Promise<void> {
-  const apiBase = normalizeApiBase(connection.apiBaseUrl)
-  const url = `${apiBase.replace(/\/+$/, "")}/chat`
-
-  let response: Response
+  const candidates = new Set<string>()
+  candidates.add(buildApiUrl(connection.apiBaseUrl, "/chat"))
   try {
-    response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "text/event-stream",
-        Authorization: `Bearer ${connection.sessionToken}`,
-      },
-      body: JSON.stringify(body),
-      signal: handlers.signal,
-      cache: "no-store",
-    })
-  } catch (err) {
-    if (err instanceof Error && err.name === "AbortError") {
-      throw err
+    const urls = deriveMobileServerUrlsFromApiBase(connection.apiBaseUrl)
+    candidates.add(buildApiUrl(urls.apiBaseUrl, "/chat"))
+    if (connection.webUrl) {
+      candidates.add(buildApiUrl(connection.webUrl, "/api/chat"))
     }
-    throw new ApiError(0, "NETWORK_ERROR", "Could not reach the chat API.")
+  } catch {
+    // keep primary candidate
   }
 
-  if (!response.ok) {
-    const err = await parseApiError(response)
-    throw err
+  let response: Response | null = null
+  let lastFailedResponse: Response | null = null
+
+  for (const url of candidates) {
+    try {
+      const attempt = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "text/event-stream",
+          Authorization: `Bearer ${connection.sessionToken}`,
+        },
+        body: JSON.stringify(body),
+        signal: handlers.signal,
+        cache: "no-store",
+        mode: "cors",
+        credentials: "include",
+      })
+      if (attempt.ok) {
+        response = attempt
+        break
+      }
+      lastFailedResponse = attempt
+    } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") {
+        throw err
+      }
+    }
+  }
+
+  if (!response) {
+    if (lastFailedResponse) {
+      throw await parseApiError(lastFailedResponse)
+    }
+    throw new ApiError(
+      0,
+      "NETWORK_ERROR",
+      networkErrorMessage(connection.webUrl ?? connection.apiBaseUrl),
+    )
   }
 
   if (!response.body) {

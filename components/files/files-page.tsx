@@ -1,10 +1,11 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { ChevronRight, CloudUpload, Folder, Loader2 } from "lucide-react"
+import { CloudUpload, Folder, Loader2 } from "lucide-react"
 
 import { useFilesChrome } from "@/components/files/files-chrome-context"
 import { AssetThumbnail } from "@/components/files/asset-thumbnail"
+import { FolderTile } from "@/components/files/folder-tile"
 import { AssetViewer } from "@/components/files/asset-viewer"
 import { MobileCreateFolderSheet } from "@/components/files/mobile-create-folder-sheet"
 import { useConnection } from "@/components/providers/connection-provider"
@@ -80,37 +81,6 @@ function SectionPlaceholder({
         {description}
       </p>
     </div>
-  )
-}
-
-function FolderCard({
-  folder,
-  onOpen,
-}: {
-  folder: FolderSummary
-  onOpen: () => void
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="flex w-full items-center gap-3 rounded-2xl bg-white px-3.5 py-3 text-left active:opacity-90"
-      style={{ border: "1px solid #e5e5e5" }}
-    >
-      <div
-        className="flex size-10 shrink-0 items-center justify-center rounded-xl"
-        style={{ backgroundColor: "rgba(255,79,18,0.1)", border: "1px solid rgba(255,79,18,0.2)" }}
-      >
-        <Folder className="size-5 text-[#ff4f12]" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-[14px] font-semibold leading-tight text-[#222222]">{folder.name}</p>
-        <p className="mt-1 text-[11px] leading-snug text-[#a0a0a0]">
-          {folder.assetCount} file{folder.assetCount === 1 ? "" : "s"}
-        </p>
-      </div>
-      <ChevronRight className="size-4 shrink-0 text-[#c0c0c0]" />
-    </button>
   )
 }
 
@@ -413,6 +383,7 @@ export function FilesPage() {
           asset={viewerAsset}
           libraries={libraries}
           connection={connection}
+          browseFolderId={folderId}
           onClose={() => setViewerAsset(null)}
           onChanged={() => void load(undefined, true)}
           onDeleted={handleAssetDeleted}
@@ -492,9 +463,15 @@ export function FilesPage() {
                   Folders
                 </p>
                 {visibleFolders.length > 0 ? (
-                  visibleFolders.map((folder) => (
-                    <FolderCard key={folder.id} folder={folder} onOpen={() => openFolder(folder.id)} />
-                  ))
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                    {visibleFolders.map((folder) => (
+                      <FolderTile
+                        key={folder.id}
+                        folder={folder}
+                        onOpen={() => openFolder(folder.id)}
+                      />
+                    ))}
+                  </div>
                 ) : (
                   <SectionPlaceholder
                     icon={Folder}

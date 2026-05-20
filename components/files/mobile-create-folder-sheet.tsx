@@ -28,7 +28,7 @@ export function MobileCreateFolderSheet({
   parentFolderId?: string | null
   parentFolderName?: string | null
   onClose: () => void
-  onCreated: () => void
+  onCreated: (folder?: import("@/lib/types/folders").FolderSummary) => void
 }) {
   const { connection } = useConnection()
   const [name, setName] = useState(() => generateFolderName())
@@ -52,11 +52,11 @@ export function MobileCreateFolderSheet({
     setSaving(true)
     setError(null)
     try {
-      await createFolder(connection, libraryId, {
+      const folder = await createFolder(connection, libraryId, {
         name: trimmed,
         parentFolderId: parentFolderId ?? null,
       })
-      onCreated()
+      onCreated(folder)
       onClose()
     } catch (err) {
       setError(formatApiError(err))

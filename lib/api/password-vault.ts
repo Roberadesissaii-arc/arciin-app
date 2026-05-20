@@ -46,6 +46,14 @@ export function unlockPasswordVault(connection: MobileConnection, input: VaultUn
   )
 }
 
+export function verifyPasswordVault(connection: MobileConnection, input: VaultUnlockInput) {
+  return fetchApi<{ verified: boolean }>("/settings/password-vault/verify", {
+    connection,
+    method: "POST",
+    body: input,
+  })
+}
+
 export function lockPasswordVault(connection: MobileConnection) {
   return fetchApi<{ locked: boolean }>("/settings/password-vault/lock", {
     connection,

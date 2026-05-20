@@ -152,7 +152,7 @@ export function VaultInlinePanel({ enabled }: { enabled: boolean }) {
           Display
         </p>
         <div
-          className="divide-y divide-[#f0f0f0] rounded-xl bg-[#f7f7f7] px-3"
+          className="divide-y divide-[#f0f0f0] rounded-xl bg-[#f7f7f7] px-3 py-2"
           style={{ border: "1px solid #e5e5e5" }}
         >
           <MobilePillSwitch

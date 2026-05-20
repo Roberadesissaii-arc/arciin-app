@@ -11,7 +11,7 @@ import {
 } from "lucide-react"
 
 import { DeleteAssetDialog } from "@/components/files/delete-asset-dialog"
-import { MobileMoveLibrarySheet } from "@/components/files/mobile-move-library-sheet"
+import { MobileMoveFolderSheet } from "@/components/files/mobile-move-folder-sheet"
 import {
   assetDownloadUrl,
   deleteAsset,
@@ -28,6 +28,7 @@ type AssetViewerProps = {
   asset: AssetSummary
   libraries: LibrarySummary[]
   connection: MobileConnection
+  browseFolderId?: string | null
   onClose: () => void
   onChanged: () => void
   onDeleted: (assetId: string) => void
@@ -68,6 +69,7 @@ export function AssetViewer({
   asset,
   libraries,
   connection,
+  browseFolderId,
   onClose,
   onChanged,
   onDeleted,
@@ -79,12 +81,14 @@ export function AssetViewer({
   const [error, setError] = useState<string | null>(null)
   const [previewSrc, setPreviewSrc] = useState<string | null>(null)
   const isPdf = asset.mimeType === "application/pdf"
-  const [previewLoading, setPreviewLoading] = useState(
-    asset.mediaType === "IMAGE" || asset.mediaType === "VIDEO" || isPdf,
-  )
+  const loadsMediaBlob =
+    asset.mediaType === "IMAGE" ||
+    asset.mediaType === "VIDEO" ||
+    asset.mediaType === "AUDIO" ||
+    isPdf
+  const [previewLoading, setPreviewLoading] = useState(loadsMediaBlob)
 
   const title = asset.title?.trim() || asset.originalFilename
-  const otherLibraries = libraries.filter((l) => l.id !== asset.libraryId)
   const currentLibrary = libraries.find((l) => l.id === asset.libraryId)
 
   useEffect(() => {
@@ -97,7 +101,7 @@ export function AssetViewer({
   }, [mounted])
 
   useEffect(() => {
-    if (asset.mediaType !== "IMAGE" && asset.mediaType !== "VIDEO") {
+    if (!loadsMediaBlob) {
       void loadThumbnail(connection, asset.id).then((url) => {
         if (url) setPreviewSrc(url)
         setPreviewLoading(false)
@@ -113,6 +117,7 @@ export function AssetViewer({
     const url = assetDownloadUrl(connection, asset.id, true)
     void fetch(url, {
       headers: { Authorization: `Bearer ${connection.sessionToken}` },
+      credentials: "include",
     })
       .then((res) => {
         if (!res.ok) throw new Error("preview")
@@ -138,7 +143,7 @@ export function AssetViewer({
       cancelled = true
       if (objectUrl) URL.revokeObjectURL(objectUrl)
     }
-  }, [asset.id, asset.mediaType, connection])
+  }, [asset.id, loadsMediaBlob, connection])
 
   const handleDownload = useCallback(async () => {
     setBusy("download")
@@ -168,11 +173,14 @@ export function AssetViewer({
   }, [asset.id, connection, onClose, onDeleted])
 
   const handleMove = useCallback(
-    async (libraryId: string) => {
+    async (folderId: string | null) => {
       setBusy("move")
       setError(null)
       try {
-        await moveAsset(connection, asset.id, { libraryId, folderId: null })
+        await moveAsset(connection, asset.id, {
+          libraryId: asset.libraryId,
+          folderId,
+        })
         setMoveOpen(false)
         onChanged()
         onClose()
@@ -182,7 +190,7 @@ export function AssetViewer({
         setBusy(null)
       }
     },
-    [asset.id, connection, onChanged, onClose],
+    [asset.id, asset.libraryId, connection, onChanged, onClose],
   )
 
   if (!mounted) return null
@@ -226,6 +234,14 @@ export function AssetViewer({
               playsInline
               className="max-h-full max-w-full object-contain"
             />
+          ) : asset.mediaType === "AUDIO" && previewSrc ? (
+            <audio
+              src={previewSrc}
+              controls
+              playsInline
+              preload="metadata"
+              className="w-full max-w-md"
+            />
           ) : previewSrc ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -244,13 +260,18 @@ export function AssetViewer({
         <p className="shrink-0 px-4 pb-1 text-center text-[11px] text-red-400">{error}</p>
       ) : null}
 
-      <MobileMoveLibrarySheet
-        open={moveOpen}
-        libraries={otherLibraries}
-        busy={busy === "move"}
-        onClose={() => setMoveOpen(false)}
-        onSelect={(libraryId) => void handleMove(libraryId)}
-      />
+      {currentLibrary ? (
+        <MobileMoveFolderSheet
+          open={moveOpen}
+          libraryId={asset.libraryId}
+          libraryName={currentLibrary.name}
+          currentFolderId={browseFolderId ?? null}
+          assetFolderId={asset.folderId}
+          busy={busy === "move"}
+          onClose={() => setMoveOpen(false)}
+          onSelect={(folderId) => void handleMove(folderId)}
+        />
+      ) : null}
 
       <div
         className="grid shrink-0 grid-cols-3 gap-2 border-t border-[#27272a] bg-[#18181b] px-4 py-2.5"

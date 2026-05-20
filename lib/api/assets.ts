@@ -1,4 +1,4 @@
-import { fetchApi } from "@/lib/api/client"
+import { buildApiUrl, fetchApi } from "@/lib/api/client"
 import type { MobileConnection } from "@/lib/types/api"
 import type { AssetSummary, MediaType } from "@/lib/types/assets"
 
@@ -44,8 +44,7 @@ export async function searchAssets(
 }
 
 export function assetThumbnailUrl(connection: MobileConnection, assetId: string) {
-  const base = connection.apiBaseUrl.replace(/\/+$/, "")
-  return `${base}/assets/${assetId}/thumbnail`
+  return buildApiUrl(connection.apiBaseUrl, `/assets/${assetId}/thumbnail`)
 }
 
 export function assetDownloadUrl(
@@ -53,9 +52,8 @@ export function assetDownloadUrl(
   assetId: string,
   inline = false,
 ) {
-  const base = connection.apiBaseUrl.replace(/\/+$/, "")
   const q = inline ? "?inline=1" : ""
-  return `${base}/assets/${assetId}/download${q}`
+  return buildApiUrl(connection.apiBaseUrl, `/assets/${assetId}/download${q}`)
 }
 
 export function getAsset(connection: MobileConnection, assetId: string, signal?: AbortSignal) {

@@ -362,6 +362,7 @@ export function SignInPage() {
   const [verifiedInstanceName, setVerifiedInstanceName] = useState<string | null>(null)
   const serverProfile = loadServerProfile()
   const searchParams = useSearchParams()
+  const isAddingServer = searchParams.get("new") === "1"
 
   function goToPage(page: 0 | 1) {
     setActivePage(page)
@@ -377,14 +378,14 @@ export function SignInPage() {
 
   useEffect(() => {
     if (!ready) return
-    if (connection) {
+    if (connection && !isAddingServer) {
       router.replace("/home")
       return
     }
-    if (searchParams.get("new") === "1") {
+    if (isAddingServer) {
       goToPage(1)
     }
-  }, [ready, connection, router, searchParams])
+  }, [ready, connection, router, isAddingServer])
 
   async function handleSignIn(e: React.FormEvent) {
     e.preventDefault()
@@ -623,10 +624,21 @@ export function SignInPage() {
           footer={
             <>
               <CardDivider />
-              <GhostButton label="Back to sign in" onClick={() => goToPage(0)} />
+              <GhostButton
+                label={connection ? "Back to profile" : "Back to sign in"}
+                onClick={() => (connection ? router.push("/profile") : goToPage(0))}
+              />
             </>
           }
         >
+          {connection && isAddingServer ? (
+            <p
+              className="mb-3 rounded-xl px-3 py-2 text-[12px] leading-relaxed text-[#717171]"
+              style={{ backgroundColor: "#f7f7f7", border: "1px solid #e5e5e5" }}
+            >
+              You stay signed in to your current server until you finish pairing this one.
+            </p>
+          ) : null}
           <SetupStepIndicator step={setupStep} />
 
           {setupStep === 1 ? (

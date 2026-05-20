@@ -21,22 +21,34 @@ import {
   getPasswordVault,
   lockPasswordVault,
   unlockPasswordVault,
+  verifyPasswordVault,
   type PasswordVaultEntry,
   type PasswordVaultList,
   type VaultUnlockInput,
 } from "@/lib/api/password-vault"
 
-function maskPassword(entry: PasswordVaultEntry) {
+function entryHasPassword(entry: PasswordVaultEntry) {
+  return Boolean(entry.hasPassword ?? entry.passwordLength ?? entry.password)
+}
+
+function maskPassword(entry: PasswordVaultEntry, style: "dots" | "asterisk" | "block" = "dots") {
   const len = entry.password?.length ?? entry.passwordLength ?? 10
-  return "•".repeat(Math.min(Math.max(len, 8), 16))
+  const n = Math.min(Math.max(len, 8), 16)
+  if (style === "asterisk") return "*".repeat(n)
+  if (style === "block") return "█".repeat(n)
+  return "•".repeat(n)
 }
 
 function UnlockSheet({
   pinConfigured,
+  title,
+  description,
   onClose,
   onUnlock,
 }: {
   pinConfigured: boolean
+  title: string
+  description: string
   onClose: () => void
   onUnlock: (input: VaultUnlockInput) => Promise<void>
 }) {
@@ -59,16 +71,7 @@ function UnlockSheet({
   }
 
   return (
-    <MobileBottomSheet
-      open
-      onClose={onClose}
-      title="Unlock vault"
-      description={
-        pinConfigured
-          ? "Enter your vault PIN to view and copy passwords."
-          : "Enter your Arciin account password to view and copy vault secrets."
-      }
-    >
+    <MobileBottomSheet open onClose={onClose} title={title} description={description}>
       {error ? <p className="mb-3 text-[12px] text-[#b91c1c]">{error}</p> : null}
       <input
         type="password"
@@ -86,7 +89,7 @@ function UnlockSheet({
         style={{ backgroundColor: "#ff4f12" }}
       >
         {saving ? <Loader2 className="size-4 animate-spin" /> : null}
-        Unlock
+        Continue
       </button>
     </MobileBottomSheet>
   )
@@ -94,19 +97,22 @@ function UnlockSheet({
 
 function EntryRow({
   entry,
+  maskStyle,
   secretsVisible,
   revealed,
-  onToggleReveal,
+  onEyeClick,
   onCopy,
 }: {
   entry: PasswordVaultEntry
+  maskStyle: "dots" | "asterisk" | "block"
   secretsVisible: boolean
   revealed: boolean
-  onToggleReveal: () => void
+  onEyeClick: () => void
   onCopy: (text: string, label: string) => void
 }) {
-  const canShowPassword = secretsVisible && entry.password
-  const displayPassword = revealed && canShowPassword ? entry.password! : maskPassword(entry)
+  const hasPassword = entryHasPassword(entry)
+  const visible = Boolean(secretsVisible && entry.password && revealed)
+  const displayPassword = visible && entry.password ? entry.password : maskPassword(entry, maskStyle)
 
   return (
     <li
@@ -134,34 +140,34 @@ function EntryRow({
         ) : null}
       </div>
 
-      <div
-        className="mt-3 flex items-center gap-2 rounded-xl bg-[#f7f7f7] px-3 py-2"
-        style={{ border: "1px solid #ececec" }}
-      >
-        <span className="min-w-0 flex-1 truncate font-mono text-[13px] text-[#222222]">
-          {displayPassword}
-        </span>
-        {secretsVisible && (entry.password || entry.hasPassword) ? (
+      {hasPassword ? (
+        <div
+          className="mt-3 flex items-center gap-2 rounded-xl bg-[#f7f7f7] px-3 py-2"
+          style={{ border: "1px solid #ececec" }}
+        >
+          <span className="min-w-0 flex-1 truncate font-mono text-[13px] text-[#222222]">
+            {displayPassword}
+          </span>
           <button
             type="button"
-            onClick={onToggleReveal}
-            className="shrink-0 p-1 text-[#717171]"
-            aria-label={revealed ? "Hide password" : "Show password"}
+            onClick={onEyeClick}
+            className="flex size-8 shrink-0 items-center justify-center rounded-lg text-[#717171] active:bg-white"
+            aria-label={visible ? "Hide password" : "Show password"}
           >
-            {revealed ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+            {visible ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
           </button>
-        ) : null}
-        {canShowPassword && revealed ? (
-          <button
-            type="button"
-            onClick={() => onCopy(entry.password!, "Password")}
-            className="shrink-0 p-1 text-[#717171]"
-            aria-label="Copy password"
-          >
-            <Copy className="size-4" />
-          </button>
-        ) : null}
-      </div>
+          {visible && entry.password ? (
+            <button
+              type="button"
+              onClick={() => onCopy(entry.password!, "Password")}
+              className="flex size-8 shrink-0 items-center justify-center rounded-lg text-[#717171] active:bg-white"
+              aria-label="Copy password"
+            >
+              <Copy className="size-4" />
+            </button>
+          ) : null}
+        </div>
+      ) : null}
 
       {entry.username && secretsVisible ? (
         <button
@@ -184,6 +190,7 @@ export function PasswordsPage() {
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [unlockOpen, setUnlockOpen] = useState(false)
+  const [pendingRevealId, setPendingRevealId] = useState<string | null>(null)
   const [revealed, setRevealed] = useState<Record<string, boolean>>({})
   const [copyMsg, setCopyMsg] = useState<string | null>(null)
 
@@ -202,7 +209,7 @@ export function PasswordsPage() {
           }
         }
       } catch (err) {
-        if (!signal?.aborted) setError(formatApiError(err))
+        if (!signal?.aborted) setError(formatApiError(err, connection.webUrl ?? connection.apiBaseUrl))
       } finally {
         if (!signal?.aborted) {
           setLoading(false)
@@ -224,11 +231,53 @@ export function PasswordsPage() {
   const lockRequired = vault?.lockRequired ?? false
   const pinConfigured = vault?.pinConfigured ?? false
   const entries = vault?.entries ?? []
+  const maskStyle = vault?.display?.maskStyle ?? "dots"
+
+  function openVaultUnlock(revealEntryId?: string) {
+    setPendingRevealId(revealEntryId ?? null)
+    setUnlockOpen(true)
+  }
+
+  function onEyeClick(entry: PasswordVaultEntry) {
+    if (!entryHasPassword(entry)) return
+
+    const visible = Boolean(secretsVisible && entry.password && revealed[entry.id])
+    if (visible) {
+      setRevealed((prev) => ({ ...prev, [entry.id]: false }))
+      return
+    }
+
+    if (secretsVisible) {
+      setRevealed((prev) => ({ ...prev, [entry.id]: true }))
+      return
+    }
+
+    openVaultUnlock(entry.id)
+  }
 
   async function handleUnlock(input: VaultUnlockInput) {
     if (!connection) return
-    await unlockPasswordVault(connection, input)
+
+    const revealAfter = pendingRevealId
+
+    if (!secretsVisible) {
+      await unlockPasswordVault(connection, input)
+    } else {
+      await verifyPasswordVault(connection, input)
+    }
+
     await load(undefined, true)
+    const fresh = await getPasswordVault(connection)
+    setVault(fresh)
+
+    if (revealAfter) {
+      const entry = fresh.entries.find((e) => e.id === revealAfter)
+      if (entry?.password) {
+        setRevealed((prev) => ({ ...prev, [revealAfter]: true }))
+      }
+    }
+
+    setPendingRevealId(null)
   }
 
   async function handleLock() {
@@ -249,6 +298,12 @@ export function PasswordsPage() {
   }
 
   const statsLoading = loading && !vault
+  const unlockTitle = pendingRevealId && !secretsVisible ? "Unlock to view" : "Unlock vault"
+  const unlockDescription = pinConfigured
+    ? "Enter your vault PIN. While unlocked, tap the eye on any entry without entering it again."
+    : secretsVisible
+      ? "Enter your account password to view this password."
+      : "Enter your Arciin account password to unlock the vault on this device."
 
   return (
     <div className="flex flex-col gap-5">
@@ -310,14 +365,18 @@ export function PasswordsPage() {
           className="flex size-10 items-center justify-center rounded-xl"
           style={{ backgroundColor: "rgba(255,79,18,0.12)" }}
         >
-          <FingerprintPattern className="size-5 text-[#ff4f12]" />
+          {lockRequired && !secretsVisible ? (
+            <Lock className="size-5 text-[#717171]" />
+          ) : (
+            <FingerprintPattern className="size-5 text-[#ff4f12]" />
+          )}
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-[13px] font-semibold text-[#222222]">Password vault</p>
           <p className="text-[11px] text-[#717171]">
             {lockRequired && !secretsVisible
-              ? "Locked — unlock to view secrets"
-              : "Secrets visible on this device"}
+              ? "Locked — unlock once to use the eye on entries"
+              : "Unlocked — tap the eye to show or hide each password"}
           </p>
         </div>
         {lockRequired ? (
@@ -333,7 +392,7 @@ export function PasswordsPage() {
           ) : (
             <button
               type="button"
-              onClick={() => setUnlockOpen(true)}
+              onClick={() => openVaultUnlock()}
               className="shrink-0 rounded-xl px-3 py-1.5 text-[12px] font-semibold text-white"
               style={{ backgroundColor: "#ff4f12" }}
             >
@@ -361,7 +420,7 @@ export function PasswordsPage() {
           <FingerprintPattern className="mx-auto mb-3 size-8 text-[#e5e5e5]" />
           <p className="text-[13px] font-medium text-[#222222]">No passwords saved</p>
           <p className="mt-1 text-[12px] text-[#a0a0a0]">
-            Import or add entries from the desktop app under Settings → Passwords.
+            Add entries from the desktop app under Settings → Passwords.
           </p>
         </div>
       ) : (
@@ -370,11 +429,10 @@ export function PasswordsPage() {
             <EntryRow
               key={entry.id}
               entry={entry}
+              maskStyle={maskStyle}
               secretsVisible={secretsVisible}
               revealed={Boolean(revealed[entry.id])}
-              onToggleReveal={() =>
-                setRevealed((prev) => ({ ...prev, [entry.id]: !prev[entry.id] }))
-              }
+              onEyeClick={() => onEyeClick(entry)}
               onCopy={copyText}
             />
           ))}
@@ -384,7 +442,12 @@ export function PasswordsPage() {
       {unlockOpen ? (
         <UnlockSheet
           pinConfigured={pinConfigured}
-          onClose={() => setUnlockOpen(false)}
+          title={unlockTitle}
+          description={unlockDescription}
+          onClose={() => {
+            setUnlockOpen(false)
+            setPendingRevealId(null)
+          }}
           onUnlock={handleUnlock}
         />
       ) : null}
