@@ -13,7 +13,7 @@ import {
 import { HomePageSkeleton } from "@/components/home/home-page-skeleton"
 import { useCachedHomeOverview } from "@/lib/hooks/use-cached-home-overview"
 import { useConnection } from "@/components/providers/connection-provider"
-import { suppressFetchErrorWhenOffline } from "@/lib/connection/offline-ui"
+import { shouldShowPageFetchError } from "@/lib/connection/offline-ui"
 import {
   activityIconFor,
   activityTypeLabel,
@@ -92,7 +92,7 @@ function storagePercent(storage: NonNullable<HomeOverview["storage"]>) {
 export function HomePage() {
   const { connection, serverReachable } = useConnection()
   const { data, error, reload } = useCachedHomeOverview()
-  const displayError = suppressFetchErrorWhenOffline(serverReachable, error)
+  const showFetchError = shouldShowPageFetchError(serverReachable, error)
 
   const storage = data?.storage
   const storagePct = storage ? storagePercent(storage) : null
@@ -118,22 +118,6 @@ export function HomePage() {
   if (!data) {
     return (
       <div className="flex flex-col gap-5">
-        {displayError ? (
-          <div
-            className="rounded-xl px-4 py-3 text-[12px] text-[#b91c1c]"
-            style={{ backgroundColor: "#fef2f2", border: "1px solid #fecaca" }}
-            role="alert"
-          >
-            <p>{displayError}</p>
-            <button
-              type="button"
-              onClick={() => void reload()}
-              className="mt-2 font-semibold text-[#ff4f12]"
-            >
-              Try again
-            </button>
-          </div>
-        ) : null}
         <HomePageSkeleton userName={connection?.user.name} />
       </div>
     )
@@ -157,13 +141,13 @@ export function HomePage() {
         </p>
       </div>
 
-      {displayError ? (
+      {showFetchError ? (
         <div
           className="rounded-xl px-4 py-3 text-[12px] text-[#b91c1c]"
           style={{ backgroundColor: "#fef2f2", border: "1px solid #fecaca" }}
           role="alert"
         >
-          <p>{displayError}</p>
+          <p>{error}</p>
           <button
             type="button"
             onClick={() => void reload()}

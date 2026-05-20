@@ -227,3 +227,53 @@ body:has(.mobile-app-root) {
     display: none;
   }
 }
+
+/* Offline server banner — orange highlight travels around the card border */
+@keyframes server-offline-border-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.server-offline-banner {
+  position: relative;
+  isolation: isolate;
+  border-radius: 1rem;
+  padding: 2px;
+  overflow: hidden;
+}
+
+.server-offline-banner__ring {
+  position: absolute;
+  inset: -60%;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    transparent 248deg,
+    rgba(255, 79, 18, 0.15) 268deg,
+    #ff4f12 292deg,
+    #ff6a33 312deg,
+    rgba(255, 106, 51, 0.55) 328deg,
+    transparent 360deg
+  );
+  animation: server-offline-border-spin 3s linear infinite;
+}
+
+.server-offline-banner__panel {
+  position: relative;
+  border-radius: calc(1rem - 2px);
+  background: #ffffff;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .server-offline-banner__ring {
+    animation: none;
+    inset: 0;
+    background: linear-gradient(
+      90deg,
+      rgba(255, 79, 18, 0.45) 0%,
+      rgba(255, 106, 51, 0.2) 55%,
+      transparent 100%
+    );
+  }
+}
