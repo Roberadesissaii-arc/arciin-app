@@ -26,7 +26,7 @@ import { ArciinMark } from "@/components/ui/arciin-mark"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useChatChrome } from "@/components/chat/chat-chrome-context"
 import { useConnection } from "@/components/providers/connection-provider"
-import { useChatViewport } from "@/hooks/use-chat-viewport"
+import { syncChatKeyboardOffset, useChatKeyboard } from "@/hooks/use-chat-keyboard"
 import { isOllamaProvider } from "@/lib/models/ollama-providers"
 import { resolveChatModelForProfile } from "@/lib/models/resolve-chat-model"
 import {
@@ -517,7 +517,7 @@ export function ChatPage() {
   const abortRef = useRef<AbortController | null>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
-  useChatViewport(pageRef)
+  useChatKeyboard(pageRef)
 
   const [selectedProfile, setSelectedProfile] = useState<ChatProfile | null>(null)
   const [selectedModel, setSelectedModel] = useState("")
@@ -895,6 +895,9 @@ export function ChatPage() {
       inputEl.style.height = "auto"
       inputEl.blur()
     }
+    syncChatKeyboardOffset(pageRef.current)
+    requestAnimationFrame(() => syncChatKeyboardOffset(pageRef.current))
+    window.setTimeout(() => syncChatKeyboardOffset(pageRef.current), 320)
     setError(null)
     const priorMessages = messages
     setMessages((prev) => [...prev, userMsg, pendingMsg])
@@ -1089,6 +1092,10 @@ export function ChatPage() {
             rows={1}
             value={input}
             onChange={handleInputChange}
+            onFocus={() => {
+              syncChatKeyboardOffset(pageRef.current)
+              requestAnimationFrame(() => scrollToBottom())
+            }}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault()

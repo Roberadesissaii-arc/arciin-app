@@ -114,14 +114,10 @@ body:has(.mobile-app-root) {
 }
 
 .chat-page {
-  position: fixed;
-  left: 0;
-  right: 0;
-  top: 0;
-  height: 100dvh;
-  z-index: 0;
   display: flex;
+  flex: 1;
   flex-direction: column;
+  min-height: 0;
   overflow: hidden;
   background-color: #f7f7f7;
 }
@@ -144,9 +140,21 @@ body:has(.mobile-app-root) {
   position: relative;
   z-index: 10;
   flex-shrink: 0;
-  padding: 0.5rem 1rem max(0.75rem, env(safe-area-inset-bottom, 0px));
+  padding: 0.5rem 0 0;
   background-color: #f7f7f7;
   border-top: 1px solid rgba(0, 0, 0, 0.04);
+  transform: translateY(calc(-1 * var(--chat-kb-offset, 0px)));
+  will-change: transform;
+}
+
+/* Home-indicator padding only when the keyboard is closed */
+.chat-page:not([data-keyboard-open]) .chat-page-composer {
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom, 0px));
+}
+
+/* Tight gap above the keyboard — no double safe-area */
+.chat-page[data-keyboard-open] .chat-page-composer {
+  padding-bottom: 0.25rem;
 }
 
 .mobile-app-main:has(.chat-page) > .mobile-app-content {
