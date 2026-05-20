@@ -4,7 +4,6 @@ import Link from "next/link"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { flushSync } from "react-dom"
 import {
-  Clock,
   Copy,
   Loader2,
   MessageSquare,
