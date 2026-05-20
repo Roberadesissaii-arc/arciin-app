@@ -1,9 +1,9 @@
 "use client"
 
-import Link from "next/link"
 import { useCallback, useState } from "react"
 import { FingerprintPattern, Loader2, Lock } from "lucide-react"
 
+import { VaultAccountPasswordSheet } from "@/components/profile/vault-account-password-sheet"
 import { SettingsIntroCard } from "@/components/settings/settings-intro-card"
 import { MobilePillSwitch, SettingsPanelLink } from "@/components/settings/mobile-toggle-row"
 import {
@@ -40,6 +40,7 @@ export function VaultInlinePanel({ enabled }: { enabled: boolean }) {
   const [saving, setSaving] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
+  const [passwordSheetOpen, setPasswordSheetOpen] = useState(false)
 
   const display = vault ? { ...DEFAULT_DISPLAY, ...vault.display } : DEFAULT_DISPLAY
   const lockRequired = vault?.lockRequired ?? true
@@ -47,8 +48,20 @@ export function VaultInlinePanel({ enabled }: { enabled: boolean }) {
   const pinConfigured = vault?.pinConfigured ?? false
   const entryCount = vault?.total ?? vault?.entries?.length ?? 0
 
-  async function patchDisplay(patch: Partial<PasswordVaultDisplaySettings> & { accountPassword?: string }) {
+  async function patchDisplay(
+    patch: Partial<PasswordVaultDisplaySettings> & { accountPassword?: string },
+    optimistic?: Partial<PasswordVaultDisplaySettings>,
+  ) {
     if (!connection) return
+    const previous = vault
+
+    if (vault && optimistic) {
+      setData({
+        ...vault,
+        display: { ...display, ...optimistic },
+      })
+    }
+
     setSaving(true)
     setActionError(null)
     setMessage(null)
@@ -62,7 +75,10 @@ export function VaultInlinePanel({ enabled }: { enabled: boolean }) {
       }
       setMessage("Vault settings saved.")
     } catch (err) {
-      setActionError(formatApiError(err))
+      if (previous) setData(previous)
+      setActionError(
+        formatApiError(err, connection.webUrl ?? connection.apiBaseUrl),
+      )
     } finally {
       setSaving(false)
     }
@@ -71,12 +87,13 @@ export function VaultInlinePanel({ enabled }: { enabled: boolean }) {
   async function handleLock() {
     if (!connection) return
     setSaving(true)
+    setActionError(null)
     try {
       await lockPasswordVault(connection)
       reload()
       setMessage("Vault locked.")
     } catch (err) {
-      setActionError(formatApiError(err))
+      setActionError(formatApiError(err, connection.webUrl ?? connection.apiBaseUrl))
     } finally {
       setSaving(false)
     }
@@ -84,12 +101,35 @@ export function VaultInlinePanel({ enabled }: { enabled: boolean }) {
 
   function toggleRevealByDefault() {
     if (display.revealByDefault) {
-      void patchDisplay({ revealByDefault: false })
+      void patchDisplay({ revealByDefault: false }, { revealByDefault: false })
       return
     }
-    const password = window.prompt("Enter your Arciin account password to enable reveal by default:")
-    if (!password?.trim()) return
-    void patchDisplay({ revealByDefault: true, accountPassword: password.trim() })
+    setPasswordSheetOpen(true)
+  }
+
+  async function confirmRevealByDefault(password: string) {
+    if (!connection) throw new Error("Not connected to a server.")
+    setSaving(true)
+    setActionError(null)
+    try {
+      const next = await updatePasswordVaultDisplay(connection, {
+        revealByDefault: true,
+        accountPassword: password,
+      })
+      if (vault) {
+        setData({
+          ...vault,
+          display: { ...DEFAULT_DISPLAY, ...next },
+        })
+      }
+      setMessage("Vault settings saved.")
+    } catch (err) {
+      const msg = formatApiError(err, connection.webUrl ?? connection.apiBaseUrl)
+      setActionError(msg)
+      throw new Error(msg)
+    } finally {
+      setSaving(false)
+    }
   }
 
   if (!enabled) return null
@@ -159,31 +199,53 @@ export function VaultInlinePanel({ enabled }: { enabled: boolean }) {
             label="Show username"
             on={display.showUsername}
             disabled={saving}
-            onChange={() => void patchDisplay({ showUsername: !display.showUsername })}
+            onChange={() =>
+              void patchDisplay(
+                { showUsername: !display.showUsername },
+                { showUsername: !display.showUsername },
+              )
+            }
           />
           <MobilePillSwitch
             label="Show URL"
             on={display.showUrl}
             disabled={saving}
-            onChange={() => void patchDisplay({ showUrl: !display.showUrl })}
+            onChange={() =>
+              void patchDisplay({ showUrl: !display.showUrl }, { showUrl: !display.showUrl })
+            }
           />
           <MobilePillSwitch
             label="Show notes"
             on={display.showNotes}
             disabled={saving}
-            onChange={() => void patchDisplay({ showNotes: !display.showNotes })}
+            onChange={() =>
+              void patchDisplay(
+                { showNotes: !display.showNotes },
+                { showNotes: !display.showNotes },
+              )
+            }
           />
           <MobilePillSwitch
             label="Show category"
             on={display.showCategory}
             disabled={saving}
-            onChange={() => void patchDisplay({ showCategory: !display.showCategory })}
+            onChange={() =>
+              void patchDisplay(
+                { showCategory: !display.showCategory },
+                { showCategory: !display.showCategory },
+              )
+            }
           />
           <MobilePillSwitch
             label="Show password column"
             on={display.showPasswordColumn}
             disabled={saving}
-            onChange={() => void patchDisplay({ showPasswordColumn: !display.showPasswordColumn })}
+            onChange={() =>
+              void patchDisplay(
+                { showPasswordColumn: !display.showPasswordColumn },
+                { showPasswordColumn: !display.showPasswordColumn },
+              )
+            }
           />
           <MobilePillSwitch
             label="Reveal by default"
@@ -196,7 +258,12 @@ export function VaultInlinePanel({ enabled }: { enabled: boolean }) {
             label="Require unlock"
             on={display.lockSidebarVault}
             disabled={saving}
-            onChange={() => void patchDisplay({ lockSidebarVault: !display.lockSidebarVault })}
+            onChange={() =>
+              void patchDisplay(
+                { lockSidebarVault: !display.lockSidebarVault },
+                { lockSidebarVault: !display.lockSidebarVault },
+              )
+            }
           />
         </div>
       </div>
@@ -210,7 +277,7 @@ export function VaultInlinePanel({ enabled }: { enabled: boolean }) {
                 key={style}
                 type="button"
                 disabled={saving}
-                onClick={() => void patchDisplay({ maskStyle: style })}
+                onClick={() => void patchDisplay({ maskStyle: style }, { maskStyle: style })}
                 className="flex-1 rounded-lg py-2 text-[12px] font-semibold capitalize disabled:opacity-50"
                 style={{
                   border: `1px solid ${display.maskStyle === style ? "#ff4f12" : "#e5e5e5"}`,
@@ -226,17 +293,23 @@ export function VaultInlinePanel({ enabled }: { enabled: boolean }) {
       ) : null}
 
       {actionError ? (
-        <p className="rounded-xl px-3 py-2 text-[12px] text-[#b91c1c] bg-[#fef2f2] border border-[#fecaca]">
+        <p className="rounded-xl border border-[#fecaca] bg-[#fef2f2] px-3 py-2 text-[12px] text-[#b91c1c]">
           {actionError}
         </p>
       ) : null}
       {message ? (
-        <p className="rounded-xl px-3 py-2 text-[12px] text-[#15803d] bg-[#f0fdf4] border border-[#bbf7d0]">
+        <p className="rounded-xl border border-[#bbf7d0] bg-[#f0fdf4] px-3 py-2 text-[12px] text-[#15803d]">
           {message}
         </p>
       ) : null}
 
       <SettingsPanelLink href="/profile/passwords" label="Browse saved passwords" />
+
+      <VaultAccountPasswordSheet
+        open={passwordSheetOpen}
+        onClose={() => setPasswordSheetOpen(false)}
+        onConfirm={confirmRevealByDefault}
+      />
     </div>
   )
 }

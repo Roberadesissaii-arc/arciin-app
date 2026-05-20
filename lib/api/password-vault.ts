@@ -68,7 +68,7 @@ export function updatePasswordVaultDisplay(
 ) {
   return fetchApi<PasswordVaultDisplaySettings>("/settings/password-vault/display", {
     connection,
-    method: "PATCH",
+    method: "POST",
     body: input,
   })
 }

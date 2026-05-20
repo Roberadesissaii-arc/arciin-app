@@ -11,8 +11,9 @@ export function FolderTile({
   onOpen: () => void
   compact?: boolean
 }) {
-  const tabH = compact ? "20%" : "24%"
-  const bodyTop = compact ? "12%" : "14%"
+  const tabW = compact ? "44%" : "46%"
+  const tabH = compact ? "22%" : "24%"
+  const bodyTop = compact ? "11%" : "12%"
 
   return (
     <button
@@ -21,64 +22,54 @@ export function FolderTile({
       className="group flex w-full flex-col text-left active:scale-[0.98] active:opacity-95"
       aria-label={`Open folder ${folder.name}`}
     >
-      <div className="relative w-full" style={{ aspectRatio: compact ? "0.92" : "0.88" }}>
+      <div className="relative w-full" style={{ aspectRatio: compact ? "1" : "1.05" }}>
+        {/* Depth layer */}
         <div
-          className="absolute inset-x-[6%] bottom-0 top-[18%] rounded-2xl rounded-tl-sm"
+          className="absolute inset-x-[4%] bottom-0 rounded-2xl rounded-tl-md"
           style={{
-            background: "linear-gradient(180deg, #ffd4c4 0%, #ff8f5c 100%)",
-            boxShadow: "0 6px 16px rgba(255,79,18,0.18)",
+            top: "20%",
+            background: "linear-gradient(180deg, #ff9a6c 0%, #ff4f12 100%)",
+            boxShadow: "0 8px 18px rgba(255,79,18,0.22)",
           }}
           aria-hidden
         />
+
+        {/* Tab — left-aligned */}
         <div
-          className="absolute z-10 rounded-t-xl"
+          className="absolute z-10 rounded-t-lg rounded-br-sm"
           style={{
-            left: "10%",
+            left: "4%",
             top: 0,
-            width: "42%",
+            width: tabW,
             height: tabH,
-            background: "linear-gradient(180deg, #ffc9b0 0%, #ff6a33 55%, #ff4f12 100%)",
+            background: "linear-gradient(180deg, #ffcba8 0%, #ff6a33 50%, #ff4f12 100%)",
             boxShadow:
-              "inset 0 1px 0 rgba(255,255,255,0.45), 0 2px 4px rgba(255,79,18,0.2)",
+              "inset 0 1px 0 rgba(255,255,255,0.5), 0 2px 6px rgba(255,79,18,0.25)",
           }}
           aria-hidden
         />
+
+        {/* Main folder face */}
         <div
-          className="absolute inset-x-0 z-20 overflow-hidden rounded-2xl rounded-tl-lg"
+          className="absolute inset-x-0 z-20 overflow-hidden rounded-2xl rounded-tl-md"
           style={{
             top: bodyTop,
             bottom: 0,
-            background: "linear-gradient(165deg, #fffaf8 0%, #ffffff 38%, #f8f8f8 100%)",
-            border: "1.5px solid rgba(255,79,18,0.28)",
+            background: "linear-gradient(160deg, #fffdfb 0%, #ffffff 45%, #f4f4f5 100%)",
+            border: "1.5px solid rgba(255,79,18,0.24)",
             boxShadow:
-              "inset 0 1px 0 rgba(255,255,255,0.9), 0 4px 12px rgba(0,0,0,0.06)",
+              "inset 0 1px 0 rgba(255,255,255,1), 0 3px 10px rgba(0,0,0,0.05)",
           }}
         >
-          <div className="flex h-full flex-col items-center justify-end gap-0.5 px-2 pb-2.5 pt-3">
-            <div
-              className="mb-1 flex size-8 items-center justify-center rounded-lg"
-              style={{
-                background:
-                  "linear-gradient(145deg, rgba(255,79,18,0.14) 0%, rgba(255,79,18,0.06) 100%)",
-                border: "1px solid rgba(255,79,18,0.15)",
-              }}
-            >
-              <svg
-                viewBox="0 0 24 24"
-                className="size-4 text-[#ff4f12]"
-                fill="currentColor"
-                aria-hidden
-              >
-                <path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z" />
-              </svg>
-            </div>
-            <p className="line-clamp-2 w-full text-center text-[11px] font-bold leading-tight text-[#222222]">
-              {folder.name}
-            </p>
-            <p className="text-[10px] font-medium tabular-nums text-[#a0a0a0]">
-              {folder.assetCount} file{folder.assetCount === 1 ? "" : "s"}
-            </p>
-          </div>
+          <p className="absolute left-2.5 top-2 right-6 line-clamp-2 text-left text-[11px] font-bold leading-tight text-[#222222]">
+            {folder.name}
+          </p>
+          <span
+            className="absolute bottom-2 right-2.5 text-[12px] font-bold tabular-nums text-[#ff4f12]"
+            aria-label={`${folder.assetCount} files`}
+          >
+            {folder.assetCount}
+          </span>
         </div>
       </div>
     </button>
