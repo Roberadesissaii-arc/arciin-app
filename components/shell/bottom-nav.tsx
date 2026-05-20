@@ -28,7 +28,7 @@ export function BottomNav() {
   return (
     <nav
       aria-label="Main navigation"
-      className="mobile-bottom-nav pointer-events-auto fixed inset-x-4 z-30 flex h-16 items-center rounded-3xl border border-[#2a2a2a] bg-[#111111] shadow-[0_4px_28px_rgba(0,0,0,0.22)]"
+      className="mobile-bottom-nav pointer-events-auto z-30 flex h-16 shrink-0 items-center rounded-3xl border border-[#2a2a2a] bg-[#111111] shadow-[0_4px_28px_rgba(0,0,0,0.22)]"
     >
       {ALL_ITEMS.map(({ href, label, icon: Icon }) => {
         const active = isActive(pathname, href)

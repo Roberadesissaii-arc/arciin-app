@@ -37,10 +37,10 @@ export function MobileTopChrome() {
 
   if (pathname === "/chat" || pathname.startsWith("/chat/")) {
     return (
-      <>
-        <div className="shrink-0 pt-safe" style={{ height: "3.25rem" }} aria-hidden />
+      <div className="relative shrink-0">
+        <div className="pt-safe" style={{ height: "3.25rem" }} aria-hidden />
         <ChatMobileHeader />
-      </>
+      </div>
     )
   }
 
