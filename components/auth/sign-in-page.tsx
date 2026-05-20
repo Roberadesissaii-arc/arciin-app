@@ -360,14 +360,17 @@ export function SignInPage() {
   const [connecting, setConnecting] = useState(false)
   const [verifiedApiBase, setVerifiedApiBase] = useState<string | null>(null)
   const [verifiedInstanceName, setVerifiedInstanceName] = useState<string | null>(null)
-  /** True only for first-time setup on this phone (needs desktop connection code). */
-  const [requirePairingCode, setRequirePairingCode] = useState(false)
+  /** pair = new device (URL → Continue → 6-digit code). switch = change saved URL only. */
+  const [setupMode, setSetupMode] = useState<"pair" | "switch">("pair")
 
   const serverProfile = loadServerProfile()
-  function goToPage(page: 0 | 1) {
+  const isPairingSetup = setupMode === "pair"
+
+  function goToPage(page: 0 | 1, mode?: "pair" | "switch") {
     setActivePage(page)
     setError(null)
     if (page === 1) {
+      setSetupMode(mode ?? (hasStoredServer() ? "switch" : "pair"))
       setSetupStep(1)
       setServerUrl("")
       setServerAddressMode("local")
@@ -439,7 +442,7 @@ export function SignInPage() {
       ...clientUrls,
       instanceName,
     })
-    if (!requirePairingCode) {
+    if (setupMode === "switch") {
       setError(null)
       goToPage(0)
       return true
@@ -549,7 +552,10 @@ export function SignInPage() {
       className="flex min-h-[100dvh] flex-col pt-safe pb-safe"
       style={{ backgroundColor: "#f7f7f7" }}
     >
-      <BrandHeroCarousel activePage={activePage as 0 | 1} onSelectPage={goToPage} />
+      <BrandHeroCarousel
+        activePage={activePage as 0 | 1}
+        onSelectPage={(p) => goToPage(p, p === 1 ? "pair" : undefined)}
+      />
 
       {activePage === 0 ? (
         <AuthCard
@@ -562,13 +568,18 @@ export function SignInPage() {
           footer={
             <>
               <CardDivider />
-              <GhostButton
-                label={hasStoredServer() ? "Change server" : "Connect to a server"}
-                onClick={() => {
-                  setRequirePairingCode(!hasStoredServer())
-                  goToPage(1)
-                }}
-              />
+              <div className="flex flex-col gap-2">
+                <GhostButton
+                  label={hasStoredServer() ? "Change server" : "Connect to a server"}
+                  onClick={() => goToPage(1, hasStoredServer() ? "switch" : "pair")}
+                />
+                {hasStoredServer() ? (
+                  <GhostButton
+                    label="Connect to a new server"
+                    onClick={() => goToPage(1, "pair")}
+                  />
+                ) : null}
+              </div>
             </>
           }
         >
@@ -629,7 +640,7 @@ export function SignInPage() {
         <AuthCard
           title={
             setupStep === 1
-              ? requirePairingCode
+              ? isPairingSetup
                 ? "Connect a server"
                 : "Change server"
               : "Pair this device"
@@ -650,7 +661,7 @@ export function SignInPage() {
             </>
           }
         >
-          <SetupStepIndicator step={setupStep} />
+          {isPairingSetup ? <SetupStepIndicator step={setupStep} /> : null}
 
           {setupStep === 1 ? (
             <div className="flex flex-col gap-3.5">
@@ -698,8 +709,8 @@ export function SignInPage() {
               <OrangeButton
                 type="button"
                 loading={setupBusy === "continue"}
-                label={requirePairingCode ? "Continue" : "Save & sign in"}
-                loadingLabel={requirePairingCode ? "Continuing…" : "Saving…"}
+                label={isPairingSetup ? "Continue" : "Save & sign in"}
+                loadingLabel={isPairingSetup ? "Continuing…" : "Saving…"}
                 onClick={handleContinueSetup}
                 disabled={!serverUrl.trim() || setupBusy !== null}
               />
