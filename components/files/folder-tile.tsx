@@ -1,9 +1,106 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { Check, FolderOpen, Pencil, Trash2, X } from "lucide-react"
+import { Loader2, Pencil, Trash2, X } from "lucide-react"
+import { createPortal } from "react-dom"
 
 import type { FolderSummary } from "@/lib/types/folders"
+
+/* ── rename bottom sheet ──────────────────────────────────────── */
+
+function RenameSheet({
+  folder,
+  onClose,
+  onRename,
+}: {
+  folder: FolderSummary
+  onClose: () => void
+  onRename: (name: string) => Promise<void>
+}) {
+  const [name, setName] = useState(folder.name)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    const timer = setTimeout(() => inputRef.current?.focus(), 80)
+    return () => clearTimeout(timer)
+  }, [])
+
+  async function handleSave() {
+    const trimmed = name.trim()
+    if (!trimmed || trimmed === folder.name) { onClose(); return }
+    setBusy(true)
+    setError(null)
+    try {
+      await onRename(trimmed)
+      onClose()
+    } catch {
+      setError("Could not rename folder. Try again.")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return createPortal(
+    <div className="fixed inset-0 z-[200]" role="dialog" aria-modal="true">
+      <button
+        type="button"
+        className="absolute inset-0 bg-black/50"
+        onClick={onClose}
+        aria-label="Close"
+      />
+      <div
+        className="absolute inset-x-0 bottom-0 rounded-t-3xl bg-white px-5 pt-5"
+        style={{ paddingBottom: "max(1.5rem, env(safe-area-inset-bottom))" }}
+      >
+        {/* handle */}
+        <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-[#e0e0e0]" />
+
+        <div className="mb-4 flex items-center justify-between">
+          <p className="text-[17px] font-bold text-[#222222]">Rename folder</p>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex size-8 items-center justify-center rounded-xl text-[#717171] active:bg-[#f7f7f7]"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+
+        <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#a0a0a0]">
+          Folder name
+        </label>
+        <input
+          ref={inputRef}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") void handleSave() }}
+          disabled={busy}
+          className="mt-1.5 w-full rounded-xl border border-[#e5e5e5] bg-[#f7f7f7] px-3 py-2.5 text-[14px] text-[#222222] outline-none focus:border-[#ff4f12]"
+        />
+
+        {error ? (
+          <p className="mt-2 text-[12px] text-[#b91c1c]">{error}</p>
+        ) : null}
+
+        <button
+          type="button"
+          disabled={busy || !name.trim()}
+          onClick={() => void handleSave()}
+          className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl py-3 text-[14px] font-semibold text-white disabled:opacity-50"
+          style={{ backgroundColor: "#ff4f12" }}
+        >
+          {busy ? <Loader2 className="size-4 animate-spin" /> : null}
+          Save
+        </button>
+      </div>
+    </div>,
+    document.body,
+  )
+}
+
+/* ── folder tile row ──────────────────────────────────────────── */
 
 export function FolderTile({
   folder,
@@ -17,28 +114,10 @@ export function FolderTile({
   onRename: (newName: string) => Promise<void>
 }) {
   const [mode, setMode] = useState<"idle" | "renaming" | "confirming">("idle")
-  const [nameInput, setNameInput] = useState(folder.name)
   const [busy, setBusy] = useState(false)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const [mounted, setMounted] = useState(false)
 
-  useEffect(() => {
-    if (mode === "renaming") {
-      setNameInput(folder.name)
-      setTimeout(() => inputRef.current?.focus(), 30)
-    }
-  }, [mode, folder.name])
-
-  async function commitRename() {
-    const trimmed = nameInput.trim()
-    if (!trimmed || trimmed === folder.name) { setMode("idle"); return }
-    setBusy(true)
-    try {
-      await onRename(trimmed)
-      setMode("idle")
-    } finally {
-      setBusy(false)
-    }
-  }
+  useEffect(() => { setMounted(true) }, [])
 
   async function commitDelete() {
     setBusy(true)
@@ -51,130 +130,100 @@ export function FolderTile({
   }
 
   return (
-    <div className="flex items-center gap-3 px-4 py-3.5">
-      {/* folder icon — tap to open */}
-      <button
-        type="button"
-        onClick={onOpen}
-        className="relative shrink-0 active:opacity-75"
-        aria-label={`Open ${folder.name}`}
-      >
-        <svg width="40" height="34" viewBox="0 0 40 34" fill="none">
-          {/* tab */}
-          <path
-            d="M2 8C2 6.9 2.9 6 4 6H15L18 9H36C37.1 9 38 9.9 38 11V30C38 31.1 37.1 32 36 32H4C2.9 32 2 31.1 2 30V8Z"
-            fill="url(#ftab)"
-          />
-          {/* body */}
-          <path
-            d="M2 11C2 9.9 2.9 9 4 9H36C37.1 9 38 9.9 38 11V30C38 31.1 37.1 32 36 32H4C2.9 32 2 31.1 2 30V11Z"
-            fill="url(#fbody)"
-          />
-          <defs>
-            <linearGradient id="ftab" x1="2" y1="6" x2="38" y2="32" gradientUnits="userSpaceOnUse">
-              <stop stopColor="#ff9a6c" />
-              <stop offset="1" stopColor="#ff4f12" />
-            </linearGradient>
-            <linearGradient id="fbody" x1="2" y1="9" x2="38" y2="32" gradientUnits="userSpaceOnUse">
-              <stop stopColor="#ffb38a" />
-              <stop offset="1" stopColor="#ff5c20" />
-            </linearGradient>
-          </defs>
-        </svg>
-        <FolderOpen className="absolute left-1/2 top-1/2 size-4 -translate-x-1/2 -translate-y-1/2 text-white/80" />
-      </button>
+    <>
+      <div className="flex items-center gap-3 px-4 py-3.5">
 
-      {/* name + count — tap to open */}
-      <button
-        type="button"
-        onClick={onOpen}
-        className="min-w-0 flex-1 text-left"
-      >
-        <p className="truncate text-[14px] font-semibold text-[#222222]">{folder.name}</p>
-        <p className="text-[11px] text-[#a0a0a0]">
-          {folder.assetCount} item{folder.assetCount !== 1 ? "s" : ""}
-        </p>
-      </button>
+        {/* folder SVG — tap to open */}
+        <button
+          type="button"
+          onClick={onOpen}
+          className="shrink-0 active:opacity-75"
+          aria-label={`Open ${folder.name}`}
+        >
+          <svg width="42" height="36" viewBox="0 0 42 36" fill="none">
+            <path
+              d="M2 9C2 7.9 2.9 7 4 7H16L19 10H38C39.1 10 40 10.9 40 12V32C40 33.1 39.1 34 38 34H4C2.9 34 2 33.1 2 32V9Z"
+              fill="url(#ft2)"
+            />
+            <path
+              d="M2 12C2 10.9 2.9 10 4 10H38C39.1 10 40 10.9 40 12V32C40 33.1 39.1 34 38 34H4C2.9 34 2 33.1 2 32V12Z"
+              fill="url(#fb2)"
+            />
+            <defs>
+              <linearGradient id="ft2" x1="2" y1="7" x2="40" y2="34" gradientUnits="userSpaceOnUse">
+                <stop stopColor="#ffb07a" />
+                <stop offset="1" stopColor="#ff4f12" />
+              </linearGradient>
+              <linearGradient id="fb2" x1="2" y1="10" x2="40" y2="34" gradientUnits="userSpaceOnUse">
+                <stop stopColor="#ffa060" />
+                <stop offset="1" stopColor="#e84000" />
+              </linearGradient>
+            </defs>
+          </svg>
+        </button>
 
-      {/* ── idle: pencil + trash ───────────────────────────────── */}
-      {mode === "idle" && (
-        <div className="flex shrink-0 items-center gap-1">
-          <button
-            type="button"
-            onClick={() => setMode("renaming")}
-            className="flex size-8 items-center justify-center rounded-xl text-[#a0a0a0] active:bg-[#f0f0f0] active:text-[#222222]"
-            aria-label="Rename folder"
-          >
-            <Pencil className="size-3.5" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode("confirming")}
-            className="flex size-8 items-center justify-center rounded-xl text-[#a0a0a0] active:bg-[#fef2f2] active:text-[#dc2626]"
-            aria-label="Delete folder"
-          >
-            <Trash2 className="size-3.5" />
-          </button>
-        </div>
-      )}
+        {/* name + count — tap to open */}
+        <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-left">
+          <p className="truncate text-[14px] font-semibold text-[#222222]">{folder.name}</p>
+          <p className="text-[11px] text-[#a0a0a0]">
+            {folder.assetCount} item{folder.assetCount !== 1 ? "s" : ""}
+          </p>
+        </button>
 
-      {/* ── renaming: input + save/cancel ─────────────────────── */}
-      {mode === "renaming" && (
-        <div className="flex shrink-0 items-center gap-1">
-          <input
-            ref={inputRef}
-            value={nameInput}
-            onChange={(e) => setNameInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") void commitRename()
-              if (e.key === "Escape") setMode("idle")
-            }}
-            disabled={busy}
-            className="w-32 rounded-lg border border-[#e5e5e5] bg-[#f7f7f7] px-2 py-1 text-[13px] text-[#222222] outline-none focus:border-[#ff4f12]"
-          />
-          <button
-            type="button"
-            onClick={() => void commitRename()}
-            disabled={busy || !nameInput.trim()}
-            className="flex size-8 items-center justify-center rounded-xl text-[#ff4f12] active:bg-[#fff4f0] disabled:opacity-40"
-            aria-label="Save name"
-          >
-            <Check className="size-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode("idle")}
-            disabled={busy}
-            className="flex size-8 items-center justify-center rounded-xl text-[#a0a0a0] active:bg-[#f0f0f0]"
-            aria-label="Cancel rename"
-          >
-            <X className="size-4" />
-          </button>
-        </div>
-      )}
+        {/* ── idle: pencil + trash ─────────────────────────────── */}
+        {mode === "idle" && (
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setMode("renaming")}
+              className="flex size-8 items-center justify-center rounded-xl text-[#a0a0a0] active:bg-[#f0f0f0] active:text-[#222222]"
+              aria-label="Rename folder"
+            >
+              <Pencil className="size-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode("confirming")}
+              className="flex size-8 items-center justify-center rounded-xl text-[#a0a0a0] active:bg-[#fef2f2] active:text-[#dc2626]"
+              aria-label="Delete folder"
+            >
+              <Trash2 className="size-3.5" />
+            </button>
+          </div>
+        )}
 
-      {/* ── confirming delete: confirm/cancel ─────────────────── */}
-      {mode === "confirming" && (
-        <div className="flex shrink-0 items-center gap-1">
-          <button
-            type="button"
-            onClick={() => void commitDelete()}
-            disabled={busy}
-            className="rounded-lg bg-[#dc2626] px-2.5 py-1 text-[11px] font-semibold text-white disabled:opacity-50 active:bg-[#b91c1c]"
-          >
-            Delete
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode("idle")}
-            disabled={busy}
-            className="rounded-lg bg-[#f7f7f7] px-2.5 py-1 text-[11px] font-semibold text-[#717171] active:bg-[#ececec]"
-            style={{ border: "1px solid #e5e5e5" }}
-          >
-            Cancel
-          </button>
-        </div>
-      )}
-    </div>
+        {/* ── confirming delete ────────────────────────────────── */}
+        {mode === "confirming" && (
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              onClick={() => void commitDelete()}
+              disabled={busy}
+              className="rounded-lg bg-[#dc2626] px-2.5 py-1 text-[11px] font-semibold text-white disabled:opacity-50 active:bg-[#b91c1c]"
+            >
+              {busy ? <Loader2 className="size-3 animate-spin" /> : "Delete"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode("idle")}
+              disabled={busy}
+              className="rounded-lg bg-[#f7f7f7] px-2.5 py-1 text-[11px] font-semibold text-[#717171] active:bg-[#ececec]"
+              style={{ border: "1px solid #e5e5e5" }}
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* rename sheet — rendered via portal */}
+      {mounted && mode === "renaming" ? (
+        <RenameSheet
+          folder={folder}
+          onClose={() => setMode("idle")}
+          onRename={onRename}
+        />
+      ) : null}
+    </>
   )
 }
