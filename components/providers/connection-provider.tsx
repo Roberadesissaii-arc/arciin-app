@@ -24,6 +24,7 @@ import { isNetworkError } from "@/lib/api/errors"
 import {
   connectionFromAccount,
   listMobileAccounts,
+  removeAccount,
   setActiveAccount,
   type MobileAccount,
 } from "@/lib/connection/accounts"
@@ -57,6 +58,8 @@ type ConnectionContextValue = {
   forgetServer: () => void
   accounts: MobileAccount[]
   switchAccount: (accountId: string) => Promise<boolean>
+  /** Remove a saved server from this phone (instance on the server is untouched). */
+  deleteServer: (accountId: string) => void
 }
 
 const ConnectionContext = createContext<ConnectionContextValue | null>(null)
@@ -221,6 +224,30 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
     setAccountsTick((n) => n + 1)
   }, [])
 
+  const deleteServer = useCallback(
+    (accountId: string) => {
+      removeAccount(accountId)
+      const next = loadConnection()
+      if (next && !isConnectionExpired(next) && !isLoopbackApiBase(next.apiBaseUrl)) {
+        setConnection(next)
+        setServerReachable(null)
+        void refresh()
+      } else {
+        if (next && (isConnectionExpired(next) || isLoopbackApiBase(next.apiBaseUrl))) {
+          clearSession()
+        }
+        setConnection(next)
+        setServerReachable(null)
+      }
+      if (!listMobileAccounts().length) {
+        setConnection(null)
+        setServerReachable(null)
+      }
+      setAccountsTick((n) => n + 1)
+    },
+    [refresh],
+  )
+
   const switchAccount = useCallback(async (accountId: string) => {
     const account = setActiveAccount(accountId)
     if (!account) return false
@@ -310,6 +337,7 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
       forgetServer,
       accounts,
       switchAccount,
+      deleteServer,
     }),
     [
       connection,
@@ -323,6 +351,7 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
       forgetServer,
       accounts,
       switchAccount,
+      deleteServer,
     ],
   )
 
