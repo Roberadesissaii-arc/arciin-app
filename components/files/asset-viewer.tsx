@@ -11,7 +11,9 @@ import {
 } from "lucide-react"
 
 import { DeleteAssetDialog } from "@/components/files/delete-asset-dialog"
+import { MobilePdfViewer } from "@/components/files/mobile-pdf-viewer"
 import { MobileMoveFolderSheet } from "@/components/files/mobile-move-folder-sheet"
+import { isPdfAsset } from "@/lib/files/pdf-thumbnail"
 import {
   assetDownloadFetchUrl,
   assetDownloadRequestInit,
@@ -89,16 +91,18 @@ export function AssetViewer({
     null,
   )
   const [textPreviewError, setTextPreviewError] = useState<string | null>(null)
+  const [pdfPage, setPdfPage] = useState(1)
+  const [pdfTotal, setPdfTotal] = useState(0)
   const pointerStart = useRef<{ x: number; y: number } | null>(null)
 
   const asset = assets[currentIndex] ?? assets[0]!
   const hasPrev = currentIndex > 0
   const hasNext = currentIndex < assets.length - 1
 
-  const isPdf = asset.mimeType === "application/pdf"
+  const isPdf = isPdfAsset(asset)
   const streamsInline = asset.mediaType === "VIDEO" || asset.mediaType === "AUDIO"
   const loadsTextPreview = isTextPreviewableAsset(asset)
-  const loadsMediaBlob = asset.mediaType === "IMAGE" || isPdf
+  const loadsMediaBlob = asset.mediaType === "IMAGE"
   const [previewLoading, setPreviewLoading] = useState(
     loadsMediaBlob || loadsTextPreview,
   )
@@ -126,11 +130,19 @@ export function AssetViewer({
     setPreviewSrc(null)
     setTextPreview(null)
     setTextPreviewError(null)
-    setPreviewLoading(loadsMediaBlob || loadsTextPreview)
+    setPdfPage(1)
+    setPdfTotal(0)
+    setPreviewLoading(isPdf ? false : loadsMediaBlob || loadsTextPreview)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [asset.id])
 
   useEffect(() => {
+    if (isPdf) {
+      setPreviewSrc(null)
+      setPreviewLoading(false)
+      return
+    }
+
     if (streamsInline) {
       setPreviewSrc(assetStreamUrl(connection, asset.id))
       setPreviewLoading(false)
@@ -197,13 +209,14 @@ export function AssetViewer({
       .finally(() => { if (!cancelled) setPreviewLoading(false) })
 
     return () => { cancelled = true; if (objectUrl) URL.revokeObjectURL(objectUrl) }
-  }, [asset, loadsMediaBlob, loadsTextPreview, streamsInline, connection])
+  }, [asset, isPdf, loadsMediaBlob, loadsTextPreview, streamsInline, connection])
 
   const handleSwipeEnd = useCallback(
     (dx: number, dy: number) => {
-      if (Math.abs(dy) > Math.abs(dx) * 0.75) return
-      if (dx < -40 && hasNext) goTo(currentIndex + 1)
-      else if (dx > 40 && hasPrev) goTo(currentIndex - 1)
+      if (Math.abs(dx) < 48) return
+      if (Math.abs(dy) > Math.abs(dx) * 0.85) return
+      if (dx < -48 && hasNext) goTo(currentIndex + 1)
+      else if (dx > 48 && hasPrev) goTo(currentIndex - 1)
     },
     [currentIndex, hasPrev, hasNext, goTo],
   )
@@ -310,9 +323,16 @@ export function AssetViewer({
           <p className="truncate text-[13px] font-semibold text-white">{title}</p>
           <p className="text-[10px] text-[#a1a1aa]">
             {currentLibrary?.name ?? "Library"} · {formatBytes(asset.sizeBytes)}
-            {assets.length > 1
-              ? ` · ${currentIndex + 1} / ${assets.length} · swipe or tap edges`
+            {isPdf && pdfTotal > 0
+              ? ` · Page ${pdfPage} / ${pdfTotal}`
               : ""}
+            {assets.length > 1
+              ? isPdf
+                ? ` · ${currentIndex + 1} / ${assets.length} · swipe ← → other files`
+                : ` · ${currentIndex + 1} / ${assets.length} · swipe ← →`
+              : isPdf && pdfTotal > 0
+                ? " · scroll up/down for pages"
+                : ""}
           </p>
         </div>
         <div className="size-9 shrink-0" />
@@ -330,8 +350,17 @@ export function AssetViewer({
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
       >
-        <div className="absolute inset-0 flex items-center justify-center p-2">
-          {previewLoading ? (
+        <div className={`absolute inset-0 flex ${isPdf ? "flex-col" : "items-center justify-center"} p-2`}>
+          {isPdf ? (
+            <MobilePdfViewer
+              connection={connection}
+              assetId={asset.id}
+              onPageChange={(page, total) => {
+                setPdfPage(page)
+                setPdfTotal(total)
+              }}
+            />
+          ) : previewLoading ? (
             <Loader2 className="size-8 animate-spin text-[#71717a]" />
           ) : textPreview ? (
             <div className="flex h-full w-full max-w-lg flex-col gap-2">

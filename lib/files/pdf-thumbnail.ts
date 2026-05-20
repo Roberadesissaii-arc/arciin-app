@@ -79,7 +79,7 @@ function enqueueRender(fn: () => Promise<void>) {
 
 let pdfjsInit: Promise<typeof import("pdfjs-dist")> | null = null
 
-function loadPdfJs() {
+export function loadPdfJs() {
   if (!pdfjsInit) {
     pdfjsInit = import("pdfjs-dist").then((pdfjsLib) => {
       pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
@@ -110,23 +110,29 @@ export function isPdfAsset(asset: {
   return name.endsWith(".pdf")
 }
 
-async function renderPdfThumbDataUrl(
+export async function fetchPdfDocument(
   connection: MobileConnection,
   assetId: string,
-): Promise<string | null> {
+) {
   const res = await fetch(
     assetDownloadFetchUrl(connection, assetId, true),
     assetDownloadRequestInit(connection),
   )
-  if (!res.ok) return null
-
+  if (!res.ok) throw new Error("pdf_fetch_failed")
   const data = await res.arrayBuffer()
   const pdfjsLib = await loadPdfJs()
-  const pdf = await pdfjsLib.getDocument({
+  return pdfjsLib.getDocument({
     data,
     disableAutoFetch: true,
     disableStream: true,
   }).promise
+}
+
+async function renderPdfThumbDataUrl(
+  connection: MobileConnection,
+  assetId: string,
+): Promise<string | null> {
+  const pdf = await fetchPdfDocument(connection, assetId)
 
   try {
     const page = await pdf.getPage(1)

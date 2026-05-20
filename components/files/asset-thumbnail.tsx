@@ -38,13 +38,20 @@ function FallbackIcon({
   }
 }
 
-function StatusOverlay({ asset }: { asset: AssetSummary }) {
-  if (asset.status === "READY") return null
+function ThumbnailCornerBadge({ label }: { label: string }) {
   return (
-    <span className="absolute inset-x-0 bottom-0 bg-black/55 py-1 text-center text-[9px] font-semibold uppercase tracking-wide text-white">
-      {asset.status === "PROCESSING" ? "Processing" : asset.status}
+    <span className="absolute bottom-1 right-1 rounded-md bg-black/35 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white/90">
+      {label}
     </span>
   )
+}
+
+function cornerBadgeLabel(asset: AssetSummary, thumbLoading: boolean, readyExt: string) {
+  if (asset.status !== "READY") {
+    return asset.status === "PROCESSING" ? "Processing" : asset.status
+  }
+  if (thumbLoading) return "Processing"
+  return readyExt
 }
 
 function PdfAssetThumbnail({ asset, connection, className = "", eager = false }: ThumbnailProps) {
@@ -73,6 +80,8 @@ function PdfAssetThumbnail({ asset, connection, className = "", eager = false }:
   }, [asset.id, eager])
 
   const ext = (asset.originalFilename.split(".").pop() ?? "pdf").toUpperCase()
+  const thumbLoading = visible && !thumb
+  const badge = cornerBadgeLabel(asset, thumbLoading, ext)
 
   return (
     <div
@@ -84,14 +93,14 @@ function PdfAssetThumbnail({ asset, connection, className = "", eager = false }:
         <>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={thumb} alt="" className="size-full object-cover" />
-          <span className="absolute bottom-1 right-1 rounded-md bg-black/35 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white/90">
-            {ext}
-          </span>
+          <ThumbnailCornerBadge label={badge} />
         </>
       ) : (
-        <FallbackIcon mediaType={asset.mediaType} loading />
+        <>
+          <FallbackIcon mediaType={asset.mediaType} loading={thumbLoading} />
+          <ThumbnailCornerBadge label={badge} />
+        </>
       )}
-      <StatusOverlay asset={asset} />
     </div>
   )
 }
@@ -169,7 +178,6 @@ function ServerAssetThumbnail({ asset, connection, className = "", eager = false
       ) : (
         <FallbackIcon mediaType={asset.mediaType} />
       )}
-      <StatusOverlay asset={asset} />
     </div>
   )
 }
