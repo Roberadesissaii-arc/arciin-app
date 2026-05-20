@@ -42,6 +42,7 @@ import { useConnection } from "@/components/providers/connection-provider"
 import { ArciinDarkGradientPanel } from "@/components/ui/arciin-dark-gradient-panel"
 import { getAuthMe } from "@/lib/api/auth"
 import { formatApiError } from "@/lib/api/errors"
+import { suppressFetchErrorWhenOffline } from "@/lib/connection/offline-ui"
 import { listLibraries } from "@/lib/api/libraries"
 
 function SectionLabel({ label }: { label: string }) {
@@ -125,7 +126,7 @@ function MenuCard({ children }: { children: React.ReactNode }) {
 }
 
 export function ProfilePage() {
-  const { connection, ready, updateUser } = useConnection()
+  const { connection, ready, updateUser, serverReachable } = useConnection()
   const PROFILE_STATS_STALE_MS = 90_000
   const profileStatsCache = useRef(
     new Map<string, { fileCount: number; libraryCount: number; fetchedAt: number }>(),
@@ -208,6 +209,7 @@ export function ProfilePage() {
 
   const user = connection?.user
   const roleLabel = user?.role ?? "Member"
+  const statsError = suppressFetchErrorWhenOffline(serverReachable, error)
   const avatarCacheKey = `${user?.id ?? ""}-${user?.avatarUrl ?? ""}-${user?.updatedAt ?? ""}`
 
   return (
@@ -276,12 +278,12 @@ export function ProfilePage() {
         </div>
       </ArciinDarkGradientPanel>
 
-      {error ? (
+      {statsError ? (
         <p
           className="rounded-xl px-4 py-3 text-center text-[12px] text-[#b91c1c]"
           style={{ backgroundColor: "#fef2f2", border: "1px solid #fecaca" }}
         >
-          {error}
+          {statsError}
         </p>
       ) : null}
 

@@ -9,6 +9,7 @@ import { MobileProviderCard } from "@/components/models/mobile-provider-card"
 import { useModelsChromeOptional } from "@/components/models/models-chrome-context"
 import { PageFetchErrorAlert } from "@/components/shell/page-fetch-error-alert"
 import { useConnection } from "@/components/providers/connection-provider"
+import { suppressFetchErrorWhenOffline } from "@/lib/connection/offline-ui"
 import { getChatSelection, setChatSelection } from "@/lib/api/chat"
 import { formatApiError } from "@/lib/api/errors"
 import { getModelProfiles, setDefaultModelProfile } from "@/lib/api/models"
@@ -61,17 +62,27 @@ export function MobileModelsPage() {
         if (def) setActiveProfileId(def.id)
       }
     } catch (err) {
-      setError(formatApiError(err))
+      setError(suppressFetchErrorWhenOffline(serverReachable, formatApiError(err)))
     } finally {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [])
+  }, [serverReachable])
 
   useEffect(() => {
     if (!ready || !sessionKey) return
+    if (!serverOnline) {
+      setLoading(false)
+      setRefreshing(false)
+      setError(null)
+      return
+    }
     void load()
-  }, [ready, sessionKey, load])
+  }, [ready, sessionKey, serverOnline, load])
+
+  useEffect(() => {
+    if (serverReachable === false) setError(null)
+  }, [serverReachable])
 
   const connectedCount = useMemo(
     () =>
@@ -94,9 +105,11 @@ export function MobileModelsPage() {
 
   const sheetProfile = sheetMeta ? profileForProvider(models, sheetMeta.id) : undefined
 
-  const subtitle = loading
-    ? "Loading providers…"
-    : `${connectedCount} of ${MODEL_PROVIDERS.length} connected`
+  const subtitle = !serverOnline
+    ? "Server disconnected"
+    : loading
+      ? "Loading providers…"
+      : `${connectedCount} of ${MODEL_PROVIDERS.length} connected`
 
   const onRefresh = useCallback(() => {
     void load({ refresh: true })
@@ -161,7 +174,7 @@ export function MobileModelsPage() {
       }
       setMessage(`${profile.displayName} is now your active model for chat.`)
     } catch (err) {
-      setError(formatApiError(err))
+      setError(suppressFetchErrorWhenOffline(serverReachable, formatApiError(err)))
     } finally {
       setBusyId(null)
     }
@@ -203,7 +216,16 @@ export function MobileModelsPage() {
           </p>
         ) : null}
 
-        {loading ? (
+        {!serverOnline && !loading ? (
+          <div
+            className="flex flex-col items-center justify-center rounded-2xl bg-white px-6 py-10"
+            style={{ border: "1px solid #e5e5e5" }}
+          >
+            <p className="text-center text-[13px] leading-relaxed text-[#717171]">
+              Server disconnected. Reconnect from the banner above or Profile → Change server.
+            </p>
+          </div>
+        ) : loading ? (
           <MobileModelsListSkeleton count={MODEL_PROVIDERS.length} />
         ) : visibleProviders.length === 0 ? (
           <div

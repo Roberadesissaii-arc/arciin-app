@@ -26,6 +26,12 @@ import { ArciinMark } from "@/components/ui/arciin-mark"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useChatChrome } from "@/components/chat/chat-chrome-context"
 import { useConnection } from "@/components/providers/connection-provider"
+import {
+  chatComposerFooterNote,
+  chatComposerPlaceholder,
+  suppressFetchErrorWhenOffline,
+  useServerOnline,
+} from "@/lib/connection/offline-ui"
 import { isOllamaProvider } from "@/lib/models/ollama-providers"
 import { resolveChatModelForProfile } from "@/lib/models/resolve-chat-model"
 import {
@@ -81,10 +87,12 @@ const CHAT_SUGGESTIONS = [
 
 function ChatWelcomePanel({
   profilesLoading,
+  serverOffline,
   needsModelSetup,
   onPickSuggestion,
 }: {
   profilesLoading: boolean
+  serverOffline: boolean
   needsModelSetup: boolean
   onPickSuggestion: (text: string) => void
 }) {
@@ -94,6 +102,25 @@ function ChatWelcomePanel({
         <Skeleton className="h-8 w-[7.5rem] rounded-lg" />
         <Skeleton className="h-3.5 w-52 max-w-full rounded-md" />
         <Skeleton className="h-3.5 w-44 max-w-full rounded-md" />
+      </div>
+    )
+  }
+
+  if (serverOffline) {
+    return (
+      <div className="chat-welcome flex flex-1 flex-col items-center justify-center gap-5 px-6">
+        <ArciinMark size="lg" />
+        <p className="max-w-[17rem] text-center text-[13px] leading-relaxed text-[#717171]">
+          Your Arciin server is disconnected. Reconnect under Profile → Change server, or use Try
+          again on the banner above.
+        </p>
+        <Link
+          href="/profile"
+          className="rounded-2xl px-6 py-3 text-[13px] font-semibold text-white active:opacity-90"
+          style={{ backgroundColor: "#ff4f12" }}
+        >
+          Open Profile
+        </Link>
       </div>
     )
   }
@@ -492,7 +519,7 @@ function applyPersistedMessageIds(
 }
 
 export function ChatPage() {
-  const { connection, ready } = useConnection()
+  const { connection, ready, serverReachable, serverOnline } = useServerOnline()
   const { setChrome } = useChatChrome()
   const [historyOpen, setHistoryOpen] = useState(false)
   const [profiles, setProfiles] = useState<ChatProfile[]>([])
@@ -504,7 +531,7 @@ export function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState("")
   const [streaming, setStreaming] = useState(false)
-  const [statusNote, setStatusNote] = useState("Chat connects to your Arciin API")
+  const [statusNote, setStatusNote] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [historyError, setHistoryError] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
@@ -536,7 +563,10 @@ export function ChatPage() {
   }, [])
 
   const loadProfiles = useCallback(async () => {
-    if (!connection) return
+    if (!connection || !serverOnline) {
+      setProfilesLoading(false)
+      return
+    }
     setProfilesLoading(true)
     try {
       const [list, remote] = await Promise.all([
@@ -560,14 +590,16 @@ export function ChatPage() {
       if (!model.trim() && isOllamaProvider(profile.provider)) {
         setStatusNote("Open the model picker and choose an Ollama model")
       }
-      setStatusNote("Chat connects to your Arciin API")
+      setStatusNote("")
+      setError(null)
     } catch (err) {
-      setError(formatApiError(err, serverHint(connection)))
-      setStatusNote("Could not reach the API")
+      const msg = formatApiError(err, serverHint(connection))
+      setError(suppressFetchErrorWhenOffline(serverReachable, msg))
+      setStatusNote("")
     } finally {
       setProfilesLoading(false)
     }
-  }, [applyProfileSelection, connection])
+  }, [applyProfileSelection, connection, serverOnline, serverReachable])
 
   const loadHistory = useCallback(async () => {
     if (!connection) return
@@ -576,11 +608,12 @@ export function ChatPage() {
       const list = await getChatConversations(connection)
       setConversations(list)
     } catch (err) {
-      setError(formatApiError(err, serverHint(connection)))
+      const msg = formatApiError(err, serverHint(connection))
+      setError(suppressFetchErrorWhenOffline(serverReachable, msg))
     } finally {
       setHistoryLoading(false)
     }
-  }, [connection])
+  }, [connection, serverReachable])
 
   const loadChatContext = useCallback(async () => {
     if (!connection) return
@@ -594,10 +627,19 @@ export function ChatPage() {
 
   useEffect(() => {
     if (!ready || !connection) return
+    if (!serverOnline) {
+      setProfilesLoading(false)
+      setError(null)
+      return
+    }
     void loadProfiles()
     void loadHistory()
     void loadChatContext()
-  }, [ready, connection, loadProfiles, loadHistory, loadChatContext])
+  }, [ready, connection, serverOnline, loadProfiles, loadHistory, loadChatContext])
+
+  useEffect(() => {
+    if (serverReachable === false) setError(null)
+  }, [serverReachable])
 
   useEffect(() => {
     if (!connection) return
@@ -670,7 +712,8 @@ export function ChatPage() {
       )
       setHistoryOpen(false)
     } catch (err) {
-      setError(formatApiError(err, serverHint(connection)))
+      const msg = formatApiError(err, serverHint(connection))
+      setError(suppressFetchErrorWhenOffline(serverReachable, msg))
     } finally {
       setLoadingConvoId(null)
     }
@@ -873,7 +916,7 @@ export function ChatPage() {
 
   async function sendMessage() {
     const text = input.trim()
-    if (!text || streaming || !connection || !selectedProfile) return
+    if (!text || streaming || !connection || !selectedProfile || !serverOnline) return
 
     const userMsg: ChatMessage = { id: createId(), role: "user", content: text }
     const assistantId = createId()
@@ -935,14 +978,14 @@ export function ChatPage() {
         conversationId: activeConvoId,
         pendingUserId: userMsg.id,
       })
-      setStatusNote("Chat connects to your Arciin API")
+      setStatusNote("")
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") {
         setMessages((prev) => prev.filter((m) => m.id !== assistantId || m.content))
       } else {
         const msg = formatApiError(err, serverHint(connection))
-        setError(msg)
-        setStatusNote(isNetworkError(err) ? "Could not reach server" : "Send failed")
+        setError(suppressFetchErrorWhenOffline(serverReachable, msg))
+        setStatusNote(isNetworkError(err) && serverReachable !== false ? "Send failed" : "")
         setMessages((prev) => prev.filter((m) => m.id !== assistantId))
       }
     } finally {
@@ -952,7 +995,7 @@ export function ChatPage() {
   }
 
   async function regenerateAssistantMessage(assistantMsgId: string) {
-    if (streaming || !connection || !selectedProfile) return
+    if (streaming || !connection || !selectedProfile || !serverOnline) return
     const aiIdx = messages.findIndex((m) => m.id === assistantMsgId)
     if (aiIdx <= 0) return
     const userMsg = messages[aiIdx - 1]
@@ -983,21 +1026,39 @@ export function ChatPage() {
       if (err instanceof Error && err.name === "AbortError") {
         setMessages((prev) => prev.filter((m) => m.id !== assistantId || m.content))
       } else {
-        setError(formatApiError(err, serverHint(connection)))
-        setStatusNote(isNetworkError(err) ? "Could not reach server" : "Regenerate failed")
+        const msg = formatApiError(err, serverHint(connection))
+        setError(suppressFetchErrorWhenOffline(serverReachable, msg))
+        setStatusNote(isNetworkError(err) && serverReachable !== false ? "Regenerate failed" : "")
         setMessages((prev) => prev.filter((m) => m.id !== assistantId))
       }
     } finally {
       setStreaming(false)
       abortRef.current = null
-      setStatusNote("Chat connects to your Arciin API")
+      setStatusNote("")
     }
   }
 
   const showWelcome = messages.length === 0
-  const needsModelSetup = !profilesLoading && profiles.length === 0
-  const canSend = Boolean(input.trim()) && !streaming && selectedProfile && !profilesLoading
-  const canStop = streaming && Boolean(selectedProfile)
+  const serverOffline = !serverOnline
+  const needsModelSetup = serverOnline && !profilesLoading && profiles.length === 0
+  const hasModel = Boolean(selectedProfile)
+  const canSend =
+    Boolean(input.trim()) && !streaming && hasModel && !profilesLoading && serverOnline
+  const canStop = streaming && hasModel && serverOnline
+  const composerFooter = chatComposerFooterNote({
+    serverOnline,
+    profilesLoading,
+    streaming,
+    hasModel,
+    activityNote: statusNote || undefined,
+  })
+  const composerPlaceholder = chatComposerPlaceholder({
+    serverOnline,
+    profilesLoading,
+    streaming,
+    hasModel,
+  })
+  const visibleChatError = suppressFetchErrorWhenOffline(serverReachable, error)
 
   function handleInputChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
     setInput(e.target.value)
@@ -1022,12 +1083,12 @@ export function ChatPage() {
         onDelete={(id) => void handleDeleteConversation(id)}
       />
 
-      {error ? (
+      {visibleChatError ? (
         <div
           className="mb-3 shrink-0 rounded-xl px-3 py-2 text-[12px] text-[#b91c1c]"
           style={{ backgroundColor: "#fef2f2", border: "1px solid #fecaca" }}
         >
-          {error}
+          {visibleChatError}
         </div>
       ) : null}
 
@@ -1035,6 +1096,7 @@ export function ChatPage() {
         {showWelcome ? (
           <ChatWelcomePanel
             profilesLoading={profilesLoading}
+            serverOffline={serverOffline}
             needsModelSetup={needsModelSetup}
             onPickSuggestion={setInput}
           />
@@ -1075,7 +1137,7 @@ export function ChatPage() {
           className="flex items-center gap-2 rounded-2xl bg-white px-2 py-2 shadow-[0_2px_12px_rgba(0,0,0,0.06)]"
           style={{ border: "1px solid #e5e5e5" }}
         >
-          {connection && profiles.length > 0 ? (
+          {connection && profiles.length > 0 && serverOnline ? (
             <ChatModelBar
               variant="composer"
               connection={connection}
@@ -1105,16 +1167,8 @@ export function ChatPage() {
                 else void sendMessage()
               }
             }}
-            placeholder={
-              streaming
-                ? "Generating… tap Stop to interrupt"
-                : profilesLoading
-                  ? "Loading…"
-                  : !selectedProfile
-                    ? "No AI model configured"
-                    : "Ask anything…"
-            }
-            disabled={profilesLoading || !selectedProfile}
+            placeholder={composerPlaceholder}
+            disabled={profilesLoading || !hasModel || !serverOnline}
             className="max-h-[120px] min-h-[24px] min-w-0 flex-1 resize-none bg-transparent py-1 text-[14px] leading-snug text-[#222222] outline-none placeholder:text-[#a0a0a0] disabled:opacity-50"
           />
           {canStop ? (
@@ -1140,20 +1194,13 @@ export function ChatPage() {
           )}
         </div>
         <p className="mt-1.5 text-center text-[10px] text-[#a0a0a0]">
-          {profilesLoading ? (
-            <span className="inline-flex items-center gap-1">
-              <Loader2 className="size-2.5 animate-spin" />
-              Connecting…
-            </span>
-          ) : streaming ? (
+          {streaming && statusNote ? (
             <span className="inline-flex items-center gap-1">
               <Loader2 className="size-2.5 animate-spin" />
               {statusNote}
             </span>
-          ) : error ? (
-            <span className="text-[#b91c1c]">{statusNote}</span>
           ) : (
-            statusNote
+            composerFooter
           )}
         </p>
       </div>

@@ -8,6 +8,8 @@ import { formatApiError } from "@/lib/api/errors"
 import { getStorageSettings, getStorageVolumes, updateStorageSettings } from "@/lib/api/settings"
 import { getUserPreferences, updateUserPreferences } from "@/lib/api/user-preferences"
 import { useStablePanelLoad } from "@/lib/hooks/use-stable-panel-load"
+import { suppressFetchErrorWhenOffline } from "@/lib/connection/offline-ui"
+import { useConnection } from "@/components/providers/connection-provider"
 import { formatBytes } from "@/lib/utils/format-bytes"
 import type { StorageSettings, StorageVolumeOption, StorageVolumesResponse } from "@/lib/types/models"
 
@@ -35,6 +37,7 @@ function DrivesSkeleton() {
 }
 
 export function StorageInlinePanel({ enabled }: { enabled: boolean }) {
+  const { serverReachable } = useConnection()
   const settingsLoader = useCallback(
     (connection: Parameters<typeof getStorageSettings>[0], signal: AbortSignal) =>
       getStorageSettings(connection, signal),
@@ -155,8 +158,10 @@ export function StorageInlinePanel({ enabled }: { enabled: boolean }) {
         description="Files and libraries are stored on disk under your configured root path on this server."
       />
 
-      {settingsError && !usage ? (
-        <p className="text-[12px] text-[#b91c1c]">{settingsError}</p>
+      {suppressFetchErrorWhenOffline(serverReachable, settingsError) && !usage ? (
+        <p className="text-[12px] text-[#b91c1c]">
+          {suppressFetchErrorWhenOffline(serverReachable, settingsError)}
+        </p>
       ) : null}
 
       <div className="rounded-xl bg-[#f7f7f7] p-3" style={{ border: "1px solid #e5e5e5" }}>

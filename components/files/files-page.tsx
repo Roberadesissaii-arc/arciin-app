@@ -12,6 +12,7 @@ import { PageFetchErrorAlert } from "@/components/shell/page-fetch-error-alert"
 import { useConnection } from "@/components/providers/connection-provider"
 import { getAssets } from "@/lib/api/assets"
 import { formatApiError } from "@/lib/api/errors"
+import { suppressFetchErrorWhenOffline } from "@/lib/connection/offline-ui"
 import { deleteFolder, listFolders, renameFolder } from "@/lib/api/folders"
 import { listLibraries } from "@/lib/api/libraries"
 import { uploadFile } from "@/lib/api/uploads"
@@ -87,7 +88,8 @@ function SectionPlaceholder({
 }
 
 export function FilesPage() {
-  const { connection, ready } = useConnection()
+  const { connection, ready, serverReachable } = useConnection()
+  const serverOnline = serverReachable !== false
   const { setChrome } = useFilesChrome()
   const inputRef = useRef<HTMLInputElement>(null)
   const [filter, setFilter] = useState<FilesFilterId>("all")
@@ -202,7 +204,9 @@ export function FilesPage() {
         setAssets(list)
         setHasCache(true)
       } catch (err) {
-        if (!signal?.aborted && !cached) setError(formatApiError(err))
+        if (!signal?.aborted && !cached) {
+          setError(suppressFetchErrorWhenOffline(serverReachable, formatApiError(err)))
+        }
       } finally {
         if (!signal?.aborted) {
           setLoading(false)
@@ -210,15 +214,23 @@ export function FilesPage() {
         }
       }
     },
-    [applyCache, connection, filter, folderId, libraries],
+    [applyCache, connection, filter, folderId, libraries, serverReachable],
   )
 
   useEffect(() => {
     if (!ready || !connection) return
+    if (!serverOnline) {
+      setError(null)
+      return
+    }
     const controller = new AbortController()
     void load(controller.signal)
     return () => controller.abort()
-  }, [ready, connection, load])
+  }, [ready, connection, serverOnline, load])
+
+  useEffect(() => {
+    if (serverReachable === false) setError(null)
+  }, [serverReachable])
 
   const changeFilter = useCallback(
     (id: FilesFilterId) => {
@@ -375,7 +387,7 @@ export function FilesPage() {
       hasCache,
       refreshing,
       uploading,
-      canUpload: Boolean(connection) && !allFoldersOpen,
+      canUpload: Boolean(connection) && serverOnline && !allFoldersOpen,
       canCreateFolder: Boolean(connection && activeLibraryId) && !allFoldersOpen,
       onRefresh: triggerRefresh,
       onUpload: triggerUpload,
@@ -398,6 +410,7 @@ export function FilesPage() {
     refreshing,
     uploading,
     connection,
+    serverOnline,
     activeLibraryId,
     visibleFolders.length,
     setChrome,
