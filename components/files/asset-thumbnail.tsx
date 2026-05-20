@@ -3,12 +3,27 @@
 import { useEffect, useState } from "react"
 import { Clapperboard, FileText, Files, Image as ImageIcon, Loader2, Music4 } from "lucide-react"
 
+import { usePdfThumbnail } from "@/hooks/use-pdf-thumbnail"
 import { getCachedThumbnailUrl, loadThumbnail } from "@/lib/files/thumbnail-cache"
+import { isPdfAsset } from "@/lib/files/pdf-thumbnail"
 import type { MobileConnection } from "@/lib/types/api"
 import type { AssetSummary } from "@/lib/types/assets"
 
-function FallbackIcon({ mediaType }: { mediaType: string }) {
-  const className = "size-7 text-[#c0c0c0]"
+type ThumbnailProps = {
+  asset: AssetSummary
+  connection: MobileConnection
+  className?: string
+  eager?: boolean
+}
+
+function FallbackIcon({
+  mediaType,
+  loading = false,
+}: {
+  mediaType: string
+  loading?: boolean
+}) {
+  const className = `size-7 text-[#c0c0c0]${loading ? " arciin-doc-icon-pulse" : ""}`
   switch (mediaType) {
     case "VIDEO":
       return <Clapperboard className={className} />
@@ -23,33 +38,66 @@ function FallbackIcon({ mediaType }: { mediaType: string }) {
   }
 }
 
-function assetWantsThumbnail(
-  asset: AssetSummary,
-  documentThumbnailsEnabled: boolean,
-): boolean {
-  if (asset.mediaType === "IMAGE" || asset.mediaType === "VIDEO") return true
-  if (!documentThumbnailsEnabled) return false
-  const mime = (asset.mimeType ?? "").toLowerCase()
-  if (mime === "application/pdf") return true
-  const name = (asset.originalFilename ?? "").toLowerCase()
-  return name.endsWith(".pdf")
+function StatusOverlay({ asset }: { asset: AssetSummary }) {
+  if (asset.status === "READY") return null
+  return (
+    <span className="absolute inset-x-0 bottom-0 bg-black/55 py-1 text-center text-[9px] font-semibold uppercase tracking-wide text-white">
+      {asset.status === "PROCESSING" ? "Processing" : asset.status}
+    </span>
+  )
 }
 
-export function AssetThumbnail({
-  asset,
-  connection,
-  className = "",
-  eager = false,
-  documentThumbnailsEnabled = false,
-}: {
-  asset: AssetSummary
-  connection: MobileConnection
-  className?: string
-  /** When true, fetch even if not in viewport (viewer). */
-  eager?: boolean
-  documentThumbnailsEnabled?: boolean
-}) {
-  const wantsThumb = assetWantsThumbnail(asset, documentThumbnailsEnabled)
+function PdfAssetThumbnail({ asset, connection, className = "", eager = false }: ThumbnailProps) {
+  const [inView, setInView] = useState(Boolean(eager))
+  const visible = eager || inView
+  const thumb = usePdfThumbnail(connection, asset.id, asset.updatedAt, visible)
+
+  useEffect(() => {
+    if (eager) return
+    const el = document.getElementById(`thumb-${asset.id}`)
+    if (!el || !("IntersectionObserver" in window)) {
+      setInView(true)
+      return
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setInView(true)
+          observer.disconnect()
+        }
+      },
+      { rootMargin: "120px" },
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [asset.id, eager])
+
+  const ext = (asset.originalFilename.split(".").pop() ?? "pdf").toUpperCase()
+
+  return (
+    <div
+      id={`thumb-${asset.id}`}
+      className={`relative flex aspect-square w-full items-center justify-center overflow-hidden rounded-xl bg-[#f0f0f0] ${className}`}
+      style={{ border: "1px solid #e8e8e8" }}
+    >
+      {thumb ? (
+        <>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={thumb} alt="" className="size-full object-cover" />
+          <span className="absolute bottom-1 right-1 rounded-md bg-black/35 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white/90">
+            {ext}
+          </span>
+        </>
+      ) : (
+        <FallbackIcon mediaType={asset.mediaType} loading />
+      )}
+      <StatusOverlay asset={asset} />
+    </div>
+  )
+}
+
+function ServerAssetThumbnail({ asset, connection, className = "", eager = false }: ThumbnailProps) {
+  const wantsThumb = asset.mediaType === "IMAGE" || asset.mediaType === "VIDEO"
   const cached = wantsThumb ? getCachedThumbnailUrl(asset.id) : null
 
   const [src, setSrc] = useState<string | null>(cached)
@@ -121,11 +169,38 @@ export function AssetThumbnail({
       ) : (
         <FallbackIcon mediaType={asset.mediaType} />
       )}
-      {asset.status !== "READY" ? (
-        <span className="absolute inset-x-0 bottom-0 bg-black/55 py-1 text-center text-[9px] font-semibold uppercase tracking-wide text-white">
-          {asset.status === "PROCESSING" ? "Processing" : asset.status}
-        </span>
-      ) : null}
+      <StatusOverlay asset={asset} />
     </div>
+  )
+}
+
+export function AssetThumbnail({
+  asset,
+  connection,
+  className = "",
+  eager = false,
+  documentThumbnailsEnabled = false,
+}: ThumbnailProps & {
+  /** When true, fetch even if not in viewport (viewer). */
+  documentThumbnailsEnabled?: boolean
+}) {
+  if (documentThumbnailsEnabled && isPdfAsset(asset)) {
+    return (
+      <PdfAssetThumbnail
+        asset={asset}
+        connection={connection}
+        className={className}
+        eager={eager}
+      />
+    )
+  }
+
+  return (
+    <ServerAssetThumbnail
+      asset={asset}
+      connection={connection}
+      className={className}
+      eager={eager}
+    />
   )
 }
