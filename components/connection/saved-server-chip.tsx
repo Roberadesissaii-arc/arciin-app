@@ -4,45 +4,31 @@ import { Server } from "lucide-react"
 
 import { getServerAddressDisplay } from "@/lib/connection/normalize-url"
 
-export function SavedServerChip({
+/** Login only: minimal row when a real public domain is saved (not LAN, tunnel, or Vercel). */
+export function LoginDomainChip({
   apiBaseUrl,
   webUrl,
-  caption = "Your Arciin server (saved on this phone)",
 }: {
   apiBaseUrl: string
   webUrl?: string | null
-  caption?: string
 }) {
-  const { kindLabel, host, hint, kind } = getServerAddressDisplay(apiBaseUrl, webUrl)
-  const needsAttention = kind === "app_host" || kind === "localhost" || kind === "tunnel"
+  const display = getServerAddressDisplay(apiBaseUrl, webUrl)
+  if (display.kind !== "public") return null
 
   return (
     <div
-      className="rounded-xl px-3 py-2.5"
-      style={{
-        backgroundColor: needsAttention ? "#fffbeb" : "#f7f7f7",
-        border: `1px solid ${needsAttention ? "#fde68a" : "#efefef"}`,
-      }}
+      className="flex min-w-0 items-center gap-2 rounded-xl px-3 py-2"
+      style={{ backgroundColor: "#f7f7f7", border: "1px solid #efefef" }}
     >
-      <div className="flex min-w-0 items-start gap-2.5">
-        <Server className="mt-0.5 size-3.5 shrink-0 text-[#ff4f12]" aria-hidden />
-        <div className="min-w-0 flex-1 overflow-hidden">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-[#a0a0a0]">
-            {caption}
-          </p>
-          <p
-            className="mt-0.5 truncate text-[13px] font-medium text-[#222222]"
-            title={`${kindLabel}: ${host}`}
-          >
-            <span className="text-[#717171]">{kindLabel}</span>
-            <span className="text-[#c0c0c0]"> · </span>
-            <span className="font-mono text-[12px]">{host}</span>
-          </p>
-          {hint ? (
-            <p className="mt-1.5 text-[11px] leading-relaxed text-[#b45309]">{hint}</p>
-          ) : null}
-        </div>
-      </div>
+      <Server className="size-3.5 shrink-0 text-[#ff4f12]" aria-hidden />
+      <p
+        className="min-w-0 flex-1 truncate text-[12px] text-[#717171]"
+        title={display.host}
+      >
+        <span className="text-[#a0a0a0]">Domain</span>
+        <span className="text-[#c0c0c0]"> · </span>
+        <span className="font-mono text-[12px] text-[#222222]">{display.host}</span>
+      </p>
     </div>
   )
 }

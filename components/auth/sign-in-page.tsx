@@ -19,7 +19,7 @@ import {
   saveServerProfile,
 } from "@/lib/connection/storage"
 import { BrandHeroCarousel } from "@/components/auth/brand-hero"
-import { SavedServerChip } from "@/components/connection/saved-server-chip"
+import { LoginDomainChip } from "@/components/connection/saved-server-chip"
 import { useConnection } from "@/components/providers/connection-provider"
 
 function SuccessScreen({ serverUrl }: { serverUrl: string }) {
@@ -574,7 +574,7 @@ export function SignInPage() {
         >
           <form onSubmit={handleSignIn} className="flex flex-col gap-3.5">
             {serverProfile?.apiBaseUrl ? (
-              <SavedServerChip
+              <LoginDomainChip
                 apiBaseUrl={serverProfile.apiBaseUrl}
                 webUrl={serverProfile.webUrl}
               />
@@ -663,11 +663,11 @@ export function SignInPage() {
                 }}
               />
               <Field
-                label={serverAddressMode === "remote" ? "Public URL" : "Server IP address"}
+                label={serverAddressMode === "remote" ? "Domain" : "Server IP address"}
                 icon={Globe}
                 placeholder={
                   serverAddressMode === "remote"
-                    ? "https://arciin.example.com"
+                    ? "https://your-domain.com"
                     : "192.168.1.100"
                 }
                 value={serverUrl}

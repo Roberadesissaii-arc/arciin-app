@@ -7,7 +7,6 @@ import { Loader2, Server } from "lucide-react"
 import { SettingsIntroCard } from "@/components/settings/settings-intro-card"
 import { useConnection } from "@/components/providers/connection-provider"
 import { formatApiError } from "@/lib/api/errors"
-import { SavedServerChip } from "@/components/connection/saved-server-chip"
 import { serverAddressFromProfile } from "@/lib/connection/reconnect-server"
 import { loadServerProfile } from "@/lib/connection/storage"
 import { dispatchAppForeground } from "@/lib/hooks/use-app-foreground"
@@ -70,19 +69,10 @@ export function ChangeServerInlinePanel({ enabled }: { enabled: boolean }) {
         description="Point this app at a different Arciin instance. Use a LAN IP on Wi‑Fi or a public URL / tunnel when you are away from home."
       />
 
-      {profile?.apiBaseUrl ? (
-        <>
-          <SavedServerChip
-            apiBaseUrl={profile.apiBaseUrl}
-            webUrl={profile.webUrl}
-            caption="Current server"
-          />
-          {serverReachable === false ? (
-            <p className="text-[12px] text-[#b45309]">
-              Cannot reach this server right now. Paste an updated URL below.
-            </p>
-          ) : null}
-        </>
+      {serverReachable === false ? (
+        <p className="text-[12px] text-[#b45309]">
+          Cannot reach this server right now. Paste an updated URL below.
+        </p>
       ) : null}
 
       <div className="space-y-3">
