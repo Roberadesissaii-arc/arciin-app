@@ -306,7 +306,7 @@ export function ProfilePage() {
           <SettingsGroupItem
             icon={Server}
             label="Change server"
-            sub="Connect to another Arciin instance"
+            sub="Switch between saved Arciin servers"
             open={sectionOpen("change-server")}
             onToggle={() => toggleSection("change-server")}
           >

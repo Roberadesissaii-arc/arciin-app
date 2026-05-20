@@ -21,6 +21,10 @@ function isActive(pathname: string, href: string) {
 export function BottomNav() {
   const pathname = usePathname()
 
+  if (pathname === "/chat" || pathname.startsWith("/chat/")) {
+    return null
+  }
+
   return (
     <nav
       aria-label="Main navigation"

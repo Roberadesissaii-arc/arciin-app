@@ -1,5 +1,6 @@
 import { fetchApi } from "@/lib/api/client"
 import { ApiError, parseApiError } from "@/lib/api/errors"
+import { normalizeApiBase } from "@/lib/connection/normalize-url"
 import type { MobileConnection } from "@/lib/types/api"
 import type {
   ChatConversationDetail,
@@ -96,8 +97,8 @@ export async function streamChat(
   },
   handlers: StreamHandlers,
 ): Promise<void> {
-  const base = connection.apiBaseUrl.replace(/\/+$/, "")
-  const url = `${base}/chat`
+  const apiBase = normalizeApiBase(connection.apiBaseUrl)
+  const url = `${apiBase.replace(/\/+$/, "")}/chat`
 
   let response: Response
   try {

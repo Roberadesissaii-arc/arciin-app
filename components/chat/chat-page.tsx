@@ -1,7 +1,9 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
+import { useRouter } from "next/navigation"
 import {
+  ChevronLeft,
   Clock,
   Loader2,
   MessageSquare,
@@ -231,6 +233,7 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export function ChatPage() {
+  const router = useRouter()
   const { connection, ready } = useConnection()
   const [historyOpen, setHistoryOpen] = useState(false)
   const [profiles, setProfiles] = useState<ChatProfile[]>([])
@@ -475,8 +478,16 @@ export function ChatPage() {
   const showWelcome = messages.length === 0
   const canSend = Boolean(input.trim()) && !streaming && selectedProfile && !profilesLoading
 
+  function goBack() {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back()
+    } else {
+      router.push("/home")
+    }
+  }
+
   return (
-    <div className="chat-page">
+    <div className="chat-page px-4">
       <HistoryDrawer
         open={historyOpen}
         onClose={() => setHistoryOpen(false)}
@@ -489,18 +500,22 @@ export function ChatPage() {
         onDelete={(id) => void handleDeleteConversation(id)}
       />
 
-      <div className="flex shrink-0 items-start justify-between gap-3 pb-3">
-        <div>
-          <h2
-            className="text-[22px] font-bold tracking-tight text-[#222222]"
-            style={{ fontFamily: "var(--font-space-grotesk, sans-serif)" }}
-          >
-            Chat
-          </h2>
-          <p className="mt-0.5 text-[13px] text-[#717171]">
-            Ask about your files, libraries, and instance.
-          </p>
-        </div>
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[#ececec] pb-3 pt-1">
+        <button
+          type="button"
+          onClick={goBack}
+          className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white text-[#222222] active:opacity-70"
+          style={{ border: "1px solid #e5e5e5" }}
+          aria-label="Go back"
+        >
+          <ChevronLeft className="size-5" />
+        </button>
+        <p
+          className="min-w-0 flex-1 truncate text-center text-[16px] font-bold text-[#222222]"
+          style={{ fontFamily: "var(--font-space-grotesk, sans-serif)" }}
+        >
+          Chat
+        </p>
         <button
           type="button"
           onClick={() => setHistoryOpen(true)}

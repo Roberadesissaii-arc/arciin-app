@@ -22,7 +22,12 @@ import { isLoopbackApiBase } from "@/lib/connection/normalize-url"
 import { reconnectToServer, type ReconnectResult } from "@/lib/connection/reconnect-server"
 import { isNetworkError } from "@/lib/api/errors"
 import {
-  clearConnection,
+  connectionFromAccount,
+  listMobileAccounts,
+  setActiveAccount,
+  type MobileAccount,
+} from "@/lib/connection/accounts"
+import {
   clearSession,
   connectionFromAuth,
   isConnectionExpired,
@@ -50,6 +55,8 @@ type ConnectionContextValue = {
   updateUser: (user: MobileConnection["user"]) => void
   signOut: () => void
   forgetServer: () => void
+  accounts: MobileAccount[]
+  switchAccount: (accountId: string) => Promise<boolean>
 }
 
 const ConnectionContext = createContext<ConnectionContextValue | null>(null)
@@ -58,6 +65,12 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
   const [connection, setConnection] = useState<MobileConnection | null>(null)
   const [ready, setReady] = useState(false)
   const [serverReachable, setServerReachable] = useState<boolean | null>(null)
+  const [accountsTick, setAccountsTick] = useState(0)
+
+  const accounts = useMemo(() => {
+    void accountsTick
+    return listMobileAccounts()
+  }, [accountsTick, connection?.apiBaseUrl])
 
   const applyAuth = useCallback((auth: MobileAuthResult, requestApiBase?: string) => {
     const saved = loadServerProfile()?.apiBaseUrl
@@ -72,6 +85,7 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
     const next = connectionFromAuth(merged)
     saveConnection(next)
     setConnection(next)
+    setAccountsTick((n) => n + 1)
   }, [])
 
   const refresh = useCallback(async () => {
@@ -202,8 +216,59 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const forgetServer = useCallback(() => {
-    clearConnection()
+    clearSession()
     setConnection(null)
+    setAccountsTick((n) => n + 1)
+  }, [])
+
+  const switchAccount = useCallback(async (accountId: string) => {
+    const account = setActiveAccount(accountId)
+    if (!account) return false
+
+    const stored = connectionFromAccount(account)
+    if (!stored || isConnectionExpired(stored)) {
+      clearSession()
+      setConnection(null)
+      setAccountsTick((n) => n + 1)
+      return false
+    }
+
+    if (isLoopbackApiBase(stored.apiBaseUrl)) {
+      clearSession()
+      setConnection(null)
+      setAccountsTick((n) => n + 1)
+      return false
+    }
+
+    setConnection(stored)
+    try {
+      const me = await getAuthMe(stored)
+      const next = { ...stored, user: me.user }
+      saveConnection(next)
+      setConnection(next)
+      setServerReachable(true)
+      setAccountsTick((n) => n + 1)
+      dispatchAppForeground()
+      return true
+    } catch (err) {
+      if (isAuthFailure(err)) {
+        clearSession()
+        setConnection(null)
+        setServerReachable(null)
+        setAccountsTick((n) => n + 1)
+        return false
+      }
+      if (isNetworkError(err)) {
+        setConnection(stored)
+        setServerReachable(false)
+        setAccountsTick((n) => n + 1)
+        return true
+      }
+      setConnection(stored)
+      setServerReachable(true)
+      setAccountsTick((n) => n + 1)
+      return true
+    }
   }, [])
 
   const probeServerOnForeground = useCallback(async () => {
@@ -243,6 +308,8 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
       updateUser,
       signOut,
       forgetServer,
+      accounts,
+      switchAccount,
     }),
     [
       connection,
@@ -254,6 +321,8 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
       updateUser,
       signOut,
       forgetServer,
+      accounts,
+      switchAccount,
     ],
   )
 

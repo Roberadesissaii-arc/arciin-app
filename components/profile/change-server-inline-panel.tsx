@@ -1,120 +1,167 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Loader2, Server } from "lucide-react"
+import { Check, Loader2, Plus, Server } from "lucide-react"
 
-import { SettingsIntroCard } from "@/components/settings/settings-intro-card"
 import { useConnection } from "@/components/providers/connection-provider"
 import { formatApiError } from "@/lib/api/errors"
-import { serverAddressFromProfile } from "@/lib/connection/reconnect-server"
-import { loadServerProfile } from "@/lib/connection/storage"
-import { dispatchAppForeground } from "@/lib/hooks/use-app-foreground"
+import {
+  connectionFromAccount,
+  getActiveAccountId,
+  setActiveAccount,
+  type MobileAccount,
+} from "@/lib/connection/accounts"
+import { displayServerLabel } from "@/lib/connection/normalize-url"
+import { isConnectionExpired } from "@/lib/connection/storage"
+
+function serverSubtitle(account: MobileAccount): string {
+  return displayServerLabel(account.server.apiBaseUrl, account.server.instanceName)
+}
 
 export function ChangeServerInlinePanel({ enabled }: { enabled: boolean }) {
   const router = useRouter()
-  const { connection, reconnectServer, refresh, forgetServer, serverReachable } = useConnection()
-
-  const [serverAddress, setServerAddress] = useState("")
-  const [connecting, setConnecting] = useState(false)
-  const [message, setMessage] = useState<string | null>(null)
+  const { connection, accounts, switchAccount, refresh } = useConnection()
+  const [switchingId, setSwitchingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [message, setMessage] = useState<string | null>(null)
 
-  const profile = loadServerProfile()
+  const activeId = getActiveAccountId()
 
   useEffect(() => {
     if (!enabled) return
-    setServerAddress(serverAddressFromProfile())
-    setMessage(null)
     setError(null)
+    setMessage(null)
   }, [enabled, connection?.apiBaseUrl])
 
-  async function handleConnect() {
-    setConnecting(true)
-    setError(null)
-    setMessage(null)
-    try {
-      const result = await reconnectServer(serverAddress)
-      if (result.status === "connected") {
-        setMessage("Connected. Your session is still active — no pairing code needed.")
-        dispatchAppForeground()
-        await refresh()
-        return
+  const handleSwitch = useCallback(
+    async (account: MobileAccount) => {
+      if (account.id === activeId && connection) return
+      setSwitchingId(account.id)
+      setError(null)
+      setMessage(null)
+      try {
+        const conn = connectionFromAccount(account)
+        if (!conn || isConnectionExpired(conn)) {
+          setActiveAccount(account.id)
+          router.push("/sign-in")
+          return
+        }
+        const ok = await switchAccount(account.id)
+        if (ok) {
+          setMessage(`Switched to ${account.server.instanceName}.`)
+          await refresh()
+        } else {
+          router.push("/sign-in")
+        }
+      } catch (err) {
+        setError(formatApiError(err))
+      } finally {
+        setSwitchingId(null)
       }
-      if (result.status === "need_sign_in") {
-        setMessage("Server updated. Sign in with your email and password on this instance.")
-        router.push("/sign-in")
-        return
-      }
-      setError(result.message)
-    } catch (err) {
-      setError(formatApiError(err, serverAddress))
-    } finally {
-      setConnecting(false)
-    }
-  }
+    },
+    [activeId, connection, refresh, router, switchAccount],
+  )
 
-  function handleSetupNewServer() {
-    forgetServer()
+  function handleAddServer() {
     router.push("/sign-in?new=1")
   }
 
   if (!enabled) return null
 
+  const sorted = [...accounts].sort((a, b) => {
+    if (a.id === activeId) return -1
+    if (b.id === activeId) return 1
+    return Date.parse(b.lastUsedAt) - Date.parse(a.lastUsedAt)
+  })
+
   return (
     <div className="flex flex-col gap-4">
-      <SettingsIntroCard
-        icon={Server}
-        title="Change server"
-        description="Switch to another Arciin server you already use, or set up this phone again with a new server."
-      />
-
-      {serverReachable === false ? (
-        <p className="text-[12px] text-[#b45309]">
-          Cannot reach this server right now. Paste an updated URL below.
-        </p>
-      ) : null}
-
-      <div className="space-y-3">
-        <div>
-          <label htmlFor="change-server-url" className="text-[12px] font-semibold text-[#222222]">
-            New server address
-          </label>
-          <input
-            id="change-server-url"
-            type="url"
-            value={serverAddress}
-            onChange={(e) => setServerAddress(e.target.value)}
-            placeholder="http://192.168.1.10:3004 or https://your-server.example.com"
-            className="mt-1.5 w-full rounded-xl bg-[#f7f7f7] px-4 py-3 font-mono text-[13px] text-[#222222] outline-none focus:ring-2 focus:ring-[#ff4f12]/30"
-            style={{ border: "1px solid #e5e5e5" }}
-            autoComplete="url"
-            inputMode="url"
-          />
-        </div>
-        <button
-          type="button"
-          disabled={connecting || !serverAddress.trim()}
-          onClick={() => void handleConnect()}
-          className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#ff4f12] text-[14px] font-semibold text-white disabled:opacity-50"
-        >
-          {connecting ? <Loader2 className="size-4 animate-spin" /> : null}
-          {connecting ? "Connecting…" : "Connect to this server"}
-        </button>
-        {error ? <p className="text-[12px] text-[#b91c1c]">{error}</p> : null}
-        {message ? <p className="text-[12px] text-[#15803d]">{message}</p> : null}
-        <p className="text-[11px] leading-relaxed text-[#a0a0a0]">
-          Updates the saved address. If your session is still valid, you stay signed in.
+      <div>
+        <p className="text-[13px] font-semibold text-[#222222]">Your servers</p>
+        <p className="mt-1 text-[12px] leading-relaxed text-[#717171]">
+          Tap a server to switch — like switching accounts. No sign-in needed if that server is
+          still signed in on this phone.
         </p>
       </div>
 
+      {error ? <p className="text-[12px] text-[#b91c1c]">{error}</p> : null}
+      {message ? <p className="text-[12px] text-[#15803d]">{message}</p> : null}
+
+      <ul className="flex flex-col gap-2">
+        {sorted.length === 0 ? (
+          <li
+            className="rounded-xl px-4 py-3 text-[13px] text-[#717171]"
+            style={{ border: "1px solid #e5e5e5", backgroundColor: "#f7f7f7" }}
+          >
+            No servers saved yet. Set up your first Arciin server below.
+          </li>
+        ) : (
+          sorted.map((account) => {
+            const isActive = account.id === activeId
+            const accountConn = connectionFromAccount(account)
+            const hasSession = Boolean(
+              accountConn && account.session && !isConnectionExpired(accountConn),
+            )
+            const busy = switchingId === account.id
+
+            return (
+              <li key={account.id}>
+                <button
+                  type="button"
+                  disabled={Boolean(switchingId) || (isActive && Boolean(connection))}
+                  onClick={() => void handleSwitch(account)}
+                  className="flex w-full items-center gap-3 rounded-xl bg-white px-3.5 py-3 text-left active:bg-[#f7f7f7] disabled:opacity-60"
+                  style={{
+                    border: isActive
+                      ? "1.5px solid rgba(255,79,18,0.45)"
+                      : "1px solid #e5e5e5",
+                    backgroundColor: isActive ? "#fff7f4" : "#ffffff",
+                  }}
+                >
+                  <div
+                    className="flex size-10 shrink-0 items-center justify-center rounded-xl"
+                    style={{
+                      backgroundColor: isActive
+                        ? "rgba(255,79,18,0.12)"
+                        : "rgba(255,79,18,0.08)",
+                    }}
+                  >
+                    <Server className="size-5 text-[#ff4f12]" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[14px] font-semibold text-[#222222]">
+                      {account.server.instanceName}
+                    </p>
+                    <p className="mt-0.5 truncate font-mono text-[11px] text-[#a0a0a0]">
+                      {serverSubtitle(account)}
+                    </p>
+                    {!hasSession && !isActive ? (
+                      <p className="mt-1 text-[10px] text-[#b45309]">Sign in required</p>
+                    ) : null}
+                  </div>
+                  {busy ? (
+                    <Loader2 className="size-4 shrink-0 animate-spin text-[#a0a0a0]" />
+                  ) : isActive ? (
+                    <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-[#ff4f12]">
+                      <Check className="size-3.5 text-white" />
+                    </span>
+                  ) : null}
+                </button>
+              </li>
+            )
+          })
+        )}
+      </ul>
+
       <button
         type="button"
-        onClick={handleSetupNewServer}
-        className="w-full rounded-xl py-3 text-center text-[13px] font-semibold text-[#717171] active:bg-[#f7f7f7]"
+        onClick={handleAddServer}
+        className="flex h-11 w-full items-center justify-center gap-2 rounded-xl text-[14px] font-semibold text-[#717171] active:bg-[#f7f7f7]"
         style={{ border: "1px solid #e5e5e5" }}
       >
-        Set up a new server
+        <Plus className="size-4" />
+        Set up another server
       </button>
     </div>
   )
