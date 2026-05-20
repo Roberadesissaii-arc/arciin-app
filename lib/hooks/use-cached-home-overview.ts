@@ -9,8 +9,16 @@ import { useConnection } from "@/components/providers/connection-provider"
 import type { HomeOverview } from "@/lib/types/models"
 
 const HOME_STALE_MS = 60_000
+const HOME_CACHE_VERSION = 2
 
-const homeCache = new Map<string, { data: HomeOverview; fetchedAt: number }>()
+const homeCache = new Map<
+  string,
+  { data: HomeOverview; fetchedAt: number; version: number }
+>()
+
+function isValidHomeOverview(data: HomeOverview | null | undefined): data is HomeOverview {
+  return Boolean(data && typeof data.jobCount === "number" && typeof data.runningJobs === "number")
+}
 
 export function useCachedHomeOverview() {
   const { connection, ready } = useConnection()
@@ -20,7 +28,10 @@ export function useCachedHomeOverview() {
 
   const [data, setData] = useState<HomeOverview | null>(() => {
     if (!sessionKey) return null
-    return homeCache.get(sessionKey)?.data ?? null
+    const hit = homeCache.get(sessionKey)
+    return hit && hit.version === HOME_CACHE_VERSION && isValidHomeOverview(hit.data)
+      ? hit.data
+      : null
   })
   const [loading, setLoading] = useState(false)
   const [isRevalidating, setIsRevalidating] = useState(false)
@@ -40,7 +51,11 @@ export function useCachedHomeOverview() {
         const overview = await fetchHomeOverview(conn, opts?.signal)
         setData(overview)
         if (sessionKey) {
-          homeCache.set(sessionKey, { data: overview, fetchedAt: Date.now() })
+          homeCache.set(sessionKey, {
+            data: overview,
+            fetchedAt: Date.now(),
+            version: HOME_CACHE_VERSION,
+          })
         }
       } catch (err) {
         if (!opts?.signal?.aborted) setError(formatApiError(err))
@@ -58,9 +73,11 @@ export function useCachedHomeOverview() {
     if (!ready || !sessionKey || !connection) return
 
     const hit = homeCache.get(sessionKey)
-    const fresh = hit && Date.now() - hit.fetchedAt <= HOME_STALE_MS
+    const validHit =
+      hit && hit.version === HOME_CACHE_VERSION && isValidHomeOverview(hit.data)
+    const fresh = validHit && Date.now() - hit.fetchedAt <= HOME_STALE_MS
 
-    if (hit) {
+    if (validHit) {
       setData(hit.data)
     }
 
@@ -68,7 +85,7 @@ export function useCachedHomeOverview() {
 
     const controller = new AbortController()
     void load({
-      background: Boolean(hit),
+      background: Boolean(validHit),
       signal: controller.signal,
     })
     return () => controller.abort()
@@ -78,8 +95,10 @@ export function useCachedHomeOverview() {
     const onForeground = () => {
       if (!sessionKey) return
       const hit = homeCache.get(sessionKey)
-      if (!hit || Date.now() - hit.fetchedAt > HOME_STALE_MS) {
-        void load({ background: Boolean(hit) })
+      const validHit =
+        hit && hit.version === HOME_CACHE_VERSION && isValidHomeOverview(hit.data)
+      if (!validHit || Date.now() - hit.fetchedAt > HOME_STALE_MS) {
+        void load({ background: Boolean(validHit) })
       }
     }
     window.addEventListener(ARCIIN_FOREGROUND_EVENT, onForeground)

@@ -90,7 +90,13 @@ type StreamHandlers = {
 /** Same API bases as `fetchApi` — avoids hitting the web UI port when only the API is reachable. */
 function chatStreamUrlCandidates(connection: MobileConnection): string[] {
   const bases = apiBaseCandidates(connection.apiBaseUrl, connection)
-  return bases.map((base) => buildApiUrl(base, "/chat"))
+  const urls = bases.map((base) => buildApiUrl(base, "/chat"))
+  return [...new Set(urls)]
+}
+
+function isEventStreamResponse(response: Response): boolean {
+  const type = response.headers.get("content-type") ?? ""
+  return type.includes("text/event-stream") || type.includes("application/x-ndjson")
 }
 
 export async function streamChat(
@@ -127,9 +133,13 @@ export async function streamChat(
         cache: "no-store",
         credentials: token ? "include" : "same-origin",
       })
-      if (attempt.ok) {
+      if (attempt.ok && isEventStreamResponse(attempt)) {
         response = attempt
         break
+      }
+      if (attempt.ok) {
+        lastFailedResponse = attempt
+        continue
       }
       lastFailedResponse = attempt
     } catch (err) {
@@ -197,4 +207,28 @@ export async function streamChat(
 
     if (streamDone || done) break
   }
+}
+
+/** Like `streamChat`, but throws if the model returns no text (common when the wrong URL is hit). */
+export async function streamChatWithCheck(
+  connection: MobileConnection,
+  body: Parameters<typeof streamChat>[1],
+  handlers: StreamHandlers,
+): Promise<string> {
+  let accumulated = ""
+  await streamChat(connection, body, {
+    ...handlers,
+    onText: (chunk) => {
+      accumulated += chunk
+      handlers.onText(chunk)
+    },
+  })
+  if (!accumulated.trim()) {
+    throw new ApiError(
+      502,
+      "EMPTY_RESPONSE",
+      "The model returned no reply. Check the model is configured and reachable on your Arciin server.",
+    )
+  }
+  return accumulated
 }

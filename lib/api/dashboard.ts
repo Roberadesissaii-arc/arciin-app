@@ -58,7 +58,10 @@ export async function fetchHomeOverview(
     throw firstError.reason
   }
 
-  const logs = logsResult.status === "fulfilled" ? logsResult.value : { jobs: { queued: 0, active: 0 } }
+  const logs =
+    logsResult.status === "fulfilled"
+      ? logsResult.value
+      : { jobs: { queued: 0, active: 0, completed: 0, failed: 0 } }
   const activity = activityResult.status === "fulfilled" ? activityResult.value : []
   const uploads = uploadsResult.status === "fulfilled" ? uploadsResult.value : []
   const storage =
@@ -67,8 +70,13 @@ export async function fetchHomeOverview(
 
   const uploadInProgress = uploads.filter((u) => IN_PROGRESS_UPLOAD.has(u.status)).length
 
+  const jobStats = logs.jobs ?? { queued: 0, active: 0, completed: 0, failed: 0 }
+  const runningJobs = jobStats.queued + jobStats.active
+  const jobCount = runningJobs + jobStats.completed + jobStats.failed
+
   return {
-    activeJobs: logs.jobs.queued + logs.jobs.active,
+    jobCount,
+    runningJobs,
     uploadCount: uploads.length,
     uploadInProgress,
     passwordVaultCount: vault?.total ?? null,

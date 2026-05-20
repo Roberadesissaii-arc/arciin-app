@@ -131,6 +131,8 @@ export type LogsOverview = {
   jobs: {
     queued: number
     active: number
+    completed: number
+    failed: number
   }
 }
 
@@ -177,7 +179,10 @@ export type OllamaCloudModelsResult = {
 }
 
 export type HomeOverview = {
-  activeJobs: number
+  /** Total jobs in the instance (matches the Jobs screen list). */
+  jobCount: number
+  /** Queued + currently running jobs. */
+  runningJobs: number
   uploadCount: number
   uploadInProgress: number
   passwordVaultCount: number | null

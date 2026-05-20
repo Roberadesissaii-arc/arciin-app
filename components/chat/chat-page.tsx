@@ -28,7 +28,7 @@ import {
   getChatProfiles,
   getChatSelection,
   saveChatMessages,
-  streamChat,
+  streamChatWithCheck,
 } from "@/lib/api/chat"
 import { formatApiError, isNetworkError } from "@/lib/api/errors"
 import type { MobileConnection } from "@/lib/types/api"
@@ -526,7 +526,7 @@ export function ChatPage() {
       abortRef.current = new AbortController()
       let accumulated = ""
 
-      await streamChat(
+      accumulated = await streamChatWithCheck(
         connection,
         {
           profileId: profile.id,

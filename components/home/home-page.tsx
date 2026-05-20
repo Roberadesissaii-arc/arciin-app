@@ -174,9 +174,15 @@ export function HomePage() {
 
       <div className="grid grid-cols-2 gap-3">
         <StatCard
-          label="Active jobs"
-          value={String(data.activeJobs)}
-          sub={data.activeJobs ? "queued or running" : "none right now"}
+          label="Jobs"
+          value={String(data.jobCount)}
+          sub={
+            data.runningJobs > 0
+              ? `${data.runningJobs} running`
+              : data.jobCount > 0
+                ? "all done"
+                : "none yet"
+          }
           icon={BriefcaseBusiness}
           href="/jobs"
         />

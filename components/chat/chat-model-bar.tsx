@@ -1,8 +1,9 @@
 "use client"
 
 import { useState } from "react"
-import { ChevronDown, Loader2, Sparkles, X } from "lucide-react"
+import { Boxes, ChevronDown, Loader2, X } from "lucide-react"
 
+import { MobileOverlay } from "@/components/shell/mobile-bottom-sheet"
 import { setChatSelection } from "@/lib/api/chat"
 import { chatModelForProfile } from "@/lib/models/model-helpers"
 import { providerMetaFor } from "@/lib/models/provider-catalog"
@@ -34,30 +35,31 @@ function ChatModelPickerSheet({
   if (!open) return null
 
   return (
-    <>
-      <button
-        type="button"
-        className="mobile-overlay-root fixed inset-0 z-[100] bg-black/40"
-        aria-label="Close model picker"
-        onClick={onClose}
-      />
+    <MobileOverlay open={open} onClose={onClose}>
       <div
-        className="fixed inset-x-3 bottom-0 z-[100] max-h-[min(420px,70vh)] overflow-hidden rounded-t-2xl bg-white pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-xl"
-        style={{ border: "1px solid #e5e5e5" }}
+        className="pointer-events-auto flex max-h-[min(92dvh,520px)] w-full flex-col rounded-t-3xl bg-white pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-12px_48px_rgba(0,0,0,0.18)]"
+        style={{ borderTop: "1px solid #e5e5e5" }}
         role="dialog"
         aria-label="Choose model"
       >
-        <div className="flex items-center justify-between border-b border-[#ececec] px-4 py-3">
-          <span className="text-[15px] font-bold text-[#222222]">Chat model</span>
+        <div className="flex shrink-0 items-start justify-between gap-3 border-b border-[#f0f0f0] px-5 py-4">
+          <div className="min-w-0">
+            <p className="text-[16px] font-bold text-[#222222]">Chat model</p>
+            <p className="mt-1 text-[12px] leading-relaxed text-[#717171]">
+              Synced with desktop — same model on all devices
+            </p>
+          </div>
           <button
             type="button"
             onClick={onClose}
-            className="flex size-8 items-center justify-center rounded-full text-[#717171] active:bg-[#f7f7f7]"
+            className="flex size-8 shrink-0 items-center justify-center rounded-xl text-[#717171] active:bg-[#f7f7f7]"
+            aria-label="Close"
           >
             <X className="size-4" />
           </button>
         </div>
-        <ul className="overflow-y-auto p-2 scrollbar-hide">
+
+        <ul className="scrollbar-hide min-h-0 flex-1 overflow-y-auto px-5 py-3">
           {profiles.map((profile) => {
             const active = selectedProfile?.id === profile.id
             const modelLabel =
@@ -65,7 +67,7 @@ function ChatModelPickerSheet({
                 ? selectedModel
                 : profile.defaultModel || profile.provider
             return (
-              <li key={profile.id}>
+              <li key={profile.id} className="mb-1.5 last:mb-0">
                 <button
                   type="button"
                   onClick={() => onPick(profile, modelForChatProfile(profile))}
@@ -91,11 +93,8 @@ function ChatModelPickerSheet({
             )
           })}
         </ul>
-        <p className="border-t border-[#ececec] px-4 py-2.5 text-center text-[10px] text-[#a0a0a0]">
-          Synced with desktop — same model on all devices
-        </p>
       </div>
-    </>
+    </MobileOverlay>
   )
 }
 
@@ -154,7 +153,7 @@ export function ChatModelBar({
         {loading ? (
           <Loader2 className="size-4 animate-spin text-[#a0a0a0]" />
         ) : (
-          <Sparkles className="size-4" />
+          <Boxes className="size-[18px]" strokeWidth={2} />
         )}
       </button>
     ) : (
@@ -165,14 +164,22 @@ export function ChatModelBar({
         className="flex w-full items-center justify-between gap-2 rounded-xl bg-[#f7f7f7] px-3 py-2.5 text-left active:bg-[#f0f0f0] disabled:opacity-50"
         style={{ border: "1px solid #e5e5e5" }}
       >
-        <div className="min-w-0">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-[#a0a0a0]">
-            Model
-          </p>
-          <p className="truncate text-[13px] font-semibold text-[#222222]">{label}</p>
-          {selectedProfile ? (
-            <p className="truncate text-[11px] text-[#717171]">{selectedProfile.displayName}</p>
-          ) : null}
+        <div className="flex min-w-0 items-center gap-2.5">
+          <div
+            className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-white"
+            style={{ border: "1px solid #e8e8e8" }}
+          >
+            <Boxes className="size-4 text-[#ff4f12]" strokeWidth={2} />
+          </div>
+          <div className="min-w-0">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-[#a0a0a0]">
+              Model
+            </p>
+            <p className="truncate text-[13px] font-semibold text-[#222222]">{label}</p>
+            {selectedProfile ? (
+              <p className="truncate text-[11px] text-[#717171]">{selectedProfile.displayName}</p>
+            ) : null}
+          </div>
         </div>
         {loading ? (
           <Loader2 className="size-4 shrink-0 animate-spin text-[#a0a0a0]" />
