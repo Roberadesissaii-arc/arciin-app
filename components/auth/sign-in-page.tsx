@@ -9,6 +9,7 @@ import { discoverServer, pairMobileDevice, loginMobileDevice } from "@/lib/api/m
 import {
   deriveMobileServerUrlsFromApiBase,
   displayServerLabel,
+  getServerAddressDisplay,
   isLoopbackApiBase,
   isPublicServerAddress,
 } from "@/lib/connection/normalize-url"
@@ -322,6 +323,34 @@ function AuthCard({
   )
 }
 
+
+function CurrentServerChip({
+  apiBaseUrl,
+  webUrl,
+}: {
+  apiBaseUrl: string
+  webUrl?: string | null
+}) {
+  const { kindLabel, host } = getServerAddressDisplay(apiBaseUrl, webUrl)
+
+  return (
+    <div
+      className="flex min-w-0 items-center gap-2.5 rounded-xl px-3 py-2.5"
+      style={{ backgroundColor: "#f7f7f7", border: "1px solid #efefef" }}
+    >
+      <Server className="size-3.5 shrink-0 text-[#ff4f12]" aria-hidden />
+      <p
+        className="min-w-0 flex-1 truncate text-[13px] font-medium text-[#222222]"
+        title={`${kindLabel}: ${host}`}
+      >
+        <span className="text-[#a0a0a0]">{kindLabel}</span>
+        <span className="text-[#c0c0c0]"> · </span>
+        <span className="font-mono text-[12px]">{host}</span>
+      </p>
+    </div>
+  )
+}
+
 function CardDivider() {
   return (
     <div className="my-1 flex items-center gap-3">
@@ -362,14 +391,16 @@ export function SignInPage() {
   const [requirePairingCode, setRequirePairingCode] = useState(false)
 
   const serverProfile = loadServerProfile()
-  const serverLabel = serverProfile
-    ? displayServerLabel(serverProfile.apiBaseUrl, serverProfile.instanceName)
-    : null
-
   function goToPage(page: 0 | 1) {
     setActivePage(page)
     setError(null)
-    if (page === 1) setSetupStep(1)
+    if (page === 1) {
+      setSetupStep(1)
+      setServerUrl("")
+      setServerAddressMode("local")
+      setVerifiedApiBase(null)
+      setVerifiedInstanceName(null)
+    }
   }
 
   useEffect(() => {
@@ -378,19 +409,6 @@ export function SignInPage() {
       router.replace("/home")
     }
   }, [ready, connection, router])
-
-  useEffect(() => {
-    if (!ready || !serverProfile?.apiBaseUrl) return
-    const display =
-      serverProfile.webUrl ??
-      serverProfile.apiBaseUrl.replace(/\/api\/?$/i, "")
-    setServerUrl(display)
-    setVerifiedApiBase(serverProfile.apiBaseUrl)
-    setVerifiedInstanceName(serverProfile.instanceName)
-    if (isPublicServerAddress(display) || isPublicServerAddress(serverProfile.apiBaseUrl)) {
-      setServerAddressMode("remote")
-    }
-  }, [ready, serverProfile?.apiBaseUrl, serverProfile?.instanceName, serverProfile?.webUrl])
 
   async function handleSignIn(e: React.FormEvent) {
     e.preventDefault()
@@ -564,8 +582,8 @@ export function SignInPage() {
         <AuthCard
           title="Welcome back"
           subtitle={
-            serverLabel
-              ? `Sign in to ${serverLabel}`
+            serverProfile?.apiBaseUrl
+              ? "Sign in to your Arciin server"
               : "Sign in after you connect this device to your server"
           }
           footer={
@@ -582,14 +600,11 @@ export function SignInPage() {
           }
         >
           <form onSubmit={handleSignIn} className="flex flex-col gap-3.5">
-            {serverLabel ? (
-              <p
-                className="flex items-center gap-2 rounded-xl px-3 py-2 text-[12px] text-[#717171]"
-                style={{ backgroundColor: "#f7f7f7", border: "1px solid #efefef" }}
-              >
-                <Server className="size-3.5 shrink-0 text-[#ff4f12]" />
-                {serverLabel}
-              </p>
+            {serverProfile?.apiBaseUrl ? (
+              <CurrentServerChip
+                apiBaseUrl={serverProfile.apiBaseUrl}
+                webUrl={serverProfile.webUrl}
+              />
             ) : null}
             {serverProfile && isLoopbackApiBase(serverProfile.apiBaseUrl) ? (
               <p

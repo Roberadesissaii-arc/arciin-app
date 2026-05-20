@@ -227,6 +227,47 @@ export function displayServerLabel(apiBaseUrl: string, instanceName?: string) {
   }
 }
 
+export type ServerAddressDisplayKind = "localhost" | "local" | "domain"
+
+export type ServerAddressDisplay = {
+  kind: ServerAddressDisplayKind
+  kindLabel: string
+  host: string
+}
+
+/** Short host line for login UI (domain vs LAN vs localhost). */
+export function getServerAddressDisplay(
+  apiBaseUrl: string,
+  webUrl?: string | null,
+): ServerAddressDisplay {
+  const display = (webUrl ?? apiBaseUrl.replace(/\/api\/?$/i, "")).trim()
+
+  if (isLoopbackApiBase(apiBaseUrl)) {
+    return { kind: "localhost", kindLabel: "Localhost", host: "127.0.0.1" }
+  }
+
+  const isPublic = isPublicServerAddress(display)
+  let host = display
+  try {
+    const url = new URL(/^https?:\/\//i.test(display) ? display : `http://${display.split("/")[0]}`)
+    const port = url.port
+    const showPort =
+      Boolean(port) &&
+      !(
+        (url.protocol === "https:" && port === "443") ||
+        (url.protocol === "http:" && port === "80")
+      )
+    host = showPort ? `${url.hostname}:${port}` : url.hostname
+  } catch {
+    host = display.replace(/^https?:\/\//i, "").split("/")[0] ?? display
+  }
+
+  if (isPublic) {
+    return { kind: "domain", kindLabel: "Domain", host }
+  }
+  return { kind: "local", kindLabel: "Local network", host }
+}
+
 /** Web UI origin for opening login / password flows from the mobile app. */
 export function webAppUrlFromApiBase(apiBaseUrl: string, path = "/login"): string {
   try {
