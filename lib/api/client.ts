@@ -30,7 +30,7 @@ export function buildApiUrl(
   return `${base}${segment}`
 }
 
-function apiBaseCandidates(
+export function apiBaseCandidates(
   primary: string,
   connection?: MobileConnection | null,
 ): string[] {

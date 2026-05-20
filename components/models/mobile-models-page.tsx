@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Loader2 } from "lucide-react"
+import { MobileModelsListSkeleton } from "@/components/models/mobile-provider-card-skeleton"
 
 import { MobileAddProviderSheet } from "@/components/models/mobile-add-provider-sheet"
 import { MobileConnectSheet } from "@/components/models/mobile-connect-sheet"
@@ -205,9 +205,7 @@ export function MobileModelsPage() {
         ) : null}
 
         {loading ? (
-          <div className="flex justify-center py-16">
-            <Loader2 className="size-8 animate-spin text-[#c0c0c0]" />
-          </div>
+          <MobileModelsListSkeleton count={MODEL_PROVIDERS.length} />
         ) : visibleProviders.length === 0 ? (
           <div
             className="flex flex-col items-center justify-center rounded-2xl bg-white py-12"

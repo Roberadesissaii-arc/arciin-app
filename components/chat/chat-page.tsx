@@ -1,17 +1,23 @@
 "use client"
 
+import Link from "next/link"
 import { useCallback, useEffect, useRef, useState } from "react"
 import {
   Clock,
+  Copy,
   Loader2,
   MessageSquare,
   Plus,
+  RotateCcw,
   Send,
   Sparkles,
   Trash2,
   X,
 } from "lucide-react"
 
+import { ChatModelBar } from "@/components/chat/chat-model-bar"
+import { ArciinMark } from "@/components/ui/arciin-mark"
+import { Skeleton } from "@/components/ui/skeleton"
 import { useChatChrome } from "@/components/chat/chat-chrome-context"
 import { useConnection } from "@/components/providers/connection-provider"
 import {
@@ -24,7 +30,8 @@ import {
   saveChatMessages,
   streamChat,
 } from "@/lib/api/chat"
-import { formatApiError } from "@/lib/api/errors"
+import { formatApiError, isNetworkError } from "@/lib/api/errors"
+import type { MobileConnection } from "@/lib/types/api"
 import type { ChatConversationSummary, ChatMessage, ChatProfile } from "@/lib/types/chat"
 import { relativeTime } from "@/lib/utils/relative-time"
 import { cn } from "@/lib/utils"
@@ -34,6 +41,74 @@ import { createId } from "@/lib/utils/create-id"
 function titleFromMessage(text: string) {
   const t = text.trim().replace(/\s+/g, " ")
   return t.length > 48 ? `${t.slice(0, 48)}…` : t || "New chat"
+}
+
+const CHAT_SUGGESTIONS = [
+  "What files did I upload recently?",
+  "How much storage am I using?",
+  "Show me all my videos",
+] as const
+
+function ChatWelcomePanel({
+  profilesLoading,
+  needsModelSetup,
+  onPickSuggestion,
+}: {
+  profilesLoading: boolean
+  needsModelSetup: boolean
+  onPickSuggestion: (text: string) => void
+}) {
+  if (profilesLoading) {
+    return (
+      <div className="chat-welcome flex flex-1 flex-col items-center justify-center gap-4 px-6">
+        <Skeleton className="h-8 w-[7.5rem] rounded-lg" />
+        <Skeleton className="h-3.5 w-52 max-w-full rounded-md" />
+        <Skeleton className="h-3.5 w-44 max-w-full rounded-md" />
+      </div>
+    )
+  }
+
+  if (needsModelSetup) {
+    return (
+      <div className="chat-welcome flex flex-1 flex-col items-center justify-center gap-5 px-6">
+        <ArciinMark size="lg" />
+        <p className="max-w-[17rem] text-center text-[13px] leading-relaxed text-[#717171]">
+          Connect an AI provider on your Arciin server to start chatting with your libraries and
+          files.
+        </p>
+        <Link
+          href="/models"
+          className="rounded-2xl px-6 py-3 text-[13px] font-semibold text-white active:opacity-90"
+          style={{ backgroundColor: "#ff4f12" }}
+        >
+          Configure models
+        </Link>
+      </div>
+    )
+  }
+
+  return (
+    <div className="chat-welcome flex flex-1 flex-col items-center justify-center gap-5 px-2">
+      <ArciinMark size="lg" />
+      <p className="max-w-xs text-center text-[13px] leading-relaxed text-[#717171]">
+        Ask about your files, libraries, or instance.
+      </p>
+      <div className="flex w-full max-w-sm flex-col gap-2">
+        {CHAT_SUGGESTIONS.map((s) => (
+          <button
+            key={s}
+            type="button"
+            onClick={() => onPickSuggestion(s)}
+            className="flex items-center gap-3 rounded-2xl bg-white px-4 py-3 text-left active:bg-[#f7f7f7]"
+            style={{ border: "1px solid #e5e5e5" }}
+          >
+            <Sparkles className="size-3.5 shrink-0 text-[#a0a0a0]" />
+            <span className="text-[12px] text-[#717171]">{s}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 // ── History drawer (inset, rounded) ───────────────────────────────────────────
@@ -202,11 +277,57 @@ function HistoryDrawer({
 
 // ── Message bubble ────────────────────────────────────────────────────────────
 
-function MessageBubble({ msg }: { msg: ChatMessage }) {
-  const isUser = msg.role === "user"
+function MessageActions({
+  content,
+  canRegenerate,
+  onRegenerate,
+}: {
+  content: string
+  canRegenerate: boolean
+  onRegenerate?: () => void
+}) {
+  const btn =
+    "flex size-8 items-center justify-center rounded-lg text-[#717171] active:bg-[#f7f7f7]"
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(content)
+    } catch {
+      /* clipboard denied */
+    }
+  }
 
   return (
-    <div className={cn("flex w-full", isUser ? "justify-end" : "justify-start")}>
+    <div className="mt-1.5 flex items-center gap-0.5">
+      {canRegenerate && onRegenerate ? (
+        <button type="button" className={btn} aria-label="Regenerate" onClick={onRegenerate}>
+          <RotateCcw className="size-3.5" />
+        </button>
+      ) : null}
+      <button type="button" className={btn} aria-label="Copy" onClick={() => void handleCopy()}>
+        <Copy className="size-3.5" />
+      </button>
+    </div>
+  )
+}
+
+function MessageBubble({
+  msg,
+  isStreaming = false,
+  canRegenerate = false,
+  onRegenerate,
+}: {
+  msg: ChatMessage
+  isStreaming?: boolean
+  canRegenerate?: boolean
+  onRegenerate?: () => void
+}) {
+  const isUser = msg.role === "user"
+  const showActions =
+    !isUser && !msg.pending && !isStreaming && Boolean(msg.content.trim())
+
+  return (
+    <div className={cn("flex w-full flex-col", isUser ? "items-end" : "items-start")}>
       <div
         className={cn(
           "max-w-[88%] rounded-2xl px-4 py-3 text-[14px] leading-relaxed",
@@ -225,8 +346,19 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
           <p className="whitespace-pre-wrap break-words">{msg.content}</p>
         )}
       </div>
+      {showActions ? (
+        <MessageActions
+          content={msg.content}
+          canRegenerate={canRegenerate}
+          onRegenerate={onRegenerate}
+        />
+      ) : null}
     </div>
   )
+}
+
+function serverHint(connection: MobileConnection | null) {
+  return connection?.apiBaseUrl ?? connection?.webUrl
 }
 
 // ── Main page ─────────────────────────────────────────────────────────────────
@@ -292,7 +424,7 @@ export function ChatPage() {
       applyProfileSelection(list, profile, model)
       setStatusNote("Chat connects to your Arciin API")
     } catch (err) {
-      setError(formatApiError(err))
+      setError(formatApiError(err, serverHint(connection)))
       setStatusNote("Could not reach the API")
     } finally {
       setProfilesLoading(false)
@@ -306,7 +438,7 @@ export function ChatPage() {
       const list = await getChatConversations(connection)
       setConversations(list)
     } catch (err) {
-      setError(formatApiError(err))
+      setError(formatApiError(err, serverHint(connection)))
     } finally {
       setHistoryLoading(false)
     }
@@ -317,6 +449,15 @@ export function ChatPage() {
     void loadProfiles()
     void loadHistory()
   }, [ready, connection, loadProfiles, loadHistory])
+
+  useEffect(() => {
+    if (!connection) return
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void loadProfiles()
+    }
+    document.addEventListener("visibilitychange", onVisible)
+    return () => document.removeEventListener("visibilitychange", onVisible)
+  }, [connection, loadProfiles])
 
   useEffect(() => {
     if (historyOpen && connection) void loadHistory()
@@ -355,7 +496,7 @@ export function ChatPage() {
       )
       setHistoryOpen(false)
     } catch (err) {
-      setError(formatApiError(err))
+      setError(formatApiError(err, serverHint(connection)))
     } finally {
       setLoadingConvoId(null)
     }
@@ -368,9 +509,58 @@ export function ChatPage() {
       setConversations((prev) => prev.filter((c) => c.id !== id))
       if (conversationId === id) startNewChat()
     } catch (err) {
-      setError(formatApiError(err))
+      setError(formatApiError(err, serverHint(connection)))
     }
   }
+
+  const runAssistantStream = useCallback(
+    async (
+      assistantId: string,
+      history: { role: string; content: string }[],
+      opts?: { conversationId?: string | null; saveUserTurn?: boolean },
+    ) => {
+      if (!connection || !selectedProfile) return ""
+
+      const profile = selectedProfile
+      const modelToSend = selectedModel.trim() || profile.defaultModel || undefined
+      abortRef.current = new AbortController()
+      let accumulated = ""
+
+      await streamChat(
+        connection,
+        {
+          profileId: profile.id,
+          model: modelToSend,
+          messages: history,
+        },
+        {
+          signal: abortRef.current.signal,
+          onText: (chunk) => {
+            accumulated += chunk
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === assistantId
+                  ? { ...m, content: accumulated, pending: false }
+                  : m,
+              ),
+            )
+          },
+        },
+      )
+
+      const convoId = opts?.conversationId ?? conversationId
+      if (accumulated.trim() && convoId) {
+        await saveChatMessages(connection, {
+          conversationId: convoId,
+          messages: [{ role: "assistant", content: accumulated }],
+        })
+        void loadHistory()
+      }
+
+      return accumulated
+    },
+    [connection, conversationId, loadHistory, selectedModel, selectedProfile],
+  )
 
   async function sendMessage() {
     const text = input.trim()
@@ -387,8 +577,6 @@ export function ChatPage() {
 
     const profile = selectedProfile
     if (!profile) return
-
-    const modelToSend = selectedModel.trim() || profile.defaultModel || undefined
 
     setInput("")
     setError(null)
@@ -426,62 +614,67 @@ export function ChatPage() {
           content: m.content.trim(),
         }))
 
-      abortRef.current = new AbortController()
-      let accumulated = ""
-
-      await streamChat(
-        connection,
-        {
-          profileId: profile.id,
-          model: modelToSend,
-          messages: history,
-        },
-        {
-          signal: abortRef.current.signal,
-          onText: (chunk) => {
-            accumulated += chunk
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === assistantId
-                  ? { ...m, content: accumulated, pending: false }
-                  : m,
-              ),
-            )
-          },
-        },
-      )
-
-      if (accumulated.trim() && activeConvoId) {
-        await saveChatMessages(connection, {
-          conversationId: activeConvoId,
-          messages: [{ role: "assistant", content: accumulated }],
-        })
-        void loadHistory()
-      }
+      await runAssistantStream(assistantId, history, { conversationId: activeConvoId })
+      setStatusNote("Chat connects to your Arciin API")
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") {
         setMessages((prev) => prev.filter((m) => m.id !== assistantId || m.content))
       } else {
-        const msg = formatApiError(err)
+        const msg = formatApiError(err, serverHint(connection))
         setError(msg)
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === assistantId ? { ...m, content: msg, pending: false } : m,
-          ),
-        )
+        setStatusNote(isNetworkError(err) ? "Could not reach server" : "Send failed")
+        setMessages((prev) => prev.filter((m) => m.id !== assistantId))
       }
     } finally {
       setStreaming(false)
-      setStatusNote(
-        profiles.length === 0
-          ? "No AI model configured — add one in Arciin Models"
-          : "Chat connects to your Arciin API",
-      )
       abortRef.current = null
     }
   }
 
+  async function regenerateAssistantMessage(assistantMsgId: string) {
+    if (streaming || !connection || !selectedProfile) return
+    const aiIdx = messages.findIndex((m) => m.id === assistantMsgId)
+    if (aiIdx <= 0) return
+    const userMsg = messages[aiIdx - 1]
+    if (!userMsg || userMsg.role !== "user") return
+
+    const priorMessages = messages.slice(0, aiIdx)
+    const assistantId = createId()
+    const pendingMsg: ChatMessage = {
+      id: assistantId,
+      role: "assistant",
+      content: "",
+      pending: true,
+    }
+
+    setError(null)
+    setMessages([...priorMessages, pendingMsg])
+    setStreaming(true)
+    setStatusNote("Regenerating…")
+
+    const history = priorMessages
+      .filter((m) => m.content.trim().length > 0)
+      .map((m) => ({ role: m.role, content: m.content.trim() }))
+
+    try {
+      await runAssistantStream(assistantId, history, { conversationId })
+    } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") {
+        setMessages((prev) => prev.filter((m) => m.id !== assistantId || m.content))
+      } else {
+        setError(formatApiError(err, serverHint(connection)))
+        setStatusNote(isNetworkError(err) ? "Could not reach server" : "Regenerate failed")
+        setMessages((prev) => prev.filter((m) => m.id !== assistantId))
+      }
+    } finally {
+      setStreaming(false)
+      abortRef.current = null
+      setStatusNote("Chat connects to your Arciin API")
+    }
+  }
+
   const showWelcome = messages.length === 0
+  const needsModelSetup = !profilesLoading && profiles.length === 0
   const canSend = Boolean(input.trim()) && !streaming && selectedProfile && !profilesLoading
 
   return (
@@ -507,59 +700,56 @@ export function ChatPage() {
         </div>
       ) : null}
 
-      <div ref={scrollRef} className="chat-page-messages flex flex-col gap-3 scrollbar-hide">
+      <div ref={scrollRef} className="chat-page-messages flex flex-1 flex-col gap-3 scrollbar-hide">
         {showWelcome ? (
-          <div className="flex flex-col items-center gap-5 pt-6">
-            <div
-              className="flex size-16 items-center justify-center rounded-3xl bg-[#f7f7f7]"
-              style={{ border: "1px solid #e5e5e5" }}
-            >
-              <Sparkles className="size-7 text-[#ff4f12]" />
-            </div>
-            <div className="max-w-xs space-y-2 text-center">
-              <h3
-                className="text-[18px] font-bold text-[#222222]"
-                style={{ fontFamily: "var(--font-space-grotesk, sans-serif)" }}
-              >
-                AI Chat
-              </h3>
-              <p className="text-[13px] leading-relaxed text-[#717171]">
-                Ask about your files, libraries, or instance.
-              </p>
-            </div>
-            <div className="flex w-full max-w-sm flex-col gap-2">
-              {[
-                "What files did I upload recently?",
-                "How much storage am I using?",
-                "Show me all my videos",
-              ].map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => setInput(s)}
-                  className="flex items-center gap-3 rounded-2xl bg-white px-4 py-3 text-left active:bg-[#f7f7f7]"
-                  style={{ border: "1px solid #e5e5e5" }}
-                >
-                  <Sparkles className="size-3.5 shrink-0 text-[#a0a0a0]" />
-                  <span className="text-[12px] text-[#717171]">{s}</span>
-                </button>
-              ))}
-            </div>
-          </div>
+          <ChatWelcomePanel
+            profilesLoading={profilesLoading}
+            needsModelSetup={needsModelSetup}
+            onPickSuggestion={setInput}
+          />
         ) : (
           <div className="flex flex-col gap-3 pb-2">
-            {messages.map((msg) => (
-              <MessageBubble key={msg.id} msg={msg} />
-            ))}
+            {(() => {
+              const lastAssistantId = [...messages].reverse().find((m) => m.role === "assistant")?.id
+              return messages.map((msg) => (
+                <MessageBubble
+                  key={msg.id}
+                  msg={msg}
+                  isStreaming={streaming && msg.id === lastAssistantId}
+                  canRegenerate={
+                    msg.role === "assistant" &&
+                    msg.id === lastAssistantId &&
+                    !streaming &&
+                    !msg.pending
+                  }
+                  onRegenerate={
+                    msg.role === "assistant" && msg.id === lastAssistantId
+                      ? () => void regenerateAssistantMessage(msg.id)
+                      : undefined
+                  }
+                />
+              ))
+            })()}
           </div>
         )}
       </div>
 
       <div className="chat-page-composer">
         <div
-          className="flex items-center gap-2 rounded-2xl bg-white px-3 py-2.5 shadow-[0_2px_12px_rgba(0,0,0,0.06)]"
+          className="flex items-center gap-2 rounded-2xl bg-white px-2 py-2.5 shadow-[0_2px_12px_rgba(0,0,0,0.06)]"
           style={{ border: "1px solid #e5e5e5" }}
         >
+          {connection && profiles.length > 0 ? (
+            <ChatModelBar
+              variant="composer"
+              connection={connection}
+              profiles={profiles}
+              selectedProfile={selectedProfile}
+              selectedModel={selectedModel}
+              loading={profilesLoading}
+              onSelect={(profile, model) => applyProfileSelection(profiles, profile, model)}
+            />
+          ) : null}
           <input
             ref={inputRef}
             type="text"
@@ -609,6 +799,8 @@ export function ChatPage() {
               <Loader2 className="size-2.5 animate-spin" />
               {statusNote}
             </span>
+          ) : error ? (
+            <span className="text-[#b91c1c]">{statusNote}</span>
           ) : (
             statusNote
           )}

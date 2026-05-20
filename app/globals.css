@@ -120,6 +120,12 @@ body:has(.mobile-app-root) {
   overscroll-behavior: contain;
 }
 
+.chat-welcome {
+  min-height: calc(
+    100dvh - 11.5rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)
+  );
+}
+
 .chat-page-composer {
   flex-shrink: 0;
   padding-top: 0.5rem;
