@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 
-const API_BASE_HEADER = "x-arciin-api-base"
+import { ARCIIN_API_BASE_HEADER } from "@/lib/api/arciin-proxy"
+
+const API_BASE_HEADER = ARCIIN_API_BASE_HEADER
 
 /** Same-origin proxy so the PWA can load avatars without cross-origin fetch issues. */
 export async function GET(request: Request) {

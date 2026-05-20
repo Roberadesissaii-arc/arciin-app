@@ -82,8 +82,7 @@ export function AssetViewer({
   const [busy, setBusy] = useState<"download" | "delete" | "move" | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [previewSrc, setPreviewSrc] = useState<string | null>(null)
-  const touchStartX = useRef<number | null>(null)
-  const touchStartY = useRef<number | null>(null)
+  const pointerStart = useRef<{ x: number; y: number } | null>(null)
 
   const asset = assets[currentIndex] ?? assets[0]!
   const hasPrev = currentIndex > 0
@@ -108,6 +107,9 @@ export function AssetViewer({
 
   useEffect(() => { setMounted(true) }, [])
   useEffect(() => { if (!mounted) return; return lockPageScroll() }, [mounted])
+  useEffect(() => {
+    setCurrentIndex(initialIndex)
+  }, [initialIndex])
 
   // reset preview when asset changes
   useEffect(() => {
@@ -159,21 +161,47 @@ export function AssetViewer({
     return () => { cancelled = true; if (objectUrl) URL.revokeObjectURL(objectUrl) }
   }, [asset.id, loadsMediaBlob, streamsInline, connection])
 
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    touchStartX.current = e.touches[0]?.clientX ?? null
-    touchStartY.current = e.touches[0]?.clientY ?? null
+  const handleSwipeEnd = useCallback(
+    (dx: number, dy: number) => {
+      if (Math.abs(dy) > Math.abs(dx) * 0.75) return
+      if (dx < -40 && hasNext) goTo(currentIndex + 1)
+      else if (dx > 40 && hasPrev) goTo(currentIndex - 1)
+    },
+    [currentIndex, hasPrev, hasNext, goTo],
+  )
+
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
+    if (e.button !== 0) return
+    pointerStart.current = { x: e.clientX, y: e.clientY }
   }, [])
 
-  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
-    if (touchStartX.current === null || touchStartY.current === null) return
-    const dx = (e.changedTouches[0]?.clientX ?? 0) - touchStartX.current
-    const dy = (e.changedTouches[0]?.clientY ?? 0) - touchStartY.current
-    touchStartX.current = null
-    touchStartY.current = null
-    if (Math.abs(dy) > Math.abs(dx) * 0.8) return
-    if (dx < -50 && hasNext) goTo(currentIndex + 1)
-    else if (dx > 50 && hasPrev) goTo(currentIndex - 1)
-  }, [currentIndex, hasPrev, hasNext, goTo])
+  const handlePointerUp = useCallback(
+    (e: React.PointerEvent) => {
+      const start = pointerStart.current
+      pointerStart.current = null
+      if (!start) return
+      handleSwipeEnd(e.clientX - start.x, e.clientY - start.y)
+    },
+    [handleSwipeEnd],
+  )
+
+  const handleTouchEnd = useCallback(
+    (e: React.TouchEvent) => {
+      const touch = e.changedTouches[0]
+      if (!touch) return
+      const start = pointerStart.current
+      pointerStart.current = null
+      if (!start) return
+      handleSwipeEnd(touch.clientX - start.x, touch.clientY - start.y)
+    },
+    [handleSwipeEnd],
+  )
+
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    const touch = e.touches[0]
+    if (!touch) return
+    pointerStart.current = { x: touch.clientX, y: touch.clientY }
+  }, [])
 
   const handleDownload = useCallback(async () => {
     setBusy("download")
@@ -225,6 +253,7 @@ export function AssetViewer({
       role="dialog"
       aria-modal="true"
       aria-label="File preview"
+      data-scroll-lock-allow
     >
       {/* header */}
       <div
@@ -243,7 +272,9 @@ export function AssetViewer({
           <p className="truncate text-[13px] font-semibold text-white">{title}</p>
           <p className="text-[10px] text-[#a1a1aa]">
             {currentLibrary?.name ?? "Library"} · {formatBytes(asset.sizeBytes)}
-            {assets.length > 1 ? ` · ${currentIndex + 1} / ${assets.length}` : ""}
+            {assets.length > 1
+              ? ` · ${currentIndex + 1} / ${assets.length} · swipe or tap edges`
+              : ""}
           </p>
         </div>
         <div className="size-9 shrink-0" />
@@ -251,7 +282,13 @@ export function AssetViewer({
 
       {/* preview area — swipeable */}
       <div
-        className="relative min-h-0 flex-1 overflow-hidden bg-[#09090b]"
+        className="relative min-h-0 flex-1 overflow-hidden bg-[#09090b] touch-pan-y"
+        data-scroll-lock-allow
+        onPointerDown={handlePointerDown}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={() => {
+          pointerStart.current = null
+        }}
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
       >

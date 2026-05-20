@@ -1,3 +1,7 @@
+import {
+  arciinProxyHeaders,
+  needsArciinSameOriginProxy,
+} from "@/lib/api/arciin-proxy"
 import { apiBaseCandidates, buildApiUrl, fetchApi } from "@/lib/api/client"
 import { ApiError, networkErrorMessage, parseApiError } from "@/lib/api/errors"
 import type { MobileConnection } from "@/lib/types/api"
@@ -87,8 +91,11 @@ type StreamHandlers = {
   signal?: AbortSignal
 }
 
-/** Same API bases as `fetchApi` — avoids hitting the web UI port when only the API is reachable. */
+/** PWA on Vercel → same-origin proxy; LAN dev on same host → direct API (like desktop). */
 function chatStreamUrlCandidates(connection: MobileConnection): string[] {
+  if (needsArciinSameOriginProxy(connection.apiBaseUrl)) {
+    return ["/api/arciin/chat"]
+  }
   const bases = apiBaseCandidates(connection.apiBaseUrl, connection)
   const urls = bases.map((base) => buildApiUrl(base, "/chat"))
   return [...new Set(urls)]
@@ -111,11 +118,13 @@ export async function streamChat(
   const candidates = chatStreamUrlCandidates(connection)
   const token = connection.sessionToken
 
+  const useProxy = needsArciinSameOriginProxy(connection.apiBaseUrl)
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     Accept: "text/event-stream",
+    ...(useProxy ? arciinProxyHeaders(connection) : {}),
   }
-  if (token) {
+  if (token && !headers.Authorization) {
     headers.Authorization = `Bearer ${token}`
   }
 
@@ -131,7 +140,7 @@ export async function streamChat(
         body: JSON.stringify(body),
         signal: handlers.signal,
         cache: "no-store",
-        credentials: token ? "include" : "same-origin",
+        credentials: useProxy ? "same-origin" : token ? "include" : "same-origin",
       })
       if (attempt.ok && isEventStreamResponse(attempt)) {
         response = attempt
