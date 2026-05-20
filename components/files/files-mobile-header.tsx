@@ -21,6 +21,11 @@ export function FilesMobileHeader() {
 
   const chrome = ctx?.chrome
 
+  /* All-folders view has its own in-page header — do not show Files filters here */
+  if (chrome?.view === "all-folders") {
+    return null
+  }
+
   return (
     <header className="z-40 shrink-0 border-b border-[#e5e5e5] bg-[#f7f7f7] pt-safe">
       <div className="flex flex-col gap-3 px-4 pb-3 pt-1">

@@ -5,7 +5,10 @@ import { createContext, useContext, useMemo, useState } from "react"
 import type { FilesFilterId } from "@/lib/files/library-helpers"
 import type { LibrarySummary } from "@/lib/types/assets"
 
+export type FilesChromeView = "files" | "all-folders"
+
 export type FilesChromeModel = {
+  view: FilesChromeView
   subtitle: string
   filter: FilesFilterId
   libraries: LibrarySummary[]
@@ -23,6 +26,7 @@ export type FilesChromeModel = {
   onCreateFolder: () => void
   onChangeFilter: (id: FilesFilterId) => void
   onGoToLibraryRoot: () => void
+  onCloseAllFolders?: () => void
 }
 
 type FilesChromeContextValue = {

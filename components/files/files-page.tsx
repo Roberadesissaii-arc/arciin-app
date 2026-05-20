@@ -340,9 +340,16 @@ export function FilesPage() {
     setCreateFolderOpen(true)
   }, [])
 
+  const closeAllFolders = useCallback(() => {
+    setAllFoldersOpen(false)
+  }, [])
+
   useEffect(() => {
     setChrome({
-      subtitle,
+      view: allFoldersOpen ? "all-folders" : "files",
+      subtitle: allFoldersOpen
+        ? `${visibleFolders.length} folder${visibleFolders.length !== 1 ? "s" : ""}`
+        : subtitle,
       filter,
       libraries,
       libraryScoped,
@@ -352,16 +359,18 @@ export function FilesPage() {
       hasCache,
       refreshing,
       uploading,
-      canUpload: Boolean(connection),
-      canCreateFolder: Boolean(connection && activeLibraryId),
+      canUpload: Boolean(connection) && !allFoldersOpen,
+      canCreateFolder: Boolean(connection && activeLibraryId) && !allFoldersOpen,
       onRefresh: triggerRefresh,
       onUpload: triggerUpload,
       onCreateFolder: triggerCreateFolder,
       onChangeFilter: changeFilter,
       onGoToLibraryRoot: goToLibraryRoot,
+      onCloseAllFolders: closeAllFolders,
     })
     return () => setChrome(null)
   }, [
+    allFoldersOpen,
     subtitle,
     filter,
     libraries,
@@ -374,12 +383,14 @@ export function FilesPage() {
     uploading,
     connection,
     activeLibraryId,
+    visibleFolders.length,
     setChrome,
     triggerRefresh,
     triggerUpload,
     triggerCreateFolder,
     changeFilter,
     goToLibraryRoot,
+    closeAllFolders,
   ])
 
   return (
@@ -614,7 +625,7 @@ function AllFoldersList({
     : folders
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4 pt-safe">
       {/* intro card */}
       <div
         className="relative overflow-hidden rounded-2xl px-4 pb-4 pt-4"
