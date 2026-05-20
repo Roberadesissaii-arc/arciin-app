@@ -14,6 +14,7 @@ import { DeleteAssetDialog } from "@/components/files/delete-asset-dialog"
 import { MobileMoveFolderSheet } from "@/components/files/mobile-move-folder-sheet"
 import {
   assetDownloadUrl,
+  assetStreamUrl,
   deleteAsset,
   downloadAssetFile,
   moveAsset,
@@ -81,11 +82,10 @@ export function AssetViewer({
   const [error, setError] = useState<string | null>(null)
   const [previewSrc, setPreviewSrc] = useState<string | null>(null)
   const isPdf = asset.mimeType === "application/pdf"
+  const streamsInline =
+    asset.mediaType === "VIDEO" || asset.mediaType === "AUDIO"
   const loadsMediaBlob =
-    asset.mediaType === "IMAGE" ||
-    asset.mediaType === "VIDEO" ||
-    asset.mediaType === "AUDIO" ||
-    isPdf
+    asset.mediaType === "IMAGE" || isPdf
   const [previewLoading, setPreviewLoading] = useState(loadsMediaBlob)
 
   const title = asset.title?.trim() || asset.originalFilename
@@ -101,6 +101,12 @@ export function AssetViewer({
   }, [mounted])
 
   useEffect(() => {
+    if (streamsInline) {
+      setPreviewSrc(assetStreamUrl(connection, asset.id))
+      setPreviewLoading(false)
+      return
+    }
+
     if (!loadsMediaBlob) {
       void loadThumbnail(connection, asset.id).then((url) => {
         if (url) setPreviewSrc(url)
@@ -143,7 +149,7 @@ export function AssetViewer({
       cancelled = true
       if (objectUrl) URL.revokeObjectURL(objectUrl)
     }
-  }, [asset.id, loadsMediaBlob, connection])
+  }, [asset.id, loadsMediaBlob, streamsInline, connection])
 
   const handleDownload = useCallback(async () => {
     setBusy("download")

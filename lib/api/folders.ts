@@ -28,3 +28,11 @@ export function createFolder(
     },
   })
 }
+
+export function deleteFolder(connection: MobileConnection, folderId: string) {
+  return fetchApi<{ success: boolean }>(`/folders/${folderId}/delete`, {
+    connection,
+    method: "POST",
+    body: {},
+  })
+}

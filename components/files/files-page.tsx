@@ -8,10 +8,11 @@ import { AssetThumbnail } from "@/components/files/asset-thumbnail"
 import { FolderTile } from "@/components/files/folder-tile"
 import { AssetViewer } from "@/components/files/asset-viewer"
 import { MobileCreateFolderSheet } from "@/components/files/mobile-create-folder-sheet"
+import { MobileFolderActionsSheet } from "@/components/files/mobile-folder-actions-sheet"
 import { useConnection } from "@/components/providers/connection-provider"
 import { getAssets } from "@/lib/api/assets"
 import { formatApiError } from "@/lib/api/errors"
-import { listFolders } from "@/lib/api/folders"
+import { deleteFolder, listFolders } from "@/lib/api/folders"
 import { listLibraries } from "@/lib/api/libraries"
 import { uploadFile } from "@/lib/api/uploads"
 import { classifyFile, filterIdForMediaType } from "@/lib/files/classify-file"
@@ -102,6 +103,7 @@ export function FilesPage() {
   const [error, setError] = useState<string | null>(null)
   const [viewerAsset, setViewerAsset] = useState<AssetSummary | null>(null)
   const [createFolderOpen, setCreateFolderOpen] = useState(false)
+  const [folderActionsTarget, setFolderActionsTarget] = useState<FolderSummary | null>(null)
   const [hasCache, setHasCache] = useState(false)
 
   const libraryScoped = filter !== "all"
@@ -218,6 +220,15 @@ export function FilesPage() {
     },
     [load],
   )
+
+  const handleDeleteFolder = useCallback(async () => {
+    if (!connection || !folderActionsTarget) return
+    await deleteFolder(connection, folderActionsTarget.id)
+    setFolders((prev) => prev.filter((f) => f.id !== folderActionsTarget.id))
+    if (folderId === folderActionsTarget.id) setFolderId(null)
+    setFolderActionsTarget(null)
+    void load(undefined, true)
+  }, [connection, folderActionsTarget, folderId, load])
 
   const goToLibraryRoot = useCallback(() => {
     setFolderId(null)
@@ -390,6 +401,16 @@ export function FilesPage() {
         />
       ) : null}
 
+      <MobileFolderActionsSheet
+        open={Boolean(folderActionsTarget)}
+        folder={folderActionsTarget}
+        onClose={() => setFolderActionsTarget(null)}
+        onOpen={() => {
+          if (folderActionsTarget) openFolder(folderActionsTarget.id)
+        }}
+        onDelete={handleDeleteFolder}
+      />
+
       <MobileCreateFolderSheet
         open={createFolderOpen}
         libraryId={activeLibraryId}
@@ -469,6 +490,7 @@ export function FilesPage() {
                         key={folder.id}
                         folder={folder}
                         onOpen={() => openFolder(folder.id)}
+                        onLongPress={() => setFolderActionsTarget(folder)}
                       />
                     ))}
                   </div>
@@ -476,7 +498,7 @@ export function FilesPage() {
                   <SectionPlaceholder
                     icon={Folder}
                     title="No folders yet"
-                    description="Tap the folder icon above to create a folder in this library."
+                    description="Tap the folder icon above to create one, or press and hold a folder to delete it."
                   />
                 )}
               </section>

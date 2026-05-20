@@ -52,8 +52,22 @@ export function assetDownloadUrl(
   assetId: string,
   inline = false,
 ) {
-  const q = inline ? "?inline=1" : ""
+  const params = new URLSearchParams()
+  if (inline) params.set("inline", "1")
+  const q = params.size ? `?${params.toString()}` : ""
   return buildApiUrl(connection.apiBaseUrl, `/assets/${assetId}/download${q}`)
+}
+
+/** Stream URL for `<audio>` / `<video>` — browser cannot send Bearer headers on media elements. */
+export function assetStreamUrl(connection: MobileConnection, assetId: string) {
+  const params = new URLSearchParams({
+    inline: "1",
+    access_token: connection.sessionToken,
+  })
+  return buildApiUrl(
+    connection.apiBaseUrl,
+    `/assets/${assetId}/download?${params.toString()}`,
+  )
 }
 
 export function getAsset(connection: MobileConnection, assetId: string, signal?: AbortSignal) {

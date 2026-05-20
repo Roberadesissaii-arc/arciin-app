@@ -103,7 +103,7 @@ export async function streamChat(
     const urls = deriveMobileServerUrlsFromApiBase(connection.apiBaseUrl)
     candidates.add(buildApiUrl(urls.apiBaseUrl, "/chat"))
     if (connection.webUrl) {
-      candidates.add(buildApiUrl(connection.webUrl, "/api/chat"))
+      candidates.add(buildApiUrl(connection.webUrl, "/chat"))
     }
   } catch {
     // keep primary candidate

@@ -5,10 +5,12 @@ import type { FolderSummary } from "@/lib/types/folders"
 export function FolderTile({
   folder,
   onOpen,
+  onLongPress,
   compact,
 }: {
   folder: FolderSummary
   onOpen: () => void
+  onLongPress?: () => void
   compact?: boolean
 }) {
   const tabW = compact ? "44%" : "46%"
@@ -19,6 +21,17 @@ export function FolderTile({
     <button
       type="button"
       onClick={onOpen}
+      onContextMenu={(e) => {
+        e.preventDefault()
+        onLongPress?.()
+      }}
+      onTouchStart={() => {
+        if (!onLongPress) return
+        const timer = window.setTimeout(() => onLongPress(), 520)
+        const clear = () => window.clearTimeout(timer)
+        window.addEventListener("touchend", clear, { once: true })
+        window.addEventListener("touchmove", clear, { once: true })
+      }}
       className="group flex w-full flex-col text-left active:scale-[0.98] active:opacity-95"
       aria-label={`Open folder ${folder.name}`}
     >
