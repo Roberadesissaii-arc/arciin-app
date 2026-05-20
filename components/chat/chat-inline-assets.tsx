@@ -4,7 +4,8 @@ import { useEffect, useState } from "react"
 import { File, Loader2 } from "lucide-react"
 
 import { useConnection } from "@/components/providers/connection-provider"
-import { assetThumbnailUrl, getAsset, getAssets } from "@/lib/api/assets"
+import { getAsset, getAssets } from "@/lib/api/assets"
+import { getCachedThumbnailUrl, loadThumbnail } from "@/lib/files/thumbnail-cache"
 import type { AssetSummary, MediaType } from "@/lib/types/assets"
 
 const MEDIA_TYPE_MAP: Record<string, MediaType> = {
@@ -22,10 +23,36 @@ function fmtBytes(bytes: number) {
 
 function AssetCard({ asset }: { asset: AssetSummary }) {
   const { connection } = useConnection()
+  const wantsThumb = asset.mediaType === "IMAGE" || asset.mediaType === "VIDEO"
+  const [thumbSrc, setThumbSrc] = useState<string | null>(
+    wantsThumb ? getCachedThumbnailUrl(asset.id) : null,
+  )
   const [thumbFailed, setThumbFailed] = useState(false)
-  const hasThumb =
-    !thumbFailed && (asset.mediaType === "IMAGE" || asset.mediaType === "VIDEO")
-  const thumbSrc = connection ? assetThumbnailUrl(connection, asset.id) : null
+
+  useEffect(() => {
+    if (!connection || !wantsThumb) return
+    const cached = getCachedThumbnailUrl(asset.id)
+    if (cached) {
+      setThumbSrc(cached)
+      setThumbFailed(false)
+      return
+    }
+    let cancelled = false
+    void loadThumbnail(connection, asset.id).then((url) => {
+      if (cancelled) return
+      if (url) {
+        setThumbSrc(url)
+        setThumbFailed(false)
+      } else {
+        setThumbFailed(true)
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [asset.id, connection, wantsThumb])
+
+  const hasThumb = Boolean(thumbSrc) && !thumbFailed
 
   return (
     <div
@@ -33,15 +60,9 @@ function AssetCard({ asset }: { asset: AssetSummary }) {
       style={{ border: "1px solid #e5e5e5" }}
     >
       <div className="relative aspect-video overflow-hidden bg-[#f0f0f0]">
-        {hasThumb && thumbSrc ? (
+        {hasThumb ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={thumbSrc}
-            alt=""
-            className="h-full w-full object-cover"
-            loading="lazy"
-            onError={() => setThumbFailed(true)}
-          />
+          <img src={thumbSrc!} alt="" className="h-full w-full object-cover" loading="lazy" />
         ) : (
           <div className="flex h-full w-full items-center justify-center text-[#c0c0c0]">
             <File className="size-6" />
