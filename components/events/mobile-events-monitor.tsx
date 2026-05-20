@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import { io, type Socket } from "socket.io-client"
 import { ChevronDown, ChevronRight, Pause, Play, Trash2, Wifi, WifiOff } from "lucide-react"
 
+import { PageFetchErrorAlert } from "@/components/shell/page-fetch-error-alert"
 import { useConnection } from "@/components/providers/connection-provider"
 import { getMobileSocketUrl } from "@/lib/realtime/socket-url"
 import { socketEventTypes, type SocketEventPayload } from "@/lib/types/events"
@@ -290,14 +291,10 @@ export function MobileEventsMonitor() {
           </span>
         </div>
 
-        {error ? (
-          <p
-            className="rounded-lg px-2.5 py-1.5 text-[11px] text-[#b91c1c]"
-            style={{ backgroundColor: "#fef2f2", border: "1px solid #fecaca" }}
-          >
-            {error}
-          </p>
-        ) : null}
+        <PageFetchErrorAlert
+          error={error}
+          className="rounded-lg px-2.5 py-1.5 text-[11px] text-[#b91c1c]"
+        />
 
         <div className="flex items-center gap-2">
           {paused && bufferedCount > 0 ? (

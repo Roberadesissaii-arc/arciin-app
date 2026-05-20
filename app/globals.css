@@ -228,7 +228,7 @@ body:has(.mobile-app-root) {
   }
 }
 
-/* Offline server banner — orange highlight travels around the card border */
+/* Offline server banner — one soft orange beam travels the border (slow, seamless loop) */
 @keyframes server-offline-border-spin {
   to {
     transform: rotate(360deg);
@@ -245,18 +245,22 @@ body:has(.mobile-app-root) {
 
 .server-offline-banner__ring {
   position: absolute;
-  inset: -60%;
+  inset: -80%;
   background: conic-gradient(
     from 0deg,
-    transparent 0deg,
-    transparent 248deg,
-    rgba(255, 79, 18, 0.15) 268deg,
-    #ff4f12 292deg,
-    #ff6a33 312deg,
-    rgba(255, 106, 51, 0.55) 328deg,
-    transparent 360deg
+    transparent 0deg 302deg,
+    rgba(255, 79, 18, 0.12) 322deg,
+    rgba(255, 79, 18, 0.5) 338deg,
+    #ff4f12 346deg,
+    #ff6a33 349deg,
+    #ff4f12 352deg,
+    rgba(255, 79, 18, 0.5) 358deg,
+    rgba(255, 79, 18, 0.12) 368deg,
+    transparent 382deg
   );
-  animation: server-offline-border-spin 3s linear infinite;
+  animation: server-offline-border-spin 7.5s linear infinite;
+  filter: blur(0.65px);
+  will-change: transform;
 }
 
 .server-offline-banner__panel {
@@ -269,10 +273,11 @@ body:has(.mobile-app-root) {
   .server-offline-banner__ring {
     animation: none;
     inset: 0;
+    filter: none;
     background: linear-gradient(
       90deg,
-      rgba(255, 79, 18, 0.45) 0%,
-      rgba(255, 106, 51, 0.2) 55%,
+      rgba(255, 79, 18, 0.4) 0%,
+      rgba(255, 106, 51, 0.15) 55%,
       transparent 100%
     );
   }

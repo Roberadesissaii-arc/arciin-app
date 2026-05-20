@@ -7,6 +7,7 @@ import { MobileAddProviderSheet } from "@/components/models/mobile-add-provider-
 import { MobileConnectSheet } from "@/components/models/mobile-connect-sheet"
 import { MobileProviderCard } from "@/components/models/mobile-provider-card"
 import { useModelsChromeOptional } from "@/components/models/models-chrome-context"
+import { PageFetchErrorAlert } from "@/components/shell/page-fetch-error-alert"
 import { useConnection } from "@/components/providers/connection-provider"
 import { getChatSelection, setChatSelection } from "@/lib/api/chat"
 import { formatApiError } from "@/lib/api/errors"
@@ -187,14 +188,7 @@ export function MobileModelsPage() {
       ) : null}
 
       <div className="flex flex-col gap-4 pb-6 pt-0">
-        {error ? (
-          <p
-            className="rounded-xl px-4 py-3 text-[12px] text-[#b91c1c]"
-            style={{ backgroundColor: "#fef2f2", border: "1px solid #fecaca" }}
-          >
-            {error}
-          </p>
-        ) : null}
+        <PageFetchErrorAlert error={error} onRetry={() => void load({ refresh: true })} />
         {message ? (
           <p
             className="rounded-xl px-4 py-3 text-[12px] text-[#15803d]"

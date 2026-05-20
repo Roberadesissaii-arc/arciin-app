@@ -6,6 +6,7 @@ import { Activity, Loader2, RefreshCw, Search, X } from "lucide-react"
 import { activityIconFor, activityTypeLabel, Clock3 } from "@/lib/activity/icons"
 import { formatApiError } from "@/lib/api/errors"
 import { fetchRecentActivity } from "@/lib/api/notifications"
+import { PageFetchErrorAlert } from "@/components/shell/page-fetch-error-alert"
 import { useConnection } from "@/components/providers/connection-provider"
 import type { ActivitySummary } from "@/lib/types/models"
 import { formatRelativeDate } from "@/lib/utils/format-date"
@@ -124,14 +125,7 @@ export function MobileActivityPage({ title = "Activity" }: { title?: string }) {
       </div>
 
       {/* ── error ───────────────────────────────────────────────── */}
-      {error ? (
-        <div
-          className="rounded-xl px-4 py-3 text-[12px] text-[#b91c1c]"
-          style={{ backgroundColor: "#fef2f2", border: "1px solid #fecaca" }}
-        >
-          {error}
-        </div>
-      ) : null}
+      <PageFetchErrorAlert error={error} onRetry={() => void load()} />
 
       {/* ── list ────────────────────────────────────────────────── */}
       {loading ? (

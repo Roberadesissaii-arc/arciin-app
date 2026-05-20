@@ -5,6 +5,7 @@ import { BriefcaseBusiness, ChevronLeft, ChevronRight, Loader2, RefreshCw, Searc
 
 import { formatApiError } from "@/lib/api/errors"
 import { fetchJobs, type JobSummary } from "@/lib/api/jobs"
+import { PageFetchErrorAlert } from "@/components/shell/page-fetch-error-alert"
 import { useConnection } from "@/components/providers/connection-provider"
 import { formatRelativeDate } from "@/lib/utils/format-date"
 
@@ -185,14 +186,7 @@ export function MobileJobsPage() {
       </div>
 
       {/* ── error ───────────────────────────────────────────────── */}
-      {error ? (
-        <div
-          className="rounded-xl px-4 py-3 text-[12px] text-[#b91c1c]"
-          style={{ backgroundColor: "#fef2f2", border: "1px solid #fecaca" }}
-        >
-          {error}
-        </div>
-      ) : null}
+      <PageFetchErrorAlert error={error} onRetry={() => void load()} />
 
       {/* ── list ────────────────────────────────────────────────── */}
       {loading ? (

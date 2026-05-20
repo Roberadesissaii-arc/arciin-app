@@ -8,6 +8,7 @@ import { AssetThumbnail } from "@/components/files/asset-thumbnail"
 import { FolderTile } from "@/components/files/folder-tile"
 import { AssetViewer } from "@/components/files/asset-viewer"
 import { MobileCreateFolderSheet } from "@/components/files/mobile-create-folder-sheet"
+import { PageFetchErrorAlert } from "@/components/shell/page-fetch-error-alert"
 import { useConnection } from "@/components/providers/connection-provider"
 import { getAssets } from "@/lib/api/assets"
 import { formatApiError } from "@/lib/api/errors"
@@ -466,15 +467,7 @@ export function FilesPage() {
             </p>
           ) : null}
 
-          {error ? (
-            <div
-              className="rounded-xl px-4 py-3 text-[12px] text-[#b91c1c]"
-              style={{ backgroundColor: "#fef2f2", border: "1px solid #fecaca" }}
-              role="alert"
-            >
-              {error}
-            </div>
-          ) : null}
+          <PageFetchErrorAlert error={error} onRetry={() => void load()} />
 
           {uploading && uploadName ? (
             <div

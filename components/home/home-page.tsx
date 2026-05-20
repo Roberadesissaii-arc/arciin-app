@@ -12,8 +12,8 @@ import {
 
 import { HomePageSkeleton } from "@/components/home/home-page-skeleton"
 import { useCachedHomeOverview } from "@/lib/hooks/use-cached-home-overview"
+import { PageFetchErrorAlert } from "@/components/shell/page-fetch-error-alert"
 import { useConnection } from "@/components/providers/connection-provider"
-import { shouldShowPageFetchError } from "@/lib/connection/offline-ui"
 import {
   activityIconFor,
   activityTypeLabel,
@@ -90,9 +90,8 @@ function storagePercent(storage: NonNullable<HomeOverview["storage"]>) {
 }
 
 export function HomePage() {
-  const { connection, serverReachable } = useConnection()
+  const { connection } = useConnection()
   const { data, error, reload } = useCachedHomeOverview()
-  const showFetchError = shouldShowPageFetchError(serverReachable, error)
 
   const storage = data?.storage
   const storagePct = storage ? storagePercent(storage) : null
@@ -141,22 +140,7 @@ export function HomePage() {
         </p>
       </div>
 
-      {showFetchError ? (
-        <div
-          className="rounded-xl px-4 py-3 text-[12px] text-[#b91c1c]"
-          style={{ backgroundColor: "#fef2f2", border: "1px solid #fecaca" }}
-          role="alert"
-        >
-          <p>{error}</p>
-          <button
-            type="button"
-            onClick={() => void reload()}
-            className="mt-2 font-semibold text-[#ff4f12]"
-          >
-            Try again
-          </button>
-        </div>
-      ) : null}
+      <PageFetchErrorAlert error={error} onRetry={() => void reload()} />
 
       <div className="grid grid-cols-2 gap-3">
         <StatCard
