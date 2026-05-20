@@ -7,6 +7,7 @@ import type {
   IntegrationSummary,
   RemoteAccessSettings,
   StorageSettings,
+  StorageVolumesResponse,
 } from "@/lib/types/models"
 
 export function getStorageSettings(connection: MobileConnection, signal?: AbortSignal) {
@@ -22,6 +23,14 @@ export function updateStorageSettings(connection: MobileConnection, storageRoot:
     connection,
     method: "PATCH",
     body: { storageRoot },
+  })
+}
+
+export function getStorageVolumes(connection: MobileConnection, signal?: AbortSignal) {
+  return fetchApi<StorageVolumesResponse>("/settings/storage/volumes", {
+    connection,
+    method: "GET",
+    signal,
   })
 }
 

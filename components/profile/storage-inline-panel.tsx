@@ -1,15 +1,21 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import { FolderTree, HardDrive, Loader2, Save } from "lucide-react"
+import { BadgeCheck, FolderTree, HardDrive, Loader2, RefreshCw, Save } from "lucide-react"
 
 import { SettingsIntroCard } from "@/components/settings/settings-intro-card"
 import { formatApiError } from "@/lib/api/errors"
-import { getStorageSettings, updateStorageSettings } from "@/lib/api/settings"
+import { getStorageSettings, getStorageVolumes, updateStorageSettings } from "@/lib/api/settings"
 import { getUserPreferences, updateUserPreferences } from "@/lib/api/user-preferences"
 import { useStablePanelLoad } from "@/lib/hooks/use-stable-panel-load"
 import { formatBytes } from "@/lib/utils/format-bytes"
-import type { StorageSettings } from "@/lib/types/models"
+import type { StorageSettings, StorageVolumeOption } from "@/lib/types/models"
+
+function formatVolumeFree(option: StorageVolumeOption) {
+  if (option.availableBytes == null) return "Space unknown"
+  const total = option.totalBytes != null ? formatBytes(option.totalBytes) : "?"
+  return `${formatBytes(option.availableBytes)} free of ${total}`
+}
 
 const LAYOUT_HINTS = [
   { label: "objects", hint: "Binary blobs keyed by object ID" },
@@ -37,6 +43,10 @@ export function StorageInlinePanel({ enabled }: { enabled: boolean }) {
   const [docThumbs, setDocThumbs] = useState(false)
   const [prefsSaving, setPrefsSaving] = useState(false)
   const [prefsError, setPrefsError] = useState<string | null>(null)
+  const [volumes, setVolumes] = useState<StorageVolumeOption[]>([])
+  const [volumesLoading, setVolumesLoading] = useState(false)
+  const [volumesError, setVolumesError] = useState<string | null>(null)
+  const [volumesNote, setVolumesNote] = useState<string | null>(null)
 
   useEffect(() => {
     if (!data) return
@@ -44,6 +54,27 @@ export function StorageInlinePanel({ enabled }: { enabled: boolean }) {
     setPath(root)
     setInitialPath(root)
   }, [data])
+
+  const loadVolumes = useCallback(async () => {
+    if (!connection) return
+    setVolumesLoading(true)
+    setVolumesError(null)
+    try {
+      const res = await getStorageVolumes(connection)
+      setVolumes(res.volumes ?? [])
+      setVolumesNote(res.installNotes?.[0] ?? null)
+    } catch (err) {
+      setVolumes([])
+      setVolumesError(formatApiError(err))
+    } finally {
+      setVolumesLoading(false)
+    }
+  }, [connection])
+
+  useEffect(() => {
+    if (!enabled || !connection) return
+    void loadVolumes()
+  }, [enabled, connection, loadVolumes])
 
   useEffect(() => {
     if (!enabled || !connection) return
@@ -144,6 +175,79 @@ export function StorageInlinePanel({ enabled }: { enabled: boolean }) {
           <span>{usagePct != null ? `${usagePct}% full` : usage?.writable === false ? "Read-only" : ""}</span>
         </div>
       </div>
+
+      <div className="rounded-xl bg-[#f7f7f7] p-3" style={{ border: "1px solid #e5e5e5" }}>
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <p className="text-[12px] font-semibold text-[#222222]">Detected drives</p>
+          <button
+            type="button"
+            disabled={volumesLoading}
+            onClick={() => void loadVolumes()}
+            className="flex items-center gap-1 text-[11px] font-medium text-[#717171] disabled:opacity-50"
+          >
+            <RefreshCw className={`size-3.5 ${volumesLoading ? "animate-spin" : ""}`} />
+            Rescan
+          </button>
+        </div>
+        {volumesLoading && volumes.length === 0 ? (
+          <div className="flex items-center gap-2 py-4 text-[12px] text-[#a0a0a0]">
+            <Loader2 className="size-4 animate-spin" />
+            Scanning server volumes…
+          </div>
+        ) : volumesError ? (
+          <p className="py-2 text-[12px] text-[#a0a0a0]">{volumesError}</p>
+        ) : volumes.length === 0 ? (
+          <p className="py-2 text-[12px] text-[#a0a0a0]">
+            No volumes reported. Use Arciin on desktop to move storage or rescan after mounting a drive.
+          </p>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {volumes.map((vol) => (
+              <li
+                key={vol.id}
+                className="rounded-lg px-2.5 py-2"
+                style={{
+                  border: vol.isCurrent ? "1px solid #ff4f12" : "1px solid #e5e5e5",
+                  backgroundColor: vol.isCurrent ? "rgba(255,79,18,0.06)" : "#fff",
+                }}
+              >
+                <div className="flex items-start gap-2">
+                  {vol.isCurrent ? (
+                    <BadgeCheck className="mt-0.5 size-4 shrink-0 text-[#ff4f12]" aria-hidden />
+                  ) : (
+                    <HardDrive className="mt-0.5 size-4 shrink-0 text-[#a0a0a0]" />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <p className="text-[12px] font-medium text-[#222222]">{vol.label}</p>
+                      {vol.isCurrent ? (
+                        <span className="rounded-md bg-[#ff4f12]/10 px-1.5 py-0.5 text-[10px] font-semibold text-[#ff4f12]">
+                          In use
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className="truncate font-mono text-[10px] text-[#a0a0a0]">{vol.arciinPath}</p>
+                    <p className="mt-0.5 text-[10px] text-[#a0a0a0]">{formatVolumeFree(vol)}</p>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+        {volumesNote ? (
+          <p className="mt-2 text-[10px] leading-relaxed text-[#a0a0a0]">{volumesNote}</p>
+        ) : null}
+        <p className="mt-2 text-[10px] text-[#a0a0a0]">
+          To move all files to another disk, open Storage on the Arciin desktop app (owner/admin).
+        </p>
+      </div>
+
+      {usage?.isDockerRuntime && usage.hostStorageRoot ? (
+        <p className="text-[11px] leading-relaxed text-[#a0a0a0]">
+          Docker host folder:{" "}
+          <span className="font-mono text-[#222222]">{usage.hostStorageRoot}</span>
+        </p>
+      ) : null}
 
       <div className="flex flex-col gap-1.5">
         <label htmlFor="storage-root-inline" className="text-[12px] font-semibold text-[#717171]">

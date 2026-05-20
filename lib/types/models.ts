@@ -18,12 +18,35 @@ export type UploadSessionSummary = {
 export type StorageSettings = {
   instanceName?: string
   storageRoot?: string
+  runtimeStorageRoot?: string
+  hostStorageRoot?: string | null
+  isDockerRuntime?: boolean
   defaultLocationId?: string | null
   usageBytes: number
   objectCount: number
   totalBytes?: number | null
   availableBytes?: number | null
   writable: boolean
+}
+
+export type StorageVolumeOption = {
+  id: string
+  label: string
+  arciinPath: string
+  mountPoint: string | null
+  totalBytes: number | null
+  availableBytes: number | null
+  writable: boolean
+  recommended: boolean
+  largeExternal: boolean
+  isCurrent?: boolean
+}
+
+export type StorageVolumesResponse = {
+  volumes: StorageVolumeOption[]
+  currentStorageRoot: string
+  installNotes?: string[]
+  isDockerRuntime?: boolean
 }
 
 export type RemoteAccessSettings = {
