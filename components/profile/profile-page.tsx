@@ -13,6 +13,7 @@ import {
   KeyRound,
   Loader2,
   PackagePlus,
+  Server,
   Settings,
   Shield,
   User,
@@ -22,6 +23,7 @@ import {
 import { SignOutButton } from "@/components/auth/sign-out-button"
 import { ApiKeysInlinePanel } from "@/components/profile/api-keys-inline-panel"
 import { ChangePasswordPanel } from "@/components/profile/change-password-panel"
+import { ChangeServerInlinePanel } from "@/components/profile/change-server-inline-panel"
 import { DatabaseInlinePanel } from "@/components/profile/database-inline-panel"
 import { IntegrationsInlinePanel } from "@/components/profile/integrations-inline-panel"
 import { PreferencesInlinePanel } from "@/components/profile/preferences-inline-panel"
@@ -300,9 +302,27 @@ export function ProfilePage() {
 
       <div>
         <SectionLabel label="Account" />
-        <MenuCard>
-          <MenuRow icon={Bell} label="Notifications" sub="Alerts & toasts" href="/profile/notifications" />
-        </MenuCard>
+        <SettingsGroup>
+          <SettingsGroupItem
+            icon={Server}
+            label="Change server"
+            sub="Connect to another Arciin instance"
+            open={sectionOpen("change-server")}
+            onToggle={() => toggleSection("change-server")}
+          >
+            <ChangeServerInlinePanel enabled={sectionOpen("change-server")} />
+          </SettingsGroupItem>
+          <SettingsGroupDivider />
+          <SettingsGroupItem
+            icon={Bell}
+            label="Notifications"
+            sub="Alerts & toasts"
+            open={false}
+            onToggle={() => {}}
+            footerHref="/profile/notifications"
+            footerLabel="Open notifications"
+          />
+        </SettingsGroup>
       </div>
 
       <div>

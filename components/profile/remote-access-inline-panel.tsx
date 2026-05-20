@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation"
 import {
   ArrowLeftRight,
   Globe,
-  Link2,
   Loader2,
   Save,
   Smartphone,
@@ -52,9 +51,6 @@ export function RemoteAccessInlinePanel({ enabled }: { enabled: boolean }) {
 
   const [serverAddress, setServerAddress] = useState("")
   const [reconnecting, setReconnecting] = useState(false)
-  const [reconnectMessage, setReconnectMessage] = useState<string | null>(null)
-  const [reconnectError, setReconnectError] = useState<string | null>(null)
-
   const [domain, setDomain] = useState("")
   const [initialDomain, setInitialDomain] = useState("")
   const [localUrl, setLocalUrl] = useState<string | null>(null)
@@ -87,32 +83,6 @@ export function RemoteAccessInlinePanel({ enabled }: { enabled: boolean }) {
   const usingPublic = connectionMode === "public" && Boolean(activePublicUrl)
   const lanList =
     lanUrls.length > 0 ? lanUrls : activeLocalUrl ? [activeLocalUrl] : []
-
-  async function handleReconnect() {
-    setReconnecting(true)
-    setReconnectError(null)
-    setReconnectMessage(null)
-    try {
-      const result = await reconnectServer(serverAddress)
-      if (result.status === "connected") {
-        setReconnectMessage("Reconnected. Your session is still active — no pairing code needed.")
-        dispatchAppForeground()
-        await refresh()
-        await reload()
-        return
-      }
-      if (result.status === "need_sign_in") {
-        setReconnectMessage("Server address updated. Sign in with your email and password (same account).")
-        router.push("/sign-in")
-        return
-      }
-      setReconnectError(result.message)
-    } catch (err) {
-      setReconnectError(formatApiError(err, serverAddress))
-    } finally {
-      setReconnecting(false)
-    }
-  }
 
   async function savePatch(patch: Partial<RemoteAccessSettings>) {
     if (!connection) return
@@ -193,51 +163,18 @@ export function RemoteAccessInlinePanel({ enabled }: { enabled: boolean }) {
       <SettingsIntroCard
         icon={Globe}
         title="Remote access"
-        description="Point this app at your Arciin server — on Wi‑Fi (LAN) or your public domain. Paste the URL from desktop Settings → Domain when connecting from anywhere."
+        description="Switch between LAN and public URLs for this server. To connect to a different instance, use Account → Change server."
       />
 
-      <section
-        className="overflow-hidden rounded-2xl bg-white"
-        style={{ border: "1px solid rgba(255,79,18,0.35)" }}
-      >
-        <div className="flex items-center gap-2 border-b border-[#f0f0f0] bg-[#fff7f4] px-4 py-3">
-          <Link2 className="size-4 text-[#ff4f12]" />
-          <div>
-            <p className="text-[13px] font-semibold text-[#222222]">Server address</p>
-            <p className="text-[11px] text-[#a0a0a0]">
-              {showReconnect
-                ? "Tunnel expired or server offline? Paste the new URL and reconnect."
-                : "Change where this app connects without registering again."}
-            </p>
-          </div>
-        </div>
-        <div className="space-y-3 px-4 py-4">
-          <input
-            type="url"
-            value={serverAddress}
-            onChange={(e) => setServerAddress(e.target.value)}
-            placeholder="https://your-domain.com or http://192.168.1.10:3004"
-            className="w-full rounded-xl bg-[#f7f7f7] px-4 py-3 font-mono text-[13px] text-[#222222] outline-none"
-            style={{ border: "1px solid #e5e5e5" }}
-            autoComplete="url"
-          />
-          <button
-            type="button"
-            disabled={reconnecting || !serverAddress.trim()}
-            onClick={() => void handleReconnect()}
-            className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#ff4f12] text-[14px] font-semibold text-white disabled:opacity-50"
-          >
-            {reconnecting ? <Loader2 className="size-4 animate-spin" /> : null}
-            {reconnecting ? "Reconnecting…" : "Update address & reconnect"}
-          </button>
-          {reconnectError ? (
-            <p className="text-[12px] text-[#b91c1c]">{reconnectError}</p>
-          ) : null}
-          {reconnectMessage ? (
-            <p className="text-[12px] text-[#15803d]">{reconnectMessage}</p>
-          ) : null}
-        </div>
-      </section>
+      {showReconnect ? (
+        <p
+          className="rounded-xl px-3 py-2 text-[12px] leading-relaxed text-[#b45309]"
+          style={{ backgroundColor: "#fffbeb", border: "1px solid #fde68a" }}
+        >
+          Server unreachable. Open <strong>Change server</strong> under Account to paste a new URL,
+          or switch LAN / public below.
+        </p>
+      ) : null}
 
       {loading && connection ? (
         <div className="flex justify-center py-6">
