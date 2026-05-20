@@ -13,6 +13,7 @@ import {
 import { HomePageSkeleton } from "@/components/home/home-page-skeleton"
 import { useCachedHomeOverview } from "@/lib/hooks/use-cached-home-overview"
 import { useConnection } from "@/components/providers/connection-provider"
+import { suppressFetchErrorWhenOffline } from "@/lib/connection/offline-ui"
 import {
   activityIconFor,
   activityTypeLabel,
@@ -89,8 +90,9 @@ function storagePercent(storage: NonNullable<HomeOverview["storage"]>) {
 }
 
 export function HomePage() {
-  const { connection } = useConnection()
+  const { connection, serverReachable } = useConnection()
   const { data, error, reload } = useCachedHomeOverview()
+  const displayError = suppressFetchErrorWhenOffline(serverReachable, error)
 
   const storage = data?.storage
   const storagePct = storage ? storagePercent(storage) : null
@@ -116,13 +118,13 @@ export function HomePage() {
   if (!data) {
     return (
       <div className="flex flex-col gap-5">
-        {error ? (
+        {displayError ? (
           <div
             className="rounded-xl px-4 py-3 text-[12px] text-[#b91c1c]"
             style={{ backgroundColor: "#fef2f2", border: "1px solid #fecaca" }}
             role="alert"
           >
-            <p>{error}</p>
+            <p>{displayError}</p>
             <button
               type="button"
               onClick={() => void reload()}
@@ -155,13 +157,13 @@ export function HomePage() {
         </p>
       </div>
 
-      {error ? (
+      {displayError ? (
         <div
           className="rounded-xl px-4 py-3 text-[12px] text-[#b91c1c]"
           style={{ backgroundColor: "#fef2f2", border: "1px solid #fecaca" }}
           role="alert"
         >
-          <p>{error}</p>
+          <p>{displayError}</p>
           <button
             type="button"
             onClick={() => void reload()}
