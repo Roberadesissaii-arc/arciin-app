@@ -13,3 +13,18 @@ export function listFolders(
     signal,
   })
 }
+
+export function createFolder(
+  connection: MobileConnection,
+  libraryId: string,
+  body: { name: string; parentFolderId?: string | null },
+) {
+  return fetchApi<FolderSummary>(`/libraries/${libraryId}/folders`, {
+    connection,
+    method: "POST",
+    body: {
+      name: body.name,
+      ...(body.parentFolderId ? { parentFolderId: body.parentFolderId } : {}),
+    },
+  })
+}

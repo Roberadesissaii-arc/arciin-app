@@ -1,7 +1,7 @@
 "use client"
 
 import { usePathname } from "next/navigation"
-import { ChevronRight, CloudUpload, Loader2, RefreshCw } from "lucide-react"
+import { ChevronRight, CloudUpload, FolderPlus, Loader2, RefreshCw } from "lucide-react"
 
 import { useFilesChromeOptional } from "@/components/files/files-chrome-context"
 import { assetCountForFilter } from "@/lib/files/library-helpers"
@@ -44,6 +44,18 @@ export function FilesMobileHeader() {
                 className={`size-4 ${chrome?.refreshing ? "animate-spin" : ""}`}
               />
             </button>
+            {chrome?.canCreateFolder ? (
+              <button
+                type="button"
+                onClick={() => chrome.onCreateFolder()}
+                disabled={!chrome}
+                className="flex size-9 items-center justify-center rounded-xl bg-white text-[#717171] active:opacity-70 disabled:opacity-40"
+                style={{ border: "1px solid #e5e5e5" }}
+                aria-label="Create folder"
+              >
+                <FolderPlus className="size-4" />
+              </button>
+            ) : null}
             <button
               type="button"
               disabled={!chrome?.canUpload || chrome?.uploading}
@@ -61,7 +73,7 @@ export function FilesMobileHeader() {
           </div>
         </div>
 
-        {chrome?.libraryScoped && chrome.breadcrumbLibrary ? (
+        {chrome?.libraryScoped && chrome.currentFolderName && chrome.breadcrumbLibrary ? (
           <div className="flex flex-wrap items-center gap-1 text-[11px]">
             <button
               type="button"
@@ -70,14 +82,8 @@ export function FilesMobileHeader() {
             >
               {chrome.breadcrumbLibrary}
             </button>
-            {chrome.currentFolderName ? (
-              <>
-                <ChevronRight className="size-3.5 text-[#c0c0c0]" />
-                <span className="truncate font-medium text-[#222222]">
-                  {chrome.currentFolderName}
-                </span>
-              </>
-            ) : null}
+            <ChevronRight className="size-3.5 text-[#c0c0c0]" />
+            <span className="truncate font-medium text-[#222222]">{chrome.currentFolderName}</span>
           </div>
         ) : null}
 

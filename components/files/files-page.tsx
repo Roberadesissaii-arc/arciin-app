@@ -6,6 +6,7 @@ import { ChevronRight, CloudUpload, Folder, Loader2 } from "lucide-react"
 import { useFilesChrome } from "@/components/files/files-chrome-context"
 import { AssetThumbnail } from "@/components/files/asset-thumbnail"
 import { AssetViewer } from "@/components/files/asset-viewer"
+import { MobileCreateFolderSheet } from "@/components/files/mobile-create-folder-sheet"
 import { useConnection } from "@/components/providers/connection-provider"
 import { getAssets } from "@/lib/api/assets"
 import { formatApiError } from "@/lib/api/errors"
@@ -130,6 +131,7 @@ export function FilesPage() {
   const [uploadNotice, setUploadNotice] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [viewerAsset, setViewerAsset] = useState<AssetSummary | null>(null)
+  const [createFolderOpen, setCreateFolderOpen] = useState(false)
   const [hasCache, setHasCache] = useState(false)
 
   const libraryScoped = filter !== "all"
@@ -323,9 +325,12 @@ export function FilesPage() {
   const countMismatch = !loading && filter !== "all" && libraryTotal !== assets.length && !folderId
   const showSkeleton = loading && assets.length === 0 && visibleFolders.length === 0 && !hasCache
 
-  const breadcrumbLibrary = libraryScoped
-    ? findLibraryBySlug(libraries, librarySlugForFilter(filter))?.name ?? filterLabel
+  const activeLibrary = libraryScoped
+    ? findLibraryBySlug(libraries, librarySlugForFilter(filter))
     : null
+  const activeLibraryId = activeLibrary?.id ?? null
+
+  const breadcrumbLibrary = activeLibrary?.name ?? (libraryScoped ? filterLabel : null)
 
   const subtitle =
     loading && !hasCache
@@ -346,6 +351,10 @@ export function FilesPage() {
     void load(undefined, true)
   }, [load])
 
+  const triggerCreateFolder = useCallback(() => {
+    setCreateFolderOpen(true)
+  }, [])
+
   useEffect(() => {
     setChrome({
       subtitle,
@@ -359,8 +368,10 @@ export function FilesPage() {
       refreshing,
       uploading,
       canUpload: Boolean(connection),
+      canCreateFolder: Boolean(connection && activeLibraryId),
       onRefresh: triggerRefresh,
       onUpload: triggerUpload,
+      onCreateFolder: triggerCreateFolder,
       onChangeFilter: changeFilter,
       onGoToLibraryRoot: goToLibraryRoot,
     })
@@ -377,9 +388,11 @@ export function FilesPage() {
     refreshing,
     uploading,
     connection,
+    activeLibraryId,
     setChrome,
     triggerRefresh,
     triggerUpload,
+    triggerCreateFolder,
     changeFilter,
     goToLibraryRoot,
   ])
@@ -405,6 +418,16 @@ export function FilesPage() {
           onDeleted={handleAssetDeleted}
         />
       ) : null}
+
+      <MobileCreateFolderSheet
+        open={createFolderOpen}
+        libraryId={activeLibraryId}
+        libraryName={breadcrumbLibrary}
+        parentFolderId={folderId}
+        parentFolderName={currentFolder?.name ?? null}
+        onClose={() => setCreateFolderOpen(false)}
+        onCreated={() => void load(undefined, true)}
+      />
 
 
       {uploadNotice ? (
@@ -476,7 +499,7 @@ export function FilesPage() {
                   <SectionPlaceholder
                     icon={Folder}
                     title="No folders yet"
-                    description="Create folders on your server to organize files in this library."
+                    description="Tap the folder icon above to create a folder in this library."
                   />
                 )}
               </section>

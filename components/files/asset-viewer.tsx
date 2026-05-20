@@ -11,6 +11,7 @@ import {
 } from "lucide-react"
 
 import { DeleteAssetDialog } from "@/components/files/delete-asset-dialog"
+import { MobileMoveLibrarySheet } from "@/components/files/mobile-move-library-sheet"
 import {
   assetDownloadUrl,
   deleteAsset,
@@ -45,6 +46,10 @@ function lockPageScroll() {
   body.style.width = "100%"
 
   const blockTouch = (e: TouchEvent) => {
+    const target = e.target
+    if (target instanceof Element && target.closest("[data-scroll-lock-allow]")) {
+      return
+    }
     e.preventDefault()
   }
   document.addEventListener("touchmove", blockTouch, { passive: false })
@@ -239,86 +244,58 @@ export function AssetViewer({
         <p className="shrink-0 px-4 pb-1 text-center text-[11px] text-red-400">{error}</p>
       ) : null}
 
-      {moveOpen ? (
-        <div
-          className="shrink-0 border-t border-[#27272a] bg-[#18181b] px-4 py-3"
-          style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}
+      <MobileMoveLibrarySheet
+        open={moveOpen}
+        libraries={otherLibraries}
+        busy={busy === "move"}
+        onClose={() => setMoveOpen(false)}
+        onSelect={(libraryId) => void handleMove(libraryId)}
+      />
+
+      <div
+        className="grid shrink-0 grid-cols-3 gap-2 border-t border-[#27272a] bg-[#18181b] px-4 py-2.5"
+        style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
+      >
+        <button
+          type="button"
+          disabled={Boolean(busy) || moveOpen}
+          onClick={() => setMoveOpen(true)}
+          className="flex h-11 items-center justify-center gap-1.5 rounded-xl bg-[#27272a] text-[12px] font-semibold text-white active:bg-[#3f3f46] disabled:opacity-50"
         >
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-[#a1a1aa]">
-            Move to library
-          </p>
-          <div className="flex max-h-36 flex-col gap-1.5 overflow-y-auto">
-            {otherLibraries.length === 0 ? (
-              <p className="text-[12px] text-[#71717a]">No other libraries.</p>
-            ) : (
-              otherLibraries.map((lib) => (
-                <button
-                  key={lib.id}
-                  type="button"
-                  disabled={busy === "move"}
-                  onClick={() => void handleMove(lib.id)}
-                  className="flex items-center justify-between rounded-lg bg-[#27272a] px-3 py-2.5 text-left text-[13px] font-medium text-white active:bg-[#3f3f46] disabled:opacity-50"
-                >
-                  {lib.name}
-                  <span className="text-[10px] text-[#a1a1aa]">{lib.assetCount}</span>
-                </button>
-              ))
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={() => setMoveOpen(false)}
-            className="mt-2 w-full rounded-lg bg-[#27272a] py-2 text-[12px] font-medium text-[#d4d4d8] active:bg-[#3f3f46]"
-          >
-            Cancel
-          </button>
-        </div>
-      ) : (
-        <div
-          className="grid shrink-0 grid-cols-3 gap-2 border-t border-[#27272a] bg-[#18181b] px-4 py-2.5"
-          style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
+          {busy === "move" ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <ArrowRightLeft className="size-4" />
+          )}
+          Move
+        </button>
+        <button
+          type="button"
+          disabled={Boolean(busy) || moveOpen}
+          onClick={() => void handleDownload()}
+          className="flex h-11 items-center justify-center gap-1.5 rounded-xl bg-[#27272a] text-[12px] font-semibold text-white active:bg-[#3f3f46] disabled:opacity-50"
         >
-          <button
-            type="button"
-            disabled={Boolean(busy)}
-            onClick={() => setMoveOpen(true)}
-            className="flex h-11 items-center justify-center gap-1.5 rounded-xl bg-[#27272a] text-[12px] font-semibold text-white active:bg-[#3f3f46] disabled:opacity-50"
-          >
-            {busy === "move" ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <ArrowRightLeft className="size-4" />
-            )}
-            Move
-          </button>
-          <button
-            type="button"
-            disabled={Boolean(busy)}
-            onClick={() => void handleDownload()}
-            className="flex h-11 items-center justify-center gap-1.5 rounded-xl bg-[#27272a] text-[12px] font-semibold text-white active:bg-[#3f3f46] disabled:opacity-50"
-          >
-            {busy === "download" ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <Download className="size-4" />
-            )}
-            Download
-          </button>
-          <button
-            type="button"
-            disabled={Boolean(busy)}
-            onClick={() => setDeleteOpen(true)}
-            className="flex h-11 items-center justify-center gap-1.5 rounded-xl bg-[#dc2626] text-[12px] font-semibold text-white active:bg-[#b91c1c] disabled:opacity-50"
-          >
-            {busy === "delete" ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <Trash2 className="size-4" />
-            )}
-            Delete
-          </button>
-        </div>
-      )}
+          {busy === "download" ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Download className="size-4" />
+          )}
+          Download
+        </button>
+        <button
+          type="button"
+          disabled={Boolean(busy) || moveOpen}
+          onClick={() => setDeleteOpen(true)}
+          className="flex h-11 items-center justify-center gap-1.5 rounded-xl bg-[#dc2626] text-[12px] font-semibold text-white active:bg-[#b91c1c] disabled:opacity-50"
+        >
+          {busy === "delete" ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Trash2 className="size-4" />
+          )}
+          Delete
+        </button>
+      </div>
 
       <DeleteAssetDialog
         open={deleteOpen}

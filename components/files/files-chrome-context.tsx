@@ -17,8 +17,10 @@ export type FilesChromeModel = {
   refreshing: boolean
   uploading: boolean
   canUpload: boolean
+  canCreateFolder: boolean
   onRefresh: () => void
   onUpload: () => void
+  onCreateFolder: () => void
   onChangeFilter: (id: FilesFilterId) => void
   onGoToLibraryRoot: () => void
 }
