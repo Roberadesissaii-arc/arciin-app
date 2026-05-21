@@ -1,3 +1,4 @@
+import { isPwaHostedApp } from "@/lib/api/hosted-app"
 import { fetchApi } from "@/lib/api/client"
 import { isNetworkError } from "@/lib/api/errors"
 import { discoverServer, getMobileServerEndpoints } from "@/lib/api/mobile"
@@ -79,7 +80,17 @@ function discoverAddressesInOrder(
   add(connection.apiBaseUrl, "other")
   add(profile?.apiBaseUrl, "other")
 
-  return [...lan, ...other]
+  const ordered = [...lan, ...other]
+  if (!isPwaHostedApp()) return ordered
+
+  return ordered.filter((raw) => {
+    try {
+      const host = new URL(/^https?:\/\//i.test(raw) ? raw : `http://${raw}`).hostname
+      return !isPrivateLanHostname(host)
+    } catch {
+      return true
+    }
+  })
 }
 
 async function resolveFromDiscover(

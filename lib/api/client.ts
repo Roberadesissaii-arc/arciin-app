@@ -1,3 +1,6 @@
+import { fetchArciinProxiedWithBase } from "@/lib/api/proxy-fetch"
+import { lanBlockedFromHostedApp } from "@/lib/api/hosted-app"
+import { needsArciinSameOriginProxy } from "@/lib/api/arciin-proxy"
 import { ApiError, networkErrorMessage, parseApiError } from "@/lib/api/errors"
 import {
   deriveMobileServerUrlsFromApiBase,
@@ -87,7 +90,39 @@ export async function fetchApi<T>(path: string, options: FetchOptions = {}): Pro
   let response: Response | null = null
   let lastFailed: Response | null = null
 
-  for (const base of apiBaseCandidates(rawBase, options.connection)) {
+  const bases = apiBaseCandidates(rawBase, options.connection)
+  let lanBlocked = false
+
+  for (const base of bases) {
+    if (lanBlockedFromHostedApp(base)) {
+      lanBlocked = true
+      continue
+    }
+
+    if (needsArciinSameOriginProxy(base)) {
+      try {
+        const data = await fetchArciinProxiedWithBase<T>(base, path, {
+          connection: options.connection,
+          method,
+          body: options.body,
+          signal: options.signal,
+        })
+        return data
+      } catch (err) {
+        if (err instanceof ApiError && err.code === "LAN_BLOCKED") {
+          lanBlocked = true
+          continue
+        }
+        if (err instanceof Error && err.name === "AbortError") {
+          throw err
+        }
+        if (err instanceof ApiError) {
+          throw err
+        }
+      }
+      continue
+    }
+
     const url = buildApiUrl(base, path)
     try {
       const attempt = await fetch(url, {
@@ -111,6 +146,9 @@ export async function fetchApi<T>(path: string, options: FetchOptions = {}): Pro
   }
 
   if (!response) {
+    if (lanBlocked) {
+      throw new ApiError(0, "LAN_BLOCKED", networkErrorMessage(serverHint))
+    }
     if (lastFailed) {
       throw await parseApiError(lastFailed)
     }

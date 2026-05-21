@@ -1,3 +1,4 @@
+import { HOSTED_APP_LAN_HINT, isPwaHostedApp } from "@/lib/api/hosted-app"
 import { isPublicServerAddress } from "@/lib/connection/normalize-url"
 import { loadServerProfile } from "@/lib/connection/storage"
 import type { ApiErrorBody } from "@/lib/types/api"
@@ -29,7 +30,15 @@ export function serverAddressHint(serverAddress?: string | null): string | null 
 export function networkErrorMessage(serverAddress?: string | null): string {
   const hint = serverAddressHint(serverAddress)
   const retry =
-    "If you just restarted Arciin, wait a few seconds and try again — the app reconnects when you return to this screen."
+    "If you just restarted Arciin, wait a few seconds and try again — paste the new public URL from desktop Settings → Domain."
+
+  if (isPwaHostedApp() && hint && !isPublicServerAddress(hint)) {
+    return HOSTED_APP_LAN_HINT
+  }
+
+  if (isPwaHostedApp()) {
+    return `Could not reach your Arciin server through the public URL. Open desktop Arciin → Settings → Domain, copy the HTTPS address (trycloudflare.com), paste it under Profile → Remote access, then try again. ${retry}`
+  }
 
   if (isPublicServerAddress(hint)) {
     return `Could not reach your Arciin server. Check the URL, tunnel, or reverse proxy is running and Arciin is online. ${retry}`
@@ -40,7 +49,12 @@ export function networkErrorMessage(serverAddress?: string | null): string {
 
 export function isNetworkError(err: unknown): boolean {
   if (err instanceof ApiError) {
-    return err.code === "NETWORK_ERROR" || err.status === 0
+    return (
+      err.code === "NETWORK_ERROR" ||
+      err.code === "LAN_BLOCKED" ||
+      err.code === "UPSTREAM_UNREACHABLE" ||
+      err.status === 0
+    )
   }
   if (err instanceof Error) {
     return /could not reach/i.test(err.message)
@@ -56,7 +70,10 @@ export function formatApiError(err: unknown, serverAddress?: string | null): str
     if (err.code === "INVALID_CREDENTIALS") {
       return err.message
     }
-    if (err.code === "NETWORK_ERROR" || err.status === 0) {
+    if (err.code === "LAN_BLOCKED" || err.code === "NETWORK_ERROR" || err.status === 0) {
+      return networkErrorMessage(serverAddress)
+    }
+    if (err.code === "UPSTREAM_UNREACHABLE") {
       return networkErrorMessage(serverAddress)
     }
     if (err.code === "FORBIDDEN" || err.status === 403) {

@@ -12,8 +12,10 @@ import {
 } from "lucide-react"
 
 import { formatApiError } from "@/lib/api/errors"
+import { HOSTED_APP_LAN_HINT, isPwaHostedApp } from "@/lib/api/hosted-app"
 import { getRemoteAccessSettings, updateRemoteAccessSettings } from "@/lib/api/settings"
 import { useConnection } from "@/components/providers/connection-provider"
+import { loadServerProfile } from "@/lib/connection/storage"
 import { dispatchAppForeground } from "@/lib/hooks/use-app-foreground"
 import { useStablePanelLoad } from "@/lib/hooks/use-stable-panel-load"
 import type { RemoteAccessSettings } from "@/lib/types/models"
@@ -56,6 +58,7 @@ export function RemoteAccessInlinePanel({ enabled }: { enabled: boolean }) {
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
+  const [manualAddress, setManualAddress] = useState("")
 
   useEffect(() => {
     if (!data) return
@@ -65,6 +68,19 @@ export function RemoteAccessInlinePanel({ enabled }: { enabled: boolean }) {
     setLanUrls(data.lanUrls?.length ? data.lanUrls : [])
     setConnectionMode(readStoredMode())
   }, [data])
+
+  useEffect(() => {
+    if (!enabled) return
+    const profile = loadServerProfile()
+    const saved =
+      profile?.canonicalPublicUrl ??
+      profile?.webUrl ??
+      profile?.apiBaseUrl?.replace(/\/api\/?$/i, "") ??
+      ""
+    if (saved) {
+      setManualAddress((prev) => prev || saved)
+    }
+  }, [enabled])
 
   useEffect(() => {
     if (!enabled || !connection) return
@@ -146,8 +162,9 @@ export function RemoteAccessInlinePanel({ enabled }: { enabled: boolean }) {
         <div className="min-w-0 flex-1">
           <p className="text-[13px] font-semibold text-[#222222]">Remote access</p>
           <p className="mt-0.5 text-[11px] leading-relaxed text-[#717171]">
-            Still the right place to switch LAN vs public. After pairing, Arciin can update the address
-            when the tunnel changes (same Wi‑Fi, or while this app is open).
+            {isPwaHostedApp()
+              ? "This app runs on Vercel — use your server’s public HTTPS URL (tunnel or domain), not a home LAN IP."
+              : "Switch LAN vs public. Arciin can update the address when the tunnel changes."}
           </p>
         </div>
       </div>
@@ -160,17 +177,45 @@ export function RemoteAccessInlinePanel({ enabled }: { enabled: boolean }) {
       )}
 
       {serverReachable === false && !resolving ? (
-        <div className="rounded-xl border border-[#fde68a] bg-[#fffbeb] px-3 py-2.5">
-          <p className="text-[12px] text-[#92400e]">Can’t reach the saved URL.</p>
+        <div className="space-y-3 rounded-xl border border-[#fde68a] bg-[#fffbeb] px-3 py-3">
+          <p className="text-[12px] leading-relaxed text-[#92400e]">
+            Can’t reach the saved URL.
+            {isPwaHostedApp()
+              ? " Paste the current public HTTPS URL from desktop Arciin → Settings → Domain."
+              : " Try again on Wi‑Fi or paste your public URL below."}
+          </p>
+          <input
+            type="url"
+            value={manualAddress}
+            onChange={(e) => setManualAddress(e.target.value)}
+            placeholder="https://….trycloudflare.com"
+            className="w-full rounded-lg bg-white px-3 py-2.5 font-mono text-[12px] text-[#222222] outline-none"
+            style={{ border: "1px solid #e5e5e5" }}
+          />
           <button
             type="button"
-            className="mt-2 flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-[#ff4f12] text-[12px] font-semibold text-white"
+            disabled={reconnecting || !manualAddress.trim()}
+            className="flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-[#ff4f12] text-[12px] font-semibold text-white disabled:opacity-50"
+            onClick={() => void handleReconnectWithAddress(manualAddress.trim())}
+          >
+            <ArrowLeftRight className="size-3.5" />
+            Connect with this address
+          </button>
+          <button
+            type="button"
+            className="flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-[#fcd34d] bg-white text-[12px] font-semibold text-[#92400e]"
             onClick={() => void tryAutoReconnect().then((ok) => ok && setMessage("Reconnected."))}
           >
             <RefreshCw className="size-3.5" />
-            Try again
+            Try auto-reconnect
           </button>
         </div>
+      ) : null}
+
+      {isPwaHostedApp() ? (
+        <p className="rounded-xl border border-[#e5e5e5] bg-[#f7f7f7] px-3 py-2 text-[11px] leading-relaxed text-[#717171]">
+          {HOSTED_APP_LAN_HINT}
+        </p>
       ) : null}
 
       {loading && connection ? (
@@ -185,21 +230,23 @@ export function RemoteAccessInlinePanel({ enabled }: { enabled: boolean }) {
 
       {!loading && data ? (
         <>
-          <ModeCard
-            active={!usingPublic}
-            icon={Wifi}
-            title="On your network"
-            subtitle="Same Wi‑Fi as the server"
-            urls={lanList}
-            actionLabel="Use LAN"
-            actionDisabled={reconnecting || lanList.length === 0}
-            onAction={() => {
-              writeStoredMode("local")
-              setConnectionMode("local")
-              const target = lanList[0]
-              if (target) void handleReconnectWithAddress(target)
-            }}
-          />
+          {!isPwaHostedApp() ? (
+            <ModeCard
+              active={!usingPublic}
+              icon={Wifi}
+              title="On your network"
+              subtitle="Same Wi‑Fi as the server"
+              urls={lanList}
+              actionLabel="Use LAN"
+              actionDisabled={reconnecting || lanList.length === 0}
+              onAction={() => {
+                writeStoredMode("local")
+                setConnectionMode("local")
+                const target = lanList[0]
+                if (target) void handleReconnectWithAddress(target)
+              }}
+            />
+          ) : null}
 
           <ModeCard
             active={usingPublic}

@@ -4,19 +4,41 @@ import { ARCIIN_API_BASE_HEADER } from "@/lib/api/arciin-proxy"
 
 type RouteContext = { params: Promise<{ path: string[] }> }
 
+const PUBLIC_API_PREFIXES = [
+  "health",
+  "mobile/discover",
+  "mobile/pair/verify",
+  "mobile/login",
+  "mobile/pair",
+] as const
+
+function isPublicProxyPath(subPath: string): boolean {
+  return PUBLIC_API_PREFIXES.some(
+    (prefix) => subPath === prefix || subPath.startsWith(`${prefix}/`),
+  )
+}
+
 async function proxyUpstream(request: Request, context: RouteContext) {
   const auth = request.headers.get("authorization")
   const apiBase = request.headers.get(ARCIIN_API_BASE_HEADER)?.replace(/\/+$/, "")
+  const { path } = await context.params
+  const subPath = path.join("/")
+  const isPublic = isPublicProxyPath(subPath)
 
-  if (!auth?.startsWith("Bearer ") || !apiBase) {
+  if (!apiBase) {
+    return NextResponse.json(
+      { error: { code: "BAD_REQUEST", message: "Missing server address." } },
+      { status: 400 },
+    )
+  }
+
+  if (!isPublic && !auth?.startsWith("Bearer ")) {
     return NextResponse.json(
       { error: { code: "UNAUTHORIZED", message: "Missing session or server address." } },
       { status: 401 },
     )
   }
 
-  const { path } = await context.params
-  const subPath = path.join("/")
   const search = new URL(request.url).search
   const upstream = `${apiBase}/${subPath}${search}`
 
@@ -24,20 +46,22 @@ async function proxyUpstream(request: Request, context: RouteContext) {
   const hasBody = method !== "GET" && method !== "HEAD"
   const requestBody = hasBody ? await request.text() : undefined
 
+  const upstreamHeaders: Record<string, string> = {
+    Accept: request.headers.get("accept") ?? "application/json",
+  }
+  if (auth?.startsWith("Bearer ")) {
+    upstreamHeaders.Authorization = auth
+  }
+  if (hasBody && requestBody) {
+    upstreamHeaders["Content-Type"] =
+      request.headers.get("content-type") ?? "application/json"
+  }
+
   let res: Response
   try {
     res = await fetch(upstream, {
       method,
-      headers: {
-        Authorization: auth,
-        Accept: request.headers.get("accept") ?? "application/json",
-        ...(hasBody && requestBody
-          ? {
-              "Content-Type":
-                request.headers.get("content-type") ?? "application/json",
-            }
-          : {}),
-      },
+      headers: upstreamHeaders,
       body: hasBody && requestBody ? requestBody : undefined,
       cache: "no-store",
     })
