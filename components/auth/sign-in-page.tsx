@@ -245,13 +245,9 @@ function ServerAddressModeToggle({
               color: active ? "#111111" : "#a0a0a0",
               boxShadow: active ? "0 1px 4px rgba(0,0,0,0.06)" : undefined,
             }}
+            aria-label={disabled ? `${label} (not available)` : label}
           >
             {label}
-            {disabled && id === "local" ? (
-              <span className="mt-0.5 block text-[9px] font-medium uppercase tracking-wide text-[#c0c0c0]">
-                Unavailable
-              </span>
-            ) : null}
           </button>
         )
       })}
