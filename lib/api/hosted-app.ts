@@ -20,21 +20,14 @@ export function isPrivateLanApiBase(apiBaseUrl: string): boolean {
   }
 }
 
-/** LAN IPs are not reachable when the app UI and API are on different origins. */
 export function lanBlockedFromHostedApp(apiBaseUrl: string): boolean {
   return isPwaHostedApp() && isPrivateLanApiBase(apiBaseUrl)
 }
 
-/** Examples of valid public addresses (no hosting vendor named). */
-export const PUBLIC_SERVER_URL_EXAMPLES =
-  "your own domain (https://archive.example.com) or a Cloudflare quick tunnel URL (https://….trycloudflare.com)"
-
 export const HOSTED_APP_LAN_HINT =
-  `A home LAN address (192.168.x.x) cannot be used here. Use a public HTTPS link instead — ${PUBLIC_SERVER_URL_EXAMPLES}. Copy it from desktop Arciin → Settings → Domain.`
+  "Home network is not available here. Use From anywhere with a public HTTPS address."
 
-/** Create-server step: how to connect when only public URLs work. */
-export const HOSTED_APP_SETUP_NOTE =
-  `Use From anywhere with a public HTTPS address for your Arciin server: ${PUBLIC_SERVER_URL_EXAMPLES}. Find or generate it in desktop Arciin → Settings → Domain.`
+export const HOSTED_APP_SETUP_NOTE = HOSTED_APP_LAN_HINT
 
 export const HOSTED_APP_REMOTE_INTRO =
-  `Use your server’s public HTTPS URL — ${PUBLIC_SERVER_URL_EXAMPLES} — not a home LAN IP.`
+  "Use your public HTTPS address — not home LAN."

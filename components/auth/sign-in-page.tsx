@@ -638,8 +638,8 @@ export function SignInPage() {
           subtitle={
             setupStep === 1
               ? serverAddressMode === "remote"
-                ? "Your domain or Cloudflare tunnel URL from desktop Settings → Domain"
-                : "LAN IP on the same Wi‑Fi (when supported)"
+                ? "Public HTTPS address for your server"
+                : "Same Wi‑Fi as your server"
               : verifiedInstanceName
                 ? `Link to ${verifiedInstanceName}`
                 : "Connection code and your account"
@@ -695,11 +695,13 @@ export function SignInPage() {
                 onChange={handleServerUrlChange}
                 autoComplete="url"
               />
-              <p className="-mt-1 text-[11.5px] leading-relaxed text-[#a0a0a0]">
-                {serverAddressMode === "remote"
-                  ? "HTTPS only — your own domain, or a Cloudflare tunnel URL from Settings → Domain on desktop Arciin."
-                  : "Your server’s LAN IP on the same Wi‑Fi. Not available when connecting through a separate public app address."}
-              </p>
+              {!hostedApp ? (
+                <p className="-mt-1 text-[11.5px] leading-relaxed text-[#a0a0a0]">
+                  {serverAddressMode === "remote"
+                    ? "Works away from home. Copy the address from Settings → Domain on desktop Arciin."
+                    : "Phone and server must be on the same Wi‑Fi."}
+                </p>
+              ) : null}
               <OrangeButton
                 type="button"
                 loading={setupBusy === "check"}

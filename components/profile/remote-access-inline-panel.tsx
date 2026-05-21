@@ -14,11 +14,7 @@ import {
 import { MutedPanelError } from "@/components/shell/muted-panel-error"
 import { OfflineCachedNotice } from "@/components/settings/offline-cached-notice"
 import { formatApiError } from "@/lib/api/errors"
-import {
-  HOSTED_APP_LAN_HINT,
-  HOSTED_APP_REMOTE_INTRO,
-  isPwaHostedApp,
-} from "@/lib/api/hosted-app"
+import { HOSTED_APP_REMOTE_INTRO, isPwaHostedApp } from "@/lib/api/hosted-app"
 import { getRemoteAccessSettings, updateRemoteAccessSettings } from "@/lib/api/settings"
 import { useConnection } from "@/components/providers/connection-provider"
 import { loadServerProfile } from "@/lib/connection/storage"
@@ -187,7 +183,7 @@ export function RemoteAccessInlinePanel({ enabled }: { enabled: boolean }) {
           <p className="text-[12px] leading-relaxed text-[#92400e]">
             Can’t reach the saved URL.
             {isPwaHostedApp()
-              ? " Paste the current public HTTPS URL from desktop Arciin → Settings → Domain."
+              ? " Paste your public HTTPS address below."
               : " Try again on Wi‑Fi or paste your public URL below."}
           </p>
           <input
@@ -216,12 +212,6 @@ export function RemoteAccessInlinePanel({ enabled }: { enabled: boolean }) {
             Try auto-reconnect
           </button>
         </div>
-      ) : null}
-
-      {isPwaHostedApp() ? (
-        <p className="rounded-xl border border-[#e5e5e5] bg-[#f7f7f7] px-3 py-2 text-[11px] leading-relaxed text-[#717171]">
-          {HOSTED_APP_LAN_HINT}
-        </p>
       ) : null}
 
       {loading && connection ? (
