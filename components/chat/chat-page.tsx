@@ -25,7 +25,6 @@ import { ChatReasoningBlock } from "@/components/chat/chat-reasoning-block"
 import { ArciinMark } from "@/components/ui/arciin-mark"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useChatChrome } from "@/components/chat/chat-chrome-context"
-import { useConnection } from "@/components/providers/connection-provider"
 import {
   chatComposerFooterNote,
   chatComposerPlaceholder,

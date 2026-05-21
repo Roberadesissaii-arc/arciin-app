@@ -60,16 +60,22 @@ export function notifyMobilePublicUrlChanged(input: {
   newUrl: string
 }) {
   const newUrl = input.newUrl.trim().replace(/\/+$/, "")
-  if (!newUrl) return
-
   const previousUrl = input.previousUrl?.trim().replace(/\/+$/, "") ?? null
-  if (previousUrl && previousUrl === newUrl) return
+  if (!newUrl || !previousUrl || previousUrl === newUrl) return
+
+  const latest = loadNotices()[0]
+  if (
+    latest &&
+    latest.newUrl === newUrl &&
+    latest.previousUrl === previousUrl &&
+    Date.now() - Date.parse(latest.createdAt) < 120_000
+  ) {
+    return
+  }
 
   const newHost = hostLabel(newUrl)
   const title = "Public URL changed"
-  const message = previousUrl
-    ? `Your server address changed after a restart (${hostLabel(previousUrl)} → ${newHost}). The app will reconnect on Wi‑Fi.`
-    : `Your public address is now ${newHost}.`
+  const message = `Your server address changed after a restart (${hostLabel(previousUrl)} → ${newHost}). The app will reconnect on Wi‑Fi.`
 
   const notice: PublicUrlChangeNotice = {
     id: `url-${Date.now()}`,

@@ -32,7 +32,8 @@ export function countUnreadActivity(
   items: ActivitySummary[],
   lastSeenIso: string | null,
 ): number {
-  const urlUnread = countUnreadPublicUrlNotices(lastSeenIso)
+  const hasServerUrlEvent = items.some((a) => a.type === "remote.public_url_changed")
+  const urlUnread = hasServerUrlEvent ? 0 : countUnreadPublicUrlNotices(lastSeenIso)
   if (!lastSeenIso) {
     const activityUnread = items.length > 0 ? Math.min(items.length, 99) : 0
     return Math.min(activityUnread + urlUnread, 99)
