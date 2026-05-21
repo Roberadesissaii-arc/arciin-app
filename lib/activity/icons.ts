@@ -2,6 +2,7 @@ import {
   Clock3,
   FileText,
   Folder,
+  Globe,
   Key,
   Library,
   Upload,
@@ -17,6 +18,7 @@ const ENTITY_ICONS: Record<string, LucideIcon> = {
   folder: Folder,
   library: Library,
   "api-key": Key,
+  remote: Globe,
 }
 
 export function activityIconFor(event: ActivitySummary): LucideIcon {

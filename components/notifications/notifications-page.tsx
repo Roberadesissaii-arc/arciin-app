@@ -11,6 +11,7 @@ import {
   getNotificationsLastSeen,
   markNotificationsSeen,
 } from "@/lib/api/notifications"
+import { subscribePublicUrlChanged } from "@/lib/notifications/public-url-changed"
 import { useConnection } from "@/components/providers/connection-provider"
 import type { ActivitySummary } from "@/lib/types/models"
 import { formatRelativeDate } from "@/lib/utils/format-date"
@@ -25,6 +26,7 @@ const BADGE_STYLE: Record<string, { bg: string; color: string }> = {
   folder:    { bg: "#eff6ff", color: "#2563eb" },
   library:   { bg: "#f5f3ff", color: "#7c3aed" },
   "api-key": { bg: "#fffbeb", color: "#d97706" },
+  remote:    { bg: "#fff4f0", color: "#ff4f12" },
 }
 
 function badgeStyleFor(event: ActivitySummary) {
@@ -137,6 +139,13 @@ export function NotificationsPage() {
     const controller = new AbortController()
     void load(controller.signal)
     return () => controller.abort()
+  }, [ready, connection, load])
+
+  useEffect(() => {
+    if (!ready || !connection) return
+    return subscribePublicUrlChanged(() => {
+      void load()
+    })
   }, [ready, connection, load])
 
   useEffect(() => {

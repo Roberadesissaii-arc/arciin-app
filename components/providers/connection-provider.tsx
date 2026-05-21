@@ -25,6 +25,7 @@ import {
   resolveReachableServer,
 } from "@/lib/connection/resolve-reachable-server"
 import { serverProfileFromAuth } from "@/lib/connection/server-profile"
+import { notifyMobilePublicUrlChanged } from "@/lib/notifications/public-url-changed"
 import { getMobileSocketUrl } from "@/lib/realtime/socket-url"
 import { io, type Socket } from "socket.io-client"
 import type { SocketEventPayload } from "@/lib/types/events"
@@ -365,6 +366,14 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
     } catch {
       const resolved = await resolveReachableServer(stored, loadServerProfile(), probeAbort.signal)
       if (resolved) {
+        const prevWeb = stored.webUrl.replace(/\/+$/, "")
+        const nextWeb = resolved.server.webUrl.replace(/\/+$/, "")
+        if (prevWeb !== nextWeb) {
+          notifyMobilePublicUrlChanged({
+            previousUrl: prevWeb,
+            newUrl: nextWeb,
+          })
+        }
         saveServerProfile(resolved.server)
         const next = applyServerEndpointsToConnection(stored, resolved.server)
         saveConnection(next)
@@ -409,6 +418,7 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
             socketUrl?: string
             webUrl?: string
             instanceName?: string
+            previousPublicUrl?: string | null
           }
         | undefined
       if (!data?.apiBaseUrl) return
@@ -416,13 +426,23 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
       if (!current || isConnectionExpired(current)) return
 
       const profile = loadServerProfile()
+      const nextWebUrl = data.webUrl ?? data.apiBaseUrl.replace(/\/api\/?$/, "")
+      const previousUrl =
+        (typeof data.previousPublicUrl === "string" ? data.previousPublicUrl : null) ??
+        profile?.canonicalPublicUrl ??
+        current.webUrl
+
+      if (previousUrl && previousUrl.replace(/\/+$/, "") !== nextWebUrl.replace(/\/+$/, "")) {
+        notifyMobilePublicUrlChanged({ previousUrl, newUrl: nextWebUrl })
+      }
+
       const server = {
         apiBaseUrl: data.apiBaseUrl,
         socketUrl: data.socketUrl ?? data.apiBaseUrl.replace(/\/api\/?$/, ""),
-        webUrl: data.webUrl ?? data.apiBaseUrl.replace(/\/api\/?$/, ""),
+        webUrl: nextWebUrl,
         instanceName: data.instanceName ?? profile?.instanceName ?? current.instanceName,
         instanceId: profile?.instanceId,
-        canonicalPublicUrl: data.webUrl ?? profile?.canonicalPublicUrl,
+        canonicalPublicUrl: nextWebUrl,
         lanFallbackUrls: profile?.lanFallbackUrls,
       }
       saveServerProfile(server)
@@ -432,9 +452,26 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
       setServerReachable(true)
     }
 
+    const onActivityCreated = (event: SocketEventPayload) => {
+      if (String(event.data?.type || "") !== "remote.public_url_changed") return
+      const meta = event.data as {
+        previousPublicUrl?: string
+        publicUrl?: string
+      }
+      const newUrl = typeof meta.publicUrl === "string" ? meta.publicUrl : ""
+      if (!newUrl) return
+      notifyMobilePublicUrlChanged({
+        previousUrl:
+          typeof meta.previousPublicUrl === "string" ? meta.previousPublicUrl : null,
+        newUrl,
+      })
+    }
+
     socket.on("instance.urls.updated", onUrlsUpdated)
+    socket.on("activity.created", onActivityCreated)
     return () => {
       socket.off("instance.urls.updated", onUrlsUpdated)
+      socket.off("activity.created", onActivityCreated)
       socket.disconnect()
     }
   }, [connection?.sessionToken, connection?.apiBaseUrl])

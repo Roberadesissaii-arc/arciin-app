@@ -11,6 +11,7 @@ import {
   fetchRecentActivity,
   getNotificationsLastSeen,
 } from "@/lib/api/notifications"
+import { subscribePublicUrlChanged } from "@/lib/notifications/public-url-changed"
 import { useConnection } from "@/components/providers/connection-provider"
 
 /** Home-only top bar: logo, search, notifications. Stays fixed while scrolling. */
@@ -42,6 +43,28 @@ export function MobileHeader() {
     return () => {
       cancelled = true
       controller.abort()
+    }
+  }, [ready, connection])
+
+  useEffect(() => {
+    if (!ready || !connection) return
+    let controller: AbortController | null = null
+    const reloadBadge = () => {
+      controller?.abort()
+      controller = new AbortController()
+      void (async () => {
+        try {
+          const items = await fetchRecentActivity(connection, controller.signal)
+          setUnreadCount(countUnreadActivity(items, getNotificationsLastSeen()))
+        } catch {
+          /* ignore */
+        }
+      })()
+    }
+    const unsub = subscribePublicUrlChanged(reloadBadge)
+    return () => {
+      unsub()
+      controller?.abort()
     }
   }, [ready, connection])
 
