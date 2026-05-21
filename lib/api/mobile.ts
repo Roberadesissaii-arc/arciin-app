@@ -125,6 +125,25 @@ export function loginMobileDevice(
   })
 }
 
+export function getMobileServerEndpoints(
+  connection: import("@/lib/types/api").MobileConnection,
+  signal?: AbortSignal,
+) {
+  return fetchApi<{
+    instanceId: string | null
+    instanceName: string
+    version: string
+    webUrl: string
+    apiBaseUrl: string
+    socketUrl: string
+    lanUrls: string[]
+    requestOrigin: string | null
+  }>("/mobile/server", {
+    connection,
+    signal,
+  })
+}
+
 export function verifyPairingCode(apiBaseUrl: string, code: string) {
   return fetchApi<{ valid: boolean; instanceName: string }>("/mobile/pair/verify", {
     apiBaseUrl,

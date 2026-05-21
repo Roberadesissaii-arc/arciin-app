@@ -1,10 +1,8 @@
 import { getAuthMe } from "@/lib/api/auth"
 import { ApiError, isNetworkError } from "@/lib/api/errors"
 import { discoverServer } from "@/lib/api/mobile"
-import {
-  deriveMobileServerUrlsFromApiBase,
-  isLoopbackApiBase,
-} from "@/lib/connection/normalize-url"
+import { isLoopbackApiBase } from "@/lib/connection/normalize-url"
+import { serverProfileFromDiscover } from "@/lib/connection/server-profile"
 import {
   clearSession,
   isConnectionExpired,
@@ -29,11 +27,10 @@ export async function reconnectToServer(serverInput: string): Promise<ReconnectR
   }
 
   let apiBaseUrl: string
-  let instanceName: string
+  let discovered: Awaited<ReturnType<typeof discoverServer>>
   try {
-    const discovered = await discoverServer(trimmed)
+    discovered = await discoverServer(trimmed)
     apiBaseUrl = discovered.apiBaseUrl
-    instanceName = discovered.discover.instanceName
   } catch (err) {
     return {
       status: "invalid_server",
@@ -48,11 +45,7 @@ export async function reconnectToServer(serverInput: string): Promise<ReconnectR
     }
   }
 
-  const urls = deriveMobileServerUrlsFromApiBase(apiBaseUrl)
-  const server: MobileServerProfile = {
-    ...urls,
-    instanceName,
-  }
+  const server = serverProfileFromDiscover(discovered.discover, apiBaseUrl)
   saveServerProfile(server)
 
   const stored = loadConnection()

@@ -18,6 +18,12 @@ export type MobileServerProfile = {
   socketUrl: string
   webUrl: string
   instanceName: string
+  /** Stable id from GET /mobile/discover — used to recognize the same instance after URL changes. */
+  instanceId?: string
+  /** Last known HTTPS tunnel or fixed domain from the server. */
+  canonicalPublicUrl?: string
+  /** LAN URLs to probe when the saved public URL stops working (same Wi‑Fi). */
+  lanFallbackUrls?: string[]
 }
 
 export function connectionFromAuth(auth: MobileAuthResult): MobileConnection {

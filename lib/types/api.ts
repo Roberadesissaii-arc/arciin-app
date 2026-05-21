@@ -24,6 +24,11 @@ export type ServerEndpoints = {
   instanceName: string
   version: string
   requestOrigin: string | null
+  instanceId?: string | null
+  canonicalPublicUrl?: string | null
+  canonicalApiBaseUrl?: string | null
+  canonicalSocketUrl?: string | null
+  lanUrls?: string[]
 }
 
 export type MobileDiscoverResult = {
@@ -35,6 +40,11 @@ export type MobileDiscoverResult = {
   apiBaseUrl: string
   socketUrl: string
   requestOrigin: string | null
+  instanceId?: string | null
+  canonicalPublicUrl?: string | null
+  canonicalApiBaseUrl?: string | null
+  canonicalSocketUrl?: string | null
+  lanUrls?: string[]
   pairingSupported: boolean
 }
 

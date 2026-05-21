@@ -53,7 +53,7 @@ export function ServerReconnectBanner() {
             </p>
             <p className="mt-1 text-[12px] leading-relaxed text-[#717171]">
               {publicUrl
-                ? "Your tunnel or public URL may have expired. Update the address under Profile → Remote access, or wait a moment if Arciin is restarting."
+                ? "Your tunnel URL may have changed after a restart. On the same Wi‑Fi, Arciin will try to find the server automatically; otherwise update the address under Profile → Remote access."
                 : "Confirm Arciin is running and this phone is on the same Wi‑Fi as your server, or update the address under Profile → Remote access."}
             </p>
             <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">

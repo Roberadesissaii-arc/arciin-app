@@ -162,14 +162,15 @@ export function upsertAccountFromConnection(connection: MobileConnection): void 
     user: connection.user,
     savedAt: connection.savedAt,
   }
+  const existing = state.accounts.find((a) => a.id === id)
   const server: MobileServerProfile = {
+    ...(existing?.server ?? {}),
     apiBaseUrl: connection.apiBaseUrl,
     socketUrl: connection.socketUrl,
     webUrl: connection.webUrl,
     instanceName: connection.instanceName,
   }
 
-  const existing = state.accounts.find((a) => a.id === id)
   const accounts = existing
     ? state.accounts.map((a) =>
         a.id === id ? { ...a, server, session, lastUsedAt: now } : a,

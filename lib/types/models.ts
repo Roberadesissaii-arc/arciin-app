@@ -61,6 +61,7 @@ export type RemoteAccessSettings = {
   mode: "local" | "reverse-proxy" | "cloudflare-tunnel"
   reverseProxyEnabled: boolean
   cloudflareTunnelEnabled: boolean
+  cloudflareTunnelAutoStart?: boolean
 }
 
 export type AuthSession = {

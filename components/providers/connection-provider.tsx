@@ -20,6 +20,14 @@ import {
 } from "@/lib/connection/merge-auth"
 import { isLoopbackApiBase } from "@/lib/connection/normalize-url"
 import { reconnectToServer, type ReconnectResult } from "@/lib/connection/reconnect-server"
+import {
+  applyServerEndpointsToConnection,
+  resolveReachableServer,
+} from "@/lib/connection/resolve-reachable-server"
+import { serverProfileFromAuth } from "@/lib/connection/server-profile"
+import { getMobileSocketUrl } from "@/lib/realtime/socket-url"
+import { io, type Socket } from "socket.io-client"
+import type { SocketEventPayload } from "@/lib/types/events"
 import { isNetworkError } from "@/lib/api/errors"
 import {
   connectionFromAccount,
@@ -35,6 +43,7 @@ import {
   loadConnection,
   loadServerProfile,
   saveConnection,
+  saveServerProfile,
 } from "@/lib/connection/storage"
 import type { MobileConnection } from "@/lib/types/api"
 import type { MobileAuthResult } from "@/lib/types/api"
@@ -86,6 +95,7 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
       ? auth
       : authWithClientApiBase(auth, base)
     const next = connectionFromAuth(merged)
+    saveServerProfile(serverProfileFromAuth(merged))
     saveConnection(next)
     setConnection(next)
     setAccountsTick((n) => n + 1)
@@ -314,7 +324,18 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
       setServerReachable(true)
       await refresh()
     } catch {
-      setServerReachable(false)
+      const resolved = await resolveReachableServer(stored, loadServerProfile(), probeAbort.signal)
+      if (resolved) {
+        saveServerProfile(resolved.server)
+        const next = applyServerEndpointsToConnection(stored, resolved.server)
+        saveConnection(next)
+        setConnection(next)
+        setServerReachable(true)
+        dispatchAppForeground()
+        await refresh()
+      } else {
+        setServerReachable(false)
+      }
     } finally {
       window.clearTimeout(probeTimer)
     }
@@ -323,6 +344,55 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
   useAppForeground(() => {
     void probeServerOnForeground()
   })
+
+  useEffect(() => {
+    const stored = loadConnection()
+    if (!stored || isConnectionExpired(stored)) return
+
+    const socketUrl = getMobileSocketUrl(stored)
+    const socket: Socket = io(socketUrl, {
+      path: "/socket.io",
+      transports: ["polling", "websocket"],
+      auth: { token: stored.sessionToken },
+      extraHeaders: { Authorization: `Bearer ${stored.sessionToken}` },
+    })
+
+    const onUrlsUpdated = (event: SocketEventPayload) => {
+      const data = event.data as
+        | {
+            apiBaseUrl?: string
+            socketUrl?: string
+            webUrl?: string
+            instanceName?: string
+          }
+        | undefined
+      if (!data?.apiBaseUrl) return
+      const current = loadConnection()
+      if (!current || isConnectionExpired(current)) return
+
+      const profile = loadServerProfile()
+      const server = {
+        apiBaseUrl: data.apiBaseUrl,
+        socketUrl: data.socketUrl ?? data.apiBaseUrl.replace(/\/api\/?$/, ""),
+        webUrl: data.webUrl ?? data.apiBaseUrl.replace(/\/api\/?$/, ""),
+        instanceName: data.instanceName ?? profile?.instanceName ?? current.instanceName,
+        instanceId: profile?.instanceId,
+        canonicalPublicUrl: data.webUrl ?? profile?.canonicalPublicUrl,
+        lanFallbackUrls: profile?.lanFallbackUrls,
+      }
+      saveServerProfile(server)
+      const next = applyServerEndpointsToConnection(current, server)
+      saveConnection(next)
+      setConnection(next)
+      setServerReachable(true)
+    }
+
+    socket.on("instance.urls.updated", onUrlsUpdated)
+    return () => {
+      socket.off("instance.urls.updated", onUrlsUpdated)
+      socket.disconnect()
+    }
+  }, [connection?.sessionToken, connection?.apiBaseUrl])
 
   const value = useMemo(
     () => ({
