@@ -132,6 +132,24 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
         return false
       }
       if (isNetworkError(err)) {
+        const resolved = await resolveReachableServer(stored, loadServerProfile())
+        if (resolved) {
+          saveServerProfile(resolved.server)
+          const next = applyServerEndpointsToConnection(stored, resolved.server)
+          saveConnection(next)
+          setConnection(next)
+          setServerReachable(true)
+          dispatchAppForeground()
+          try {
+            const me = await getAuthMe(next)
+            const verified = { ...next, user: me.user }
+            saveConnection(verified)
+            setConnection(verified)
+          } catch {
+            /* session still valid on new base; user refresh can retry */
+          }
+          return true
+        }
         setConnection(stored)
         setServerReachable(false)
         return false
@@ -205,7 +223,26 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
             setConnection(null)
             setServerReachable(null)
           } else if (isNetworkError(err)) {
-            setServerReachable(false)
+            const resolved = await resolveReachableServer(stored, loadServerProfile())
+            if (!cancelled && resolved) {
+              saveServerProfile(resolved.server)
+              const next = applyServerEndpointsToConnection(stored, resolved.server)
+              saveConnection(next)
+              setConnection(next)
+              setServerReachable(true)
+              try {
+                const me = await getAuthMe(next)
+                if (!cancelled) {
+                  const verified = { ...next, user: me.user }
+                  saveConnection(verified)
+                  setConnection(verified)
+                }
+              } catch {
+                /* connected on new URL; profile refresh can retry */
+              }
+            } else if (!cancelled) {
+              setServerReachable(false)
+            }
           }
         }
       }

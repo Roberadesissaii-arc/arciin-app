@@ -1,7 +1,12 @@
 import { fetchApi } from "@/lib/api/client"
 import { isNetworkError } from "@/lib/api/errors"
 import { discoverServer, getMobileServerEndpoints } from "@/lib/api/mobile"
-import { isLoopbackApiBase, isPublicServerAddress } from "@/lib/connection/normalize-url"
+import {
+  isLoopbackApiBase,
+  isPrivateLanHostname,
+  isPublicServerAddress,
+  isTryCloudflareHostname,
+} from "@/lib/connection/normalize-url"
 import {
   serverProfileFromDiscover,
   serverProfileFromEndpoints,
@@ -29,36 +34,117 @@ async function probeHealth(apiBaseUrl: string, signal?: AbortSignal): Promise<bo
   }
 }
 
-function candidateAddresses(
+/** LAN first so a dead trycloudflare URL does not block rediscovery on Wi‑Fi. */
+function discoverAddressesInOrder(
   connection: MobileConnection,
   profile: MobileServerProfile | null,
 ): string[] {
+  const lan: string[] = []
+  const other: string[] = []
   const seen = new Set<string>()
-  const add = (raw: string | null | undefined) => {
-    const t = raw?.trim()
-    if (!t) return
+
+  const add = (raw: string | null | undefined, bucket: "lan" | "other") => {
+    const t = raw?.trim().replace(/\/+$/, "")
+    if (!t || seen.has(t)) return
     seen.add(t)
+    let host = t
+    try {
+      host = new URL(/^https?:\/\//i.test(t) ? t : `http://${t}`).hostname
+    } catch {
+      /* keep t */
+    }
+    const isLan =
+      bucket === "lan" ||
+      isPrivateLanHostname(host) ||
+      (!isPublicServerAddress(t) && !isTryCloudflareHostname(host))
+    if (isLan) lan.push(t)
+    else other.push(t)
   }
 
-  add(connection.apiBaseUrl)
-  add(connection.webUrl)
-  add(profile?.apiBaseUrl)
-  add(profile?.webUrl)
+  for (const u of profile?.lanFallbackUrls ?? []) add(u, "lan")
 
-  if (profile?.canonicalPublicUrl) {
-    add(profile.canonicalPublicUrl)
+  const maybeLan = [profile?.webUrl, connection.webUrl]
+  for (const u of maybeLan) {
+    if (!u?.trim()) continue
+    let host = u
+    try {
+      host = new URL(/^https?:\/\//i.test(u) ? u : `http://${u}`).hostname
+    } catch {
+      /* keep u */
+    }
+    add(u, isPrivateLanHostname(host) && !isTryCloudflareHostname(host) ? "lan" : "other")
   }
 
-  for (const lan of profile?.lanFallbackUrls ?? []) {
-    add(lan)
+  add(profile?.canonicalPublicUrl, "other")
+  add(connection.apiBaseUrl, "other")
+  add(profile?.apiBaseUrl, "other")
+
+  return [...lan, ...other]
+}
+
+async function resolveFromDiscover(
+  connection: MobileConnection,
+  profile: MobileServerProfile | null,
+  address: string,
+  signal?: AbortSignal,
+): Promise<{ connection: MobileConnection; server: MobileServerProfile } | null> {
+  const { discover, apiBaseUrl } = await discoverServer(address, signal)
+  if (
+    !discoverMatchesInstance(discover, {
+      instanceId: profile?.instanceId,
+      instanceName: profile?.instanceName ?? connection.instanceName,
+    })
+  ) {
+    return null
   }
 
-  return [...seen]
+  let server = serverProfileFromDiscover(discover, apiBaseUrl)
+  let resolvedBase = apiBaseUrl
+
+  const publicTry =
+    discover.canonicalApiBaseUrl ??
+    (discover.canonicalPublicUrl
+      ? `${discover.canonicalPublicUrl.replace(/\/+$/, "")}/api`
+      : null)
+
+  if (publicTry && isPublicServerAddress(publicTry) && (await probeHealth(publicTry, signal))) {
+    server = serverProfileFromDiscover(discover, publicTry)
+    resolvedBase = server.apiBaseUrl
+  } else if (!(await probeHealth(resolvedBase, signal))) {
+    return null
+  }
+
+  let next: MobileConnection = {
+    ...connection,
+    apiBaseUrl: resolvedBase,
+    socketUrl: server.socketUrl,
+    webUrl: server.webUrl,
+    instanceName: server.instanceName,
+  }
+
+  try {
+    const canonical = await getMobileServerEndpoints(next, signal)
+    if (canonical.apiBaseUrl && (await probeHealth(canonical.apiBaseUrl, signal))) {
+      server = serverProfileFromEndpoints(canonical.apiBaseUrl, {
+        instanceName: canonical.instanceName,
+        instanceId: canonical.instanceId,
+        webUrl: canonical.webUrl,
+        socketUrl: canonical.socketUrl,
+        lanUrls: canonical.lanUrls,
+        requestOrigin: canonical.requestOrigin,
+      })
+      next = applyServerEndpointsToConnection(connection, server)
+    }
+  } catch {
+    /* LAN discover already returned fresh canonicalPublicUrl when on Wi‑Fi */
+  }
+
+  return { connection: next, server }
 }
 
 /**
  * When the saved tunnel URL died after a server restart, find the instance again
- * via LAN or the server's canonical public URL — without a new pairing code.
+ * via LAN (then canonical public URL from discover) — without a new pairing code.
  */
 export async function resolveReachableServer(
   connection: MobileConnection,
@@ -67,96 +153,14 @@ export async function resolveReachableServer(
 ): Promise<{ connection: MobileConnection; server: MobileServerProfile } | null> {
   if (isLoopbackApiBase(connection.apiBaseUrl)) return null
 
-  const candidates = candidateAddresses(connection, profile)
+  const addresses = discoverAddressesInOrder(connection, profile)
 
-  for (const address of candidates) {
-    const apiBase = address.includes("/api")
-      ? address
-      : `${address.replace(/\/+$/, "")}/api`
-    if (await probeHealth(apiBase, signal)) {
-      return null
-    }
-  }
-
-  for (const address of candidates) {
+  for (const address of addresses) {
     try {
-      const { discover, apiBaseUrl } = await discoverServer(address, signal)
-      if (!discoverMatchesInstance(discover, {
-        instanceId: profile?.instanceId,
-        instanceName: profile?.instanceName ?? connection.instanceName,
-      })) {
-        continue
-      }
-
-      let server = serverProfileFromDiscover(discover, apiBaseUrl)
-
-      const publicTry =
-        discover.canonicalApiBaseUrl ??
-        (discover.canonicalPublicUrl ? `${discover.canonicalPublicUrl.replace(/\/+$/, "")}/api` : null)
-
-      let resolvedBase = apiBaseUrl
-      if (publicTry && isPublicServerAddress(publicTry)) {
-        if (await probeHealth(publicTry, signal)) {
-          server = serverProfileFromDiscover(discover, publicTry)
-          resolvedBase = server.apiBaseUrl
-        }
-      }
-
-      let next: MobileConnection = {
-        ...connection,
-        apiBaseUrl: resolvedBase,
-        socketUrl: server.socketUrl,
-        webUrl: server.webUrl,
-        instanceName: server.instanceName,
-      }
-
-      try {
-        const canonical = await getMobileServerEndpoints(next, signal)
-        if (canonical.apiBaseUrl) {
-          server.instanceId = canonical.instanceId ?? server.instanceId
-          const fromCanonical = serverProfileFromEndpoints(canonical.apiBaseUrl, {
-            instanceName: canonical.instanceName,
-            instanceId: canonical.instanceId,
-            webUrl: canonical.webUrl,
-            socketUrl: canonical.socketUrl,
-            lanUrls: canonical.lanUrls,
-            requestOrigin: canonical.requestOrigin,
-          })
-          Object.assign(server, fromCanonical)
-          next = applyServerEndpointsToConnection(connection, server)
-        }
-      } catch {
-        /* discover path is enough when /mobile/server is unreachable */
-      }
-
-      return { connection: next, server }
+      const resolved = await resolveFromDiscover(connection, profile, address, signal)
+      if (resolved) return resolved
     } catch {
       continue
-    }
-  }
-
-  if (connection.sessionToken) {
-    for (const address of profile?.lanFallbackUrls ?? []) {
-      try {
-        const { discover, apiBaseUrl } = await discoverServer(address, signal)
-        if (!discoverMatchesInstance(discover, {
-          instanceId: profile?.instanceId,
-          instanceName: profile?.instanceName ?? connection.instanceName,
-        })) {
-          continue
-        }
-        const server = serverProfileFromDiscover(discover, apiBaseUrl)
-        const next: MobileConnection = {
-          ...connection,
-          apiBaseUrl,
-          socketUrl: server.socketUrl,
-          webUrl: server.webUrl,
-          instanceName: server.instanceName,
-        }
-        return { connection: next, server }
-      } catch {
-        continue
-      }
     }
   }
 
