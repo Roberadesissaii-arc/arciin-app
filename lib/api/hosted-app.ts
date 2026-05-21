@@ -28,9 +28,8 @@ export function lanBlockedFromHostedApp(apiBaseUrl: string): boolean {
 export const HOSTED_APP_LAN_HINT =
   "Home network is not available in this app. Use From anywhere with your server's public HTTPS address."
 
-/** Setup step — explains why only one connection mode works here. */
+/** One line on create-server step when the app is hosted off the home network. */
 export const HOSTED_APP_SETUP_NOTE =
-  "Only From anywhere is available here (1 of 2 connection modes). Home LAN does not work from this install — use your public HTTPS address from Settings → Domain on your Arciin server."
+  "Home network isn't available here. Use From anywhere with your public HTTPS address."
 
-export const HOSTED_APP_REMOTE_INTRO =
-  "This install cannot reach your home LAN. Use From anywhere with your public HTTPS address (Settings → Domain on desktop)."
+export const HOSTED_APP_REMOTE_INTRO = HOSTED_APP_SETUP_NOTE

@@ -4,9 +4,12 @@ import { useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Check, ChevronLeft, Eye, EyeOff, Globe, Key, Lock, Mail, Server } from "lucide-react"
 
-import { HOSTED_APP_LAN_HINT, isPwaHostedApp } from "@/lib/api/hosted-app"
+import {
+  HOSTED_APP_LAN_HINT,
+  HOSTED_APP_SETUP_NOTE,
+  isPwaHostedApp,
+} from "@/lib/api/hosted-app"
 import { ConnectionSuccessScreen } from "@/components/auth/connection-success-screen"
-import { HostedConnectionModesNote } from "@/components/auth/hosted-connection-modes-note"
 import { formatApiError } from "@/lib/api/errors"
 import { discoverServer, pairMobileDevice, loginMobileDevice } from "@/lib/api/mobile"
 import {
@@ -663,7 +666,11 @@ export function SignInPage() {
                   setError(null)
                 }}
               />
-              {hostedApp ? <HostedConnectionModesNote /> : null}
+              {hostedApp ? (
+                <p className="text-[11.5px] leading-relaxed text-[#a0a0a0]">
+                  {HOSTED_APP_SETUP_NOTE}
+                </p>
+              ) : null}
               <Field
                 label={serverAddressMode === "remote" ? "Domain" : "Server IP address"}
                 icon={Globe}
