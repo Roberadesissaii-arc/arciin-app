@@ -20,7 +20,7 @@ export async function fetchArciinProxiedWithBase<T>(
   } = {},
 ): Promise<T> {
   if (lanBlockedFromHostedApp(apiBaseUrl)) {
-    throw new ApiError(0, "LAN_BLOCKED", "LAN addresses do not work from the Vercel mobile app.")
+    throw new ApiError(0, "LAN_BLOCKED", "LAN addresses do not work from this app install.")
   }
 
   const segment = apiPath.replace(/^\//, "")

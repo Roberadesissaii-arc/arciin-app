@@ -37,7 +37,7 @@ export function networkErrorMessage(serverAddress?: string | null): string {
   }
 
   if (isPwaHostedApp()) {
-    return `Could not reach your Arciin server through the public URL. Open desktop Arciin → Settings → Domain, copy the HTTPS address (trycloudflare.com), paste it under Profile → Remote access, then try again. ${retry}`
+    return `Could not reach your Arciin server. Open desktop Arciin → Settings → Domain, copy your public HTTPS address (your domain or Cloudflare tunnel), paste it under Profile → Remote access, then try again. ${retry}`
   }
 
   if (isPublicServerAddress(hint)) {

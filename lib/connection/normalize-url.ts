@@ -291,7 +291,7 @@ export function getServerAddressDisplay(
       kind: "app_host",
       kindLabel: "Mobile app only",
       host,
-      hint: "This is the Vercel app URL, not your home Arciin server. Tap Change server and enter your server address.",
+      hint: "This is the mobile app address, not your Arciin server. Tap Change server and enter your public HTTPS URL.",
     }
   }
 

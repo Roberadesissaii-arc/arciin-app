@@ -14,7 +14,11 @@ import {
 import { MutedPanelError } from "@/components/shell/muted-panel-error"
 import { OfflineCachedNotice } from "@/components/settings/offline-cached-notice"
 import { formatApiError } from "@/lib/api/errors"
-import { HOSTED_APP_LAN_HINT, isPwaHostedApp } from "@/lib/api/hosted-app"
+import {
+  HOSTED_APP_LAN_HINT,
+  HOSTED_APP_REMOTE_INTRO,
+  isPwaHostedApp,
+} from "@/lib/api/hosted-app"
 import { getRemoteAccessSettings, updateRemoteAccessSettings } from "@/lib/api/settings"
 import { useConnection } from "@/components/providers/connection-provider"
 import { loadServerProfile } from "@/lib/connection/storage"
@@ -165,7 +169,7 @@ export function RemoteAccessInlinePanel({ enabled }: { enabled: boolean }) {
           <p className="text-[13px] font-semibold text-[#222222]">Remote access</p>
           <p className="mt-0.5 text-[11px] leading-relaxed text-[#717171]">
             {isPwaHostedApp()
-              ? "This app runs on Vercel — use your server’s public HTTPS URL (tunnel or domain), not a home LAN IP."
+              ? HOSTED_APP_REMOTE_INTRO
               : "Switch LAN vs public. Arciin can update the address when the tunnel changes."}
           </p>
         </div>

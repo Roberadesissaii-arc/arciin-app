@@ -4,7 +4,11 @@ import { useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Check, ChevronLeft, Eye, EyeOff, Globe, Key, Lock, Mail, Server } from "lucide-react"
 
-import { HOSTED_APP_LAN_HINT, isPwaHostedApp } from "@/lib/api/hosted-app"
+import {
+  HOSTED_APP_LAN_HINT,
+  HOSTED_APP_SETUP_NOTE,
+  isPwaHostedApp,
+} from "@/lib/api/hosted-app"
 import { formatApiError } from "@/lib/api/errors"
 import { discoverServer, pairMobileDevice, loginMobileDevice } from "@/lib/api/mobile"
 import {
@@ -634,8 +638,8 @@ export function SignInPage() {
           subtitle={
             setupStep === 1
               ? serverAddressMode === "remote"
-                ? "Paste your public URL or tunnel link — works from cellular, not only Wi‑Fi"
-                : "Enter your server’s LAN IP while on the same Wi‑Fi"
+                ? "Your domain or Cloudflare tunnel URL from desktop Settings → Domain"
+                : "LAN IP on the same Wi‑Fi (when supported)"
               : verifiedInstanceName
                 ? `Link to ${verifiedInstanceName}`
                 : "Connection code and your account"
@@ -676,9 +680,7 @@ export function SignInPage() {
                   className="rounded-xl px-3 py-2.5 text-[11.5px] leading-relaxed text-[#717171]"
                   style={{ backgroundColor: "#f7f7f7", border: "1px solid #e5e5e5" }}
                 >
-                  This app is hosted on Vercel. Use <strong>From anywhere</strong> with the public
-                  HTTPS URL from desktop Arciin → Settings → Domain (trycloudflare.com or your
-                  domain). Home LAN IPs do not work from this install.
+                  {HOSTED_APP_SETUP_NOTE}
                 </p>
               ) : null}
               <Field
@@ -695,8 +697,8 @@ export function SignInPage() {
               />
               <p className="-mt-1 text-[11.5px] leading-relaxed text-[#a0a0a0]">
                 {serverAddressMode === "remote"
-                  ? "Use a domain, reverse proxy, or generated tunnel URL from Arciin settings. You do not need to be on the same network."
-                  : "Find this in Arciin on your computer, or use your router’s device list. Phone and server must share Wi‑Fi."}
+                  ? "HTTPS only — your own domain, or a Cloudflare tunnel URL from Settings → Domain on desktop Arciin."
+                  : "Your server’s LAN IP on the same Wi‑Fi. Not available when connecting through a separate public app address."}
               </p>
               <OrangeButton
                 type="button"

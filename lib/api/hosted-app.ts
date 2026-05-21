@@ -1,6 +1,6 @@
 import { isMobileAppHost, isPrivateLanHostname, normalizeApiBase } from "@/lib/connection/normalize-url"
 
-/** True when this UI is served from Vercel (not from the user's Arciin server). */
+/** True when the mobile UI is not served from the user's Arciin server origin. */
 export function isPwaHostedApp(): boolean {
   if (typeof window === "undefined") return false
   try {
@@ -20,10 +20,21 @@ export function isPrivateLanApiBase(apiBaseUrl: string): boolean {
   }
 }
 
-/** LAN IPs are not reachable from the Vercel-hosted PWA (browser + cloud proxy). */
+/** LAN IPs are not reachable when the app UI and API are on different origins. */
 export function lanBlockedFromHostedApp(apiBaseUrl: string): boolean {
   return isPwaHostedApp() && isPrivateLanApiBase(apiBaseUrl)
 }
 
+/** Examples of valid public addresses (no hosting vendor named). */
+export const PUBLIC_SERVER_URL_EXAMPLES =
+  "your own domain (https://archive.example.com) or a Cloudflare quick tunnel URL (https://….trycloudflare.com)"
+
 export const HOSTED_APP_LAN_HINT =
-  "This app runs on arciin-app.vercel.app, not on your home server. A LAN address (192.168.x.x) cannot work here — copy the public HTTPS URL from desktop Arciin → Settings → Domain (trycloudflare.com or your domain), paste it below, then connect."
+  `A home LAN address (192.168.x.x) cannot be used here. Use a public HTTPS link instead — ${PUBLIC_SERVER_URL_EXAMPLES}. Copy it from desktop Arciin → Settings → Domain.`
+
+/** Create-server step: how to connect when only public URLs work. */
+export const HOSTED_APP_SETUP_NOTE =
+  `Use From anywhere with a public HTTPS address for your Arciin server: ${PUBLIC_SERVER_URL_EXAMPLES}. Find or generate it in desktop Arciin → Settings → Domain.`
+
+export const HOSTED_APP_REMOTE_INTRO =
+  `Use your server’s public HTTPS URL — ${PUBLIC_SERVER_URL_EXAMPLES} — not a home LAN IP.`
