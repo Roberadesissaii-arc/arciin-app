@@ -3,7 +3,9 @@
 import { useCallback, useState } from "react"
 import { Loader2, Shield } from "lucide-react"
 
+import { OfflineCachedNotice } from "@/components/settings/offline-cached-notice"
 import { SettingsIntroCard } from "@/components/settings/settings-intro-card"
+import { MutedPanelError } from "@/components/shell/muted-panel-error"
 import { getSessions, revokeSession } from "@/lib/api/auth"
 import { formatApiError } from "@/lib/api/errors"
 import { useStablePanelLoad } from "@/lib/hooks/use-stable-panel-load"
@@ -74,11 +76,15 @@ export function SessionsInlinePanel({ enabled }: { enabled: boolean }) {
     [],
   )
 
-  const { data: sessions, loading, error, connection, reload } = useStablePanelLoad(
-    enabled,
-    load,
-    { cacheKey: "sessions" },
-  )
+  const {
+    data: sessions,
+    loading,
+    error,
+    showingCachedOffline,
+    isRevalidating,
+    connection,
+    reload,
+  } = useStablePanelLoad(enabled, load, { cacheKey: "sessions" })
   const [revokingId, setRevokingId] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
 
@@ -106,14 +112,17 @@ export function SessionsInlinePanel({ enabled }: { enabled: boolean }) {
     )
   }
 
-  if (error && !sessions) {
-    return <p className="text-[12px] text-[#b91c1c]">{error}</p>
+  if (!sessions) {
+    return <MutedPanelError error={error} onRetry={() => void reload()} />
   }
 
-  const list = sessions ?? []
+  const list = sessions
 
   return (
     <div className="flex flex-col gap-4">
+      {showingCachedOffline ? (
+        <OfflineCachedNotice revalidating={isRevalidating} />
+      ) : null}
       <SettingsIntroCard
         icon={Shield}
         title="Sessions"
@@ -138,7 +147,7 @@ export function SessionsInlinePanel({ enabled }: { enabled: boolean }) {
         </div>
       )}
 
-      {actionError ? <p className="text-[12px] text-[#b91c1c]">{actionError}</p> : null}
+      {actionError ? <MutedPanelError error={actionError} /> : null}
     </div>
   )
 }

@@ -3,7 +3,9 @@
 import { useCallback, useRef, useState } from "react"
 import { Globe, Loader2, Moon, Settings, Sun } from "lucide-react"
 
+import { OfflineCachedNotice } from "@/components/settings/offline-cached-notice"
 import { SettingsIntroCard } from "@/components/settings/settings-intro-card"
+import { MutedPanelError } from "@/components/shell/muted-panel-error"
 import { formatApiError } from "@/lib/api/errors"
 import { getUserPreferences, updateUserPreferences } from "@/lib/api/user-preferences"
 import { useStablePanelLoad } from "@/lib/hooks/use-stable-panel-load"
@@ -58,11 +60,16 @@ export function PreferencesInlinePanel({ enabled }: { enabled: boolean }) {
     [],
   )
 
-  const { data: prefs, loading, error, connection, setData } = useStablePanelLoad(
-    enabled,
-    load,
-    { cacheKey: "preferences" },
-  )
+  const {
+    data: prefs,
+    loading,
+    error,
+    showingCachedOffline,
+    isRevalidating,
+    connection,
+    setData,
+    reload,
+  } = useStablePanelLoad(enabled, load, { cacheKey: "preferences" })
   const connectionRef = useRef(connection)
   connectionRef.current = connection
   const [saving, setSaving] = useState(false)
@@ -79,7 +86,11 @@ export function PreferencesInlinePanel({ enabled }: { enabled: boolean }) {
   }
 
   if (!prefs) {
-    return <p className="text-[12px] text-[#717171]">{patchError ?? error ?? "Could not load preferences."}</p>
+    return (
+      <div className="flex flex-col gap-3">
+        <MutedPanelError error={patchError ?? error} onRetry={() => void reload()} />
+      </div>
+    )
   }
 
   async function patchAppearance(patch: Partial<UserPreferences["appearance"]>) {
@@ -120,6 +131,9 @@ export function PreferencesInlinePanel({ enabled }: { enabled: boolean }) {
 
   return (
     <div className="flex flex-col gap-4">
+      {showingCachedOffline ? (
+        <OfflineCachedNotice revalidating={isRevalidating} />
+      ) : null}
       <SettingsIntroCard
         icon={Settings}
         title="Preferences"
@@ -201,9 +215,7 @@ export function PreferencesInlinePanel({ enabled }: { enabled: boolean }) {
         <span className="text-[10px] font-semibold text-[#a0a0a0]">Soon</span>
       </div>
 
-      {patchError ? (
-        <p className="text-[12px] text-[#b91c1c]">{patchError}</p>
-      ) : null}
+      {patchError ? <MutedPanelError error={patchError} /> : null}
 
     </div>
   )

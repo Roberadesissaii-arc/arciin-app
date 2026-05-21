@@ -3,11 +3,13 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 
 import { useConnection } from "@/components/providers/connection-provider"
-import { formatApiError } from "@/lib/api/errors"
+import { formatApiError, isNetworkError } from "@/lib/api/errors"
 import { ARCIIN_FOREGROUND_EVENT } from "@/lib/hooks/use-app-foreground"
 import type { MobileConnection } from "@/lib/types/api"
 
 const DEFAULT_STALE_MS = 90_000
+const OFFLINE_STALE_MS = 7 * 24 * 60 * 60 * 1000
+const PANEL_CACHE_LS_PREFIX = "arciin_panel_cache_v1:"
 
 type CacheEntry<T> = { data: T; fetchedAt: number }
 
@@ -15,12 +17,31 @@ const memoryCache = new Map<string, CacheEntry<unknown>>()
 
 function readCache<T>(key: string | null): CacheEntry<T> | null {
   if (!key) return null
-  return (memoryCache.get(key) as CacheEntry<T> | undefined) ?? null
+  const mem = memoryCache.get(key) as CacheEntry<T> | undefined
+  if (mem) return mem
+  if (typeof window === "undefined") return null
+  try {
+    const raw = localStorage.getItem(`${PANEL_CACHE_LS_PREFIX}${key}`)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as CacheEntry<T>
+    if (parsed?.data === undefined) return null
+    memoryCache.set(key, parsed as CacheEntry<unknown>)
+    return parsed
+  } catch {
+    return null
+  }
 }
 
 function writeCache<T>(key: string | null, data: T) {
   if (!key) return
-  memoryCache.set(key, { data, fetchedAt: Date.now() })
+  const entry: CacheEntry<T> = { data, fetchedAt: Date.now() }
+  memoryCache.set(key, entry as CacheEntry<unknown>)
+  if (typeof window === "undefined") return
+  try {
+    localStorage.setItem(`${PANEL_CACHE_LS_PREFIX}${key}`, JSON.stringify(entry))
+  } catch {
+    /* quota */
+  }
 }
 
 export type StablePanelLoadOptions = {
@@ -33,7 +54,7 @@ export function useStablePanelLoad<T>(
   loader: (connection: MobileConnection, signal: AbortSignal) => Promise<T>,
   options?: StablePanelLoadOptions,
 ) {
-  const { connection, ready } = useConnection()
+  const { connection, ready, serverReachable } = useConnection()
   const sessionKey = connection?.sessionToken ?? null
   const connectionRef = useRef(connection)
   connectionRef.current = connection
@@ -46,10 +67,22 @@ export function useStablePanelLoad<T>(
   const [loading, setLoading] = useState(false)
   const [isRevalidating, setIsRevalidating] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showingCachedOffline, setShowingCachedOffline] = useState(
+    () => readCache<T>(storageKey) != null,
+  )
   const [reloadToken, setReloadToken] = useState(0)
 
   const reload = useCallback(() => {
-    if (storageKey) memoryCache.delete(storageKey)
+    if (storageKey) {
+      memoryCache.delete(storageKey)
+      if (typeof window !== "undefined") {
+        try {
+          localStorage.removeItem(`${PANEL_CACHE_LS_PREFIX}${storageKey}`)
+        } catch {
+          /* ignore */
+        }
+      }
+    }
     setReloadToken((n) => n + 1)
   }, [storageKey])
 
@@ -60,11 +93,13 @@ export function useStablePanelLoad<T>(
     if (!conn) return
 
     const cached = readCache<T>(storageKey)
-    const fresh = cached != null && Date.now() - cached.fetchedAt <= staleTimeMs
+    const staleBudget = serverReachable === false ? OFFLINE_STALE_MS : staleTimeMs
+    const fresh = cached != null && Date.now() - cached.fetchedAt <= staleBudget
 
     if (fresh) {
       if (data !== cached.data) setData(cached.data)
-      return
+      setShowingCachedOffline(serverReachable === false)
+      if (serverReachable !== false) return
     }
 
     let cancelled = false
@@ -77,7 +112,7 @@ export function useStablePanelLoad<T>(
     } else {
       setLoading(true)
     }
-    setError(null)
+    if (!cached?.data) setError(null)
 
     void (async () => {
       try {
@@ -85,12 +120,19 @@ export function useStablePanelLoad<T>(
         if (cancelled) return
         setData(result)
         writeCache(storageKey, result)
+        setShowingCachedOffline(false)
+        setError(null)
       } catch (err) {
         if (!cancelled) {
           const conn = connectionRef.current
-          setError(
-            formatApiError(err, conn?.webUrl ?? conn?.apiBaseUrl),
-          )
+          if (cached?.data != null && isNetworkError(err)) {
+            setData(cached.data)
+            setShowingCachedOffline(true)
+            setError(null)
+          } else {
+            setError(formatApiError(err, conn?.webUrl ?? conn?.apiBaseUrl))
+            setShowingCachedOffline(false)
+          }
         }
       } finally {
         if (!cancelled) {
@@ -104,7 +146,7 @@ export function useStablePanelLoad<T>(
       cancelled = true
       ac.abort()
     }
-  }, [enabled, ready, sessionKey, loader, reloadToken, storageKey, staleTimeMs])
+  }, [enabled, ready, sessionKey, loader, reloadToken, storageKey, staleTimeMs, serverReachable])
 
   useEffect(() => {
     if (!sessionKey) {
@@ -139,6 +181,7 @@ export function useStablePanelLoad<T>(
     loading: waiting,
     isRevalidating,
     error,
+    showingCachedOffline,
     connection,
     ready,
     sessionKey,

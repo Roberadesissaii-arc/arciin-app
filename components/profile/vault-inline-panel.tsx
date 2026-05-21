@@ -4,7 +4,9 @@ import { useCallback, useState } from "react"
 import { FingerprintPattern, Loader2 } from "lucide-react"
 
 import { VaultAccountPasswordSheet } from "@/components/profile/vault-account-password-sheet"
+import { OfflineCachedNotice } from "@/components/settings/offline-cached-notice"
 import { SettingsIntroCard } from "@/components/settings/settings-intro-card"
+import { MutedPanelError } from "@/components/shell/muted-panel-error"
 import { MobilePillSwitch, SettingsPanelLink } from "@/components/settings/mobile-toggle-row"
 import {
   getPasswordVault,
@@ -34,8 +36,16 @@ export function VaultInlinePanel({ enabled }: { enabled: boolean }) {
     [],
   )
 
-  const { data: vault, loading, error, connection, setData, reload } =
-    useStablePanelLoad<PasswordVaultList>(enabled, load, { cacheKey: "vault" })
+  const {
+    data: vault,
+    loading,
+    error,
+    showingCachedOffline,
+    isRevalidating,
+    connection,
+    setData,
+    reload,
+  } = useStablePanelLoad<PasswordVaultList>(enabled, load, { cacheKey: "vault" })
 
   const [saving, setSaving] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
@@ -142,12 +152,15 @@ export function VaultInlinePanel({ enabled }: { enabled: boolean }) {
     )
   }
 
-  if (error && !vault) {
-    return <p className="text-[12px] text-[#b91c1c]">{error}</p>
+  if (!vault) {
+    return <MutedPanelError error={error} onRetry={() => void reload()} />
   }
 
   return (
     <div className="flex flex-col gap-4">
+      {showingCachedOffline ? (
+        <OfflineCachedNotice revalidating={isRevalidating} />
+      ) : null}
       <SettingsIntroCard
         icon={FingerprintPattern}
         title="Password vault"
@@ -292,11 +305,7 @@ export function VaultInlinePanel({ enabled }: { enabled: boolean }) {
         </div>
       ) : null}
 
-      {actionError ? (
-        <p className="rounded-xl border border-[#fecaca] bg-[#fef2f2] px-3 py-2 text-[12px] text-[#b91c1c]">
-          {actionError}
-        </p>
-      ) : null}
+      {actionError ? <MutedPanelError error={actionError} /> : null}
       {message ? (
         <p className="rounded-xl border border-[#bbf7d0] bg-[#f0fdf4] px-3 py-2 text-[12px] text-[#15803d]">
           {message}

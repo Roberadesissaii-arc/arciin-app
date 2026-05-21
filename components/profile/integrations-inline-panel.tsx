@@ -3,7 +3,9 @@
 import { useCallback, useState } from "react"
 import { ChevronDown, Loader2, PackagePlus, Plug } from "lucide-react"
 
+import { OfflineCachedNotice } from "@/components/settings/offline-cached-notice"
 import { SettingsIntroCard } from "@/components/settings/settings-intro-card"
+import { MutedPanelError } from "@/components/shell/muted-panel-error"
 import { listIntegrations } from "@/lib/api/settings"
 import { useStablePanelLoad } from "@/lib/hooks/use-stable-panel-load"
 import type { IntegrationSummary } from "@/lib/types/models"
@@ -111,7 +113,14 @@ export function IntegrationsInlinePanel({ enabled }: { enabled: boolean }) {
     [],
   )
 
-  const { data: integrations, loading, error } = useStablePanelLoad(enabled, load, {
+  const {
+    data: integrations,
+    loading,
+    error,
+    showingCachedOffline,
+    isRevalidating,
+    reload,
+  } = useStablePanelLoad(enabled, load, {
     cacheKey: "integrations",
   })
   const [openId, setOpenId] = useState<string | null>(null)
@@ -126,14 +135,17 @@ export function IntegrationsInlinePanel({ enabled }: { enabled: boolean }) {
     )
   }
 
-  if (error && !integrations) {
-    return <p className="text-[12px] text-[#b91c1c]">{error}</p>
+  if (!integrations) {
+    return <MutedPanelError error={error} onRetry={() => void reload()} />
   }
 
-  const list = integrations ?? []
+  const list = integrations
 
   return (
     <div className="flex flex-col gap-4">
+      {showingCachedOffline ? (
+        <OfflineCachedNotice revalidating={isRevalidating} />
+      ) : null}
       <SettingsIntroCard
         icon={PackagePlus}
         title="Integrations"

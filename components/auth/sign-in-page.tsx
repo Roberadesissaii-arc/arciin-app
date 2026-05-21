@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Check, ChevronLeft, Eye, EyeOff, Globe, Key, Lock, Mail, Server } from "lucide-react"
 
+import { HOSTED_APP_LAN_HINT, isPwaHostedApp } from "@/lib/api/hosted-app"
 import { formatApiError } from "@/lib/api/errors"
 import { discoverServer, pairMobileDevice, loginMobileDevice } from "@/lib/api/mobile"
 import {
@@ -227,9 +228,11 @@ type ServerAddressMode = "local" | "remote"
 function ServerAddressModeToggle({
   mode,
   onChange,
+  disableLocal,
 }: {
   mode: ServerAddressMode
   onChange: (mode: ServerAddressMode) => void
+  disableLocal?: boolean
 }) {
   return (
     <div
@@ -245,14 +248,16 @@ function ServerAddressModeToggle({
         ] as const
       ).map(({ id, label }) => {
         const active = mode === id
+        const disabled = id === "local" && disableLocal
         return (
           <button
             key={id}
             type="button"
             role="tab"
             aria-selected={active}
-            onClick={() => onChange(id)}
-            className="flex-1 rounded-xl py-2.5 text-[12.5px] font-semibold transition-colors"
+            disabled={disabled}
+            onClick={() => !disabled && onChange(id)}
+            className="flex-1 rounded-xl py-2.5 text-[12.5px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-45"
             style={{
               backgroundColor: active ? "#ffffff" : "transparent",
               color: active ? "#111111" : "#a0a0a0",
@@ -351,7 +356,10 @@ export function SignInPage() {
   const [signingIn, setSigningIn] = useState(false)
 
   const [serverUrl, setServerUrl] = useState("")
-  const [serverAddressMode, setServerAddressMode] = useState<ServerAddressMode>("local")
+  const [serverAddressMode, setServerAddressMode] = useState<ServerAddressMode>(() =>
+    isPwaHostedApp() ? "remote" : "local",
+  )
+  const hostedApp = isPwaHostedApp()
   const [pairingCode, setPairingCode] = useState("")
   const [setupEmail, setSetupEmail] = useState("")
   const [setupPassword, setSetupPassword] = useState("")
@@ -370,7 +378,7 @@ export function SignInPage() {
     if (page === 1) {
       setSetupStep(1)
       setServerUrl("")
-      setServerAddressMode("local")
+      setServerAddressMode(isPwaHostedApp() ? "remote" : "local")
       setVerifiedApiBase(null)
       setVerifiedInstanceName(null)
     }
@@ -418,6 +426,10 @@ export function SignInPage() {
 
   async function handleVerifyServer() {
     setError(null)
+    if (hostedApp && serverAddressMode === "local") {
+      setError(HOSTED_APP_LAN_HINT)
+      return
+    }
     setSetupBusy("check")
     setVerifiedApiBase(null)
     setVerifiedInstanceName(null)
@@ -449,6 +461,10 @@ export function SignInPage() {
     setError(null)
     if (!serverUrl.trim()) {
       setError("Enter your server address.")
+      return
+    }
+    if (hostedApp && serverAddressMode === "local") {
+      setError(HOSTED_APP_LAN_HINT)
       return
     }
     setSetupBusy("continue")
@@ -520,7 +536,10 @@ export function SignInPage() {
     const trimmed = value.trim()
     if (/^https:\/\//i.test(trimmed) || (trimmed && isPublicServerAddress(trimmed))) {
       setServerAddressMode("remote")
-    } else if (/^192\.168\.|^10\.|^172\.(1[6-9]|2\d|3[01])\./.test(trimmed)) {
+    } else if (
+      !hostedApp &&
+      /^192\.168\.|^10\.|^172\.(1[6-9]|2\d|3[01])\./.test(trimmed)
+    ) {
       setServerAddressMode("local")
     }
   }
@@ -646,11 +665,22 @@ export function SignInPage() {
               {error ? <ErrorBanner message={error} /> : null}
               <ServerAddressModeToggle
                 mode={serverAddressMode}
+                disableLocal={hostedApp}
                 onChange={(mode) => {
                   setServerAddressMode(mode)
                   setError(null)
                 }}
               />
+              {hostedApp ? (
+                <p
+                  className="rounded-xl px-3 py-2.5 text-[11.5px] leading-relaxed text-[#717171]"
+                  style={{ backgroundColor: "#f7f7f7", border: "1px solid #e5e5e5" }}
+                >
+                  This app is hosted on Vercel. Use <strong>From anywhere</strong> with the public
+                  HTTPS URL from desktop Arciin → Settings → Domain (trycloudflare.com or your
+                  domain). Home LAN IPs do not work from this install.
+                </p>
+              ) : null}
               <Field
                 label={serverAddressMode === "remote" ? "Domain" : "Server IP address"}
                 icon={Globe}

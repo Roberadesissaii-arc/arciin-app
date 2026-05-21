@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useState } from "react"
 import { BadgeCheck, FolderTree, HardDrive, Loader2, RefreshCw, Save } from "lucide-react"
 
+import { OfflineCachedNotice } from "@/components/settings/offline-cached-notice"
 import { SettingsIntroCard } from "@/components/settings/settings-intro-card"
+import { MutedPanelError } from "@/components/shell/muted-panel-error"
 import { formatApiError } from "@/lib/api/errors"
 import { getStorageSettings, getStorageVolumes, updateStorageSettings } from "@/lib/api/settings"
 import { getUserPreferences, updateUserPreferences } from "@/lib/api/user-preferences"
@@ -54,7 +56,10 @@ export function StorageInlinePanel({ enabled }: { enabled: boolean }) {
     data,
     loading: settingsLoading,
     error: settingsError,
+    showingCachedOffline: settingsOffline,
+    isRevalidating: settingsRevalidating,
     connection,
+    reload: reloadSettings,
   } = useStablePanelLoad(enabled, settingsLoader, { cacheKey: "storage" })
 
   const {
@@ -62,6 +67,7 @@ export function StorageInlinePanel({ enabled }: { enabled: boolean }) {
     loading: volumesWaiting,
     isRevalidating: volumesRefreshing,
     error: volumesError,
+    showingCachedOffline: volumesOffline,
     reload: reloadVolumes,
   } = useStablePanelLoad<StorageVolumesResponse>(enabled, volumesLoader, {
     cacheKey: "storage-volumes",
@@ -158,10 +164,17 @@ export function StorageInlinePanel({ enabled }: { enabled: boolean }) {
         description="Files and libraries are stored on disk under your configured root path on this server."
       />
 
+      {settingsOffline || volumesOffline ? (
+        <OfflineCachedNotice
+          revalidating={settingsRevalidating || volumesRefreshing}
+        />
+      ) : null}
+
       {suppressFetchErrorWhenOffline(serverReachable, settingsError) && !usage ? (
-        <p className="text-[12px] text-[#b91c1c]">
-          {suppressFetchErrorWhenOffline(serverReachable, settingsError)}
-        </p>
+        <MutedPanelError
+          error={suppressFetchErrorWhenOffline(serverReachable, settingsError)}
+          onRetry={() => void reloadSettings()}
+        />
       ) : null}
 
       <div className="rounded-xl bg-[#f7f7f7] p-3" style={{ border: "1px solid #e5e5e5" }}>
@@ -349,17 +362,9 @@ export function StorageInlinePanel({ enabled }: { enabled: boolean }) {
         </div>
       </div>
 
-      {prefsError ? (
-        <p className="rounded-xl border border-[#fecaca] bg-[#fef2f2] px-3 py-2 text-[12px] text-[#b91c1c]">
-          {prefsError}
-        </p>
-      ) : null}
+      {prefsError ? <MutedPanelError error={prefsError} /> : null}
 
-      {saveError ? (
-        <p className="rounded-xl border border-[#fecaca] bg-[#fef2f2] px-3 py-2 text-[12px] text-[#b91c1c]">
-          {saveError}
-        </p>
-      ) : null}
+      {saveError ? <MutedPanelError error={saveError} /> : null}
       {message ? (
         <p className="rounded-xl border border-[#bbf7d0] bg-[#f0fdf4] px-3 py-2 text-[12px] text-[#15803d]">
           {message}

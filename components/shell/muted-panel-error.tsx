@@ -17,9 +17,9 @@ export function MutedPanelError({ error, onRetry, className }: MutedPanelErrorPr
 
   return (
     <div
-      className={className ?? "rounded-xl px-4 py-3 text-[12px] text-[#b91c1c]"}
-      style={{ backgroundColor: "#fef2f2", border: "1px solid #fecaca" }}
-      role="alert"
+      className={className ?? "rounded-xl px-3.5 py-3 text-[12px] leading-relaxed text-[#717171]"}
+      style={{ backgroundColor: "#f7f7f7", border: "1px solid #e5e5e5" }}
+      role="status"
     >
       <p>{visible}</p>
       {onRetry ? (

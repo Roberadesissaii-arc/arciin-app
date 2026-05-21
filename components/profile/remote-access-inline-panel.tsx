@@ -11,6 +11,8 @@ import {
   Wifi,
 } from "lucide-react"
 
+import { MutedPanelError } from "@/components/shell/muted-panel-error"
+import { OfflineCachedNotice } from "@/components/settings/offline-cached-notice"
 import { formatApiError } from "@/lib/api/errors"
 import { HOSTED_APP_LAN_HINT, isPwaHostedApp } from "@/lib/api/hosted-app"
 import { getRemoteAccessSettings, updateRemoteAccessSettings } from "@/lib/api/settings"
@@ -42,7 +44,7 @@ export function RemoteAccessInlinePanel({ enabled }: { enabled: boolean }) {
     [],
   )
 
-  const { data, loading, error, reload } = useStablePanelLoad(
+  const { data, loading, error, showingCachedOffline, isRevalidating, reload } = useStablePanelLoad(
     enabled && Boolean(connection),
     load,
     { cacheKey: "remote-access" },
@@ -224,8 +226,12 @@ export function RemoteAccessInlinePanel({ enabled }: { enabled: boolean }) {
         </div>
       ) : null}
 
-      {error && !loading ? (
-        <p className="rounded-xl border border-[#fecaca] bg-[#fef2f2] px-3 py-2 text-[12px] text-[#b91c1c]">{error}</p>
+      {error && !loading && !data ? (
+        <MutedPanelError error={error} onRetry={() => void reload()} />
+      ) : null}
+
+      {showingCachedOffline && (data || !loading) ? (
+        <OfflineCachedNotice revalidating={isRevalidating} />
       ) : null}
 
       {!loading && data ? (
@@ -288,9 +294,7 @@ export function RemoteAccessInlinePanel({ enabled }: { enabled: boolean }) {
         </>
       ) : null}
 
-      {saveError ? (
-        <p className="rounded-xl border border-[#fecaca] bg-[#fef2f2] px-3 py-2 text-[12px] text-[#b91c1c]">{saveError}</p>
-      ) : null}
+      {saveError ? <MutedPanelError error={saveError} /> : null}
       {message ? (
         <p className="rounded-xl border border-[#bbf7d0] bg-[#f0fdf4] px-3 py-2 text-[12px] text-[#15803d]">{message}</p>
       ) : null}

@@ -3,7 +3,9 @@
 import { useCallback } from "react"
 import { Database, Loader2 } from "lucide-react"
 
+import { OfflineCachedNotice } from "@/components/settings/offline-cached-notice"
 import { SettingsIntroCard } from "@/components/settings/settings-intro-card"
+import { MutedPanelError } from "@/components/shell/muted-panel-error"
 import { SettingsPanelLink } from "@/components/settings/mobile-toggle-row"
 import { fetchAdminTables } from "@/lib/api/admin"
 import { fetchHealth } from "@/lib/api/health"
@@ -26,9 +28,10 @@ export function DatabaseInlinePanel({ enabled }: { enabled: boolean }) {
     [],
   )
 
-  const { data, loading, error } = useStablePanelLoad<DatabaseSummary>(enabled, load, {
-    cacheKey: "database",
-  })
+  const { data, loading, error, showingCachedOffline, isRevalidating, reload } =
+    useStablePanelLoad<DatabaseSummary>(enabled, load, {
+      cacheKey: "database",
+    })
 
   if (!enabled) return null
 
@@ -40,12 +43,15 @@ export function DatabaseInlinePanel({ enabled }: { enabled: boolean }) {
     )
   }
 
-  if (error && !data) {
-    return <p className="text-[12px] text-[#b91c1c]">{error}</p>
+  if (!data) {
+    return <MutedPanelError error={error} onRetry={() => void reload()} />
   }
 
   return (
     <div className="flex flex-col gap-4">
+      {showingCachedOffline ? (
+        <OfflineCachedNotice revalidating={isRevalidating} />
+      ) : null}
       <SettingsIntroCard
         icon={Database}
         title="Database"
