@@ -62,6 +62,8 @@ type ConnectionContextValue = {
   applyAuth: (auth: MobileAuthResult, requestApiBase?: string) => void
   /** Change server URL; keeps your session when still valid (no full re-pair). */
   reconnectServer: (serverInput: string) => Promise<ReconnectResult>
+  /** Probe saved URL, then LAN / canonical URL — no new pairing code. */
+  tryAutoReconnect: () => Promise<boolean>
   updateUser: (user: MobileConnection["user"]) => void
   signOut: () => void
   forgetServer: () => void
@@ -308,21 +310,21 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  const probeServerOnForeground = useCallback(async () => {
+  const tryAutoReconnect = useCallback(async (): Promise<boolean> => {
     const stored = loadConnection()
     if (!stored || isConnectionExpired(stored) || isLoopbackApiBase(stored.apiBaseUrl)) {
-      return
+      return false
     }
     const probeAbort = new AbortController()
-    const probeTimer = window.setTimeout(() => probeAbort.abort(), 8_000)
+    const probeTimer = window.setTimeout(() => probeAbort.abort(), 10_000)
     try {
       await fetchApi<{ status?: string }>("/health", {
         connection: stored,
         signal: probeAbort.signal,
       })
-      dispatchAppForeground()
       setServerReachable(true)
       await refresh()
+      return true
     } catch {
       const resolved = await resolveReachableServer(stored, loadServerProfile(), probeAbort.signal)
       if (resolved) {
@@ -333,13 +335,19 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
         setServerReachable(true)
         dispatchAppForeground()
         await refresh()
-      } else {
-        setServerReachable(false)
+        return true
       }
+      setServerReachable(false)
+      return false
     } finally {
       window.clearTimeout(probeTimer)
     }
   }, [refresh])
+
+  const probeServerOnForeground = useCallback(async () => {
+    const ok = await tryAutoReconnect()
+    if (ok) dispatchAppForeground()
+  }, [tryAutoReconnect])
 
   useAppForeground(() => {
     void probeServerOnForeground()
@@ -402,6 +410,7 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
       refresh,
       applyAuth,
       reconnectServer,
+      tryAutoReconnect,
       updateUser,
       signOut,
       forgetServer,
@@ -416,6 +425,7 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
       refresh,
       applyAuth,
       reconnectServer,
+      tryAutoReconnect,
       updateUser,
       signOut,
       forgetServer,
