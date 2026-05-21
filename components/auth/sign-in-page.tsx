@@ -4,11 +4,9 @@ import { useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Check, ChevronLeft, Eye, EyeOff, Globe, Key, Lock, Mail, Server } from "lucide-react"
 
-import {
-  HOSTED_APP_LAN_HINT,
-  HOSTED_APP_SETUP_NOTE,
-  isPwaHostedApp,
-} from "@/lib/api/hosted-app"
+import { HOSTED_APP_LAN_HINT, isPwaHostedApp } from "@/lib/api/hosted-app"
+import { ConnectionSuccessScreen } from "@/components/auth/connection-success-screen"
+import { HostedConnectionModesNote } from "@/components/auth/hosted-connection-modes-note"
 import { formatApiError } from "@/lib/api/errors"
 import { discoverServer, pairMobileDevice, loginMobileDevice } from "@/lib/api/mobile"
 import {
@@ -26,29 +24,6 @@ import {
 import { BrandHeroCarousel } from "@/components/auth/brand-hero"
 import { LoginDomainChip } from "@/components/connection/saved-server-chip"
 import { useConnection } from "@/components/providers/connection-provider"
-
-function SuccessScreen({ serverUrl }: { serverUrl: string }) {
-  return (
-    <div
-      className="fixed inset-0 flex flex-col items-center justify-center pt-safe pb-safe"
-      style={{ backgroundColor: "#f7f7f7" }}
-    >
-      <div
-        className="pointer-events-none absolute rounded-full"
-        style={{
-          width: 280,
-          height: 280,
-          background: "radial-gradient(circle, rgba(255,79,18,0.13) 0%, transparent 70%)",
-        }}
-      />
-      <p className="text-[26px] font-black tracking-tight text-[#111111]">Connected!</p>
-      {serverUrl ? (
-        <p className="mt-2 text-[13px] font-medium text-[#717171]">{serverUrl}</p>
-      ) : null}
-      <p className="mt-8 text-[12.5px] text-[#a0a0a0]">Taking you to your server…</p>
-    </div>
-  )
-}
 
 function Field({
   label,
@@ -261,7 +236,7 @@ function ServerAddressModeToggle({
             aria-selected={active}
             disabled={disabled}
             onClick={() => !disabled && onChange(id)}
-            className="flex-1 rounded-xl py-2.5 text-[12.5px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-45"
+            className="relative flex-1 rounded-xl py-2.5 text-[12.5px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-45"
             style={{
               backgroundColor: active ? "#ffffff" : "transparent",
               color: active ? "#111111" : "#a0a0a0",
@@ -269,6 +244,11 @@ function ServerAddressModeToggle({
             }}
           >
             {label}
+            {disabled && id === "local" ? (
+              <span className="mt-0.5 block text-[9px] font-medium uppercase tracking-wide text-[#c0c0c0]">
+                Unavailable
+              </span>
+            ) : null}
           </button>
         )
       })}
@@ -351,6 +331,7 @@ export function SignInPage() {
   const [setupStep, setSetupStep] = useState<1 | 2>(1)
   const [showSuccess, setShowSuccess] = useState(false)
   const [connectedUrl, setConnectedUrl] = useState("")
+  const [connectedInstance, setConnectedInstance] = useState("Arciin")
   const [error, setError] = useState<string | null>(null)
 
   const [email, setEmail] = useState("")
@@ -418,9 +399,9 @@ export function SignInPage() {
       )
       applyAuth(auth, server.apiBaseUrl)
       const labelBase = authWithClientApiBase(auth, server.apiBaseUrl).server.apiBaseUrl
+      setConnectedInstance(auth.server.instanceName ?? "Arciin")
       setConnectedUrl(displayServerLabel(labelBase, auth.server.instanceName))
       setShowSuccess(true)
-      setTimeout(() => router.push("/home"), 2200)
     } catch (err) {
       setError(formatApiError(err, serverProfile?.apiBaseUrl ?? serverProfile?.webUrl))
     } finally {
@@ -518,14 +499,13 @@ export function SignInPage() {
       })
 
       applyAuth(auth, apiBase)
-      setConnectedUrl(
-        displayServerLabel(
-          authWithClientApiBase(auth, apiBase).server.apiBaseUrl,
-          auth.server.instanceName ?? instanceName ?? "Arciin",
-        ),
+      const label = displayServerLabel(
+        authWithClientApiBase(auth, apiBase).server.apiBaseUrl,
+        auth.server.instanceName ?? instanceName ?? "Arciin",
       )
+      setConnectedInstance(auth.server.instanceName ?? instanceName ?? "Arciin")
+      setConnectedUrl(label)
       setShowSuccess(true)
-      setTimeout(() => router.push("/home"), 2200)
     } catch (err) {
       setError(formatApiError(err, serverUrl.trim() || verifiedApiBase))
     } finally {
@@ -556,7 +536,15 @@ export function SignInPage() {
     )
   }
 
-  if (showSuccess) return <SuccessScreen serverUrl={connectedUrl} />
+  if (showSuccess) {
+    return (
+      <ConnectionSuccessScreen
+        instanceName={connectedInstance}
+        serverUrl={connectedUrl}
+        onComplete={() => router.replace("/home")}
+      />
+    )
+  }
 
   return (
     <div
@@ -675,14 +663,7 @@ export function SignInPage() {
                   setError(null)
                 }}
               />
-              {hostedApp ? (
-                <p
-                  className="rounded-xl px-3 py-2.5 text-[11.5px] leading-relaxed text-[#717171]"
-                  style={{ backgroundColor: "#f7f7f7", border: "1px solid #e5e5e5" }}
-                >
-                  {HOSTED_APP_SETUP_NOTE}
-                </p>
-              ) : null}
+              {hostedApp ? <HostedConnectionModesNote /> : null}
               <Field
                 label={serverAddressMode === "remote" ? "Domain" : "Server IP address"}
                 icon={Globe}

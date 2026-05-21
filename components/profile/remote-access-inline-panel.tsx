@@ -14,7 +14,8 @@ import {
 import { MutedPanelError } from "@/components/shell/muted-panel-error"
 import { OfflineCachedNotice } from "@/components/settings/offline-cached-notice"
 import { formatApiError } from "@/lib/api/errors"
-import { HOSTED_APP_REMOTE_INTRO, isPwaHostedApp } from "@/lib/api/hosted-app"
+import { isPwaHostedApp } from "@/lib/api/hosted-app"
+import { HostedConnectionModesNote } from "@/components/auth/hosted-connection-modes-note"
 import { getRemoteAccessSettings, updateRemoteAccessSettings } from "@/lib/api/settings"
 import { useConnection } from "@/components/providers/connection-provider"
 import { loadServerProfile } from "@/lib/connection/storage"
@@ -159,17 +160,19 @@ export function RemoteAccessInlinePanel({ enabled }: { enabled: boolean }) {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-start gap-2.5 rounded-xl border border-[#e5e5e5] bg-[#fafafa] px-3.5 py-3">
-        <Globe className="mt-0.5 size-4 shrink-0 text-[#ff4f12]" />
-        <div className="min-w-0 flex-1">
-          <p className="text-[13px] font-semibold text-[#222222]">Remote access</p>
-          <p className="mt-0.5 text-[11px] leading-relaxed text-[#717171]">
-            {isPwaHostedApp()
-              ? HOSTED_APP_REMOTE_INTRO
-              : "Switch LAN vs public. Arciin can update the address when the tunnel changes."}
-          </p>
+      {isPwaHostedApp() ? (
+        <HostedConnectionModesNote />
+      ) : (
+        <div className="flex items-start gap-2.5 rounded-xl border border-[#e5e5e5] bg-[#fafafa] px-3.5 py-3">
+          <Globe className="mt-0.5 size-4 shrink-0 text-[#ff4f12]" />
+          <div className="min-w-0 flex-1">
+            <p className="text-[13px] font-semibold text-[#222222]">Remote access</p>
+            <p className="mt-0.5 text-[11px] leading-relaxed text-[#717171]">
+              Switch LAN vs public. Arciin can update the address when the tunnel changes.
+            </p>
+          </div>
         </div>
-      </div>
+      )}
 
       {(resolving || reconnecting) && (
         <p className="flex items-center gap-2 text-[12px] text-[#717171]">

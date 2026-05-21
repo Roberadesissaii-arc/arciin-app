@@ -24,10 +24,13 @@ export function lanBlockedFromHostedApp(apiBaseUrl: string): boolean {
   return isPwaHostedApp() && isPrivateLanApiBase(apiBaseUrl)
 }
 
+/** Shown when user picks home LAN on the hosted install. */
 export const HOSTED_APP_LAN_HINT =
-  "Home network is not available here. Use From anywhere with a public HTTPS address."
+  "Home network is not available in this app. Use From anywhere with your server's public HTTPS address."
 
-export const HOSTED_APP_SETUP_NOTE = HOSTED_APP_LAN_HINT
+/** Setup step — explains why only one connection mode works here. */
+export const HOSTED_APP_SETUP_NOTE =
+  "Only From anywhere is available here (1 of 2 connection modes). Home LAN does not work from this install — use your public HTTPS address from Settings → Domain on your Arciin server."
 
 export const HOSTED_APP_REMOTE_INTRO =
-  "Use your public HTTPS address — not home LAN."
+  "This install cannot reach your home LAN. Use From anywhere with your public HTTPS address (Settings → Domain on desktop)."

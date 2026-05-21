@@ -323,34 +323,32 @@ export function AssetViewer({
           <p className="truncate text-[13px] font-semibold text-white">{title}</p>
           <p className="text-[10px] text-[#a1a1aa]">
             {currentLibrary?.name ?? "Library"} · {formatBytes(asset.sizeBytes)}
-            {isPdf && pdfTotal > 0
-              ? ` · Page ${pdfPage} / ${pdfTotal}`
-              : ""}
-            {assets.length > 1
-              ? isPdf
-                ? ` · ${currentIndex + 1} / ${assets.length} · swipe ← → other files`
-                : ` · ${currentIndex + 1} / ${assets.length} · swipe ← →`
-              : isPdf && pdfTotal > 0
-                ? " · scroll up/down for pages"
-                : ""}
+            {isPdf && pdfTotal > 0 ? ` · Page ${pdfPage} / ${pdfTotal}` : ""}
+            {assets.length > 1 ? ` · File ${currentIndex + 1} / ${assets.length}` : ""}
           </p>
         </div>
         <div className="size-9 shrink-0" />
       </div>
 
-      {/* preview area — swipeable */}
+      {/* preview area */}
       <div
-        className="relative min-h-0 flex-1 overflow-hidden bg-[#09090b] touch-pan-y"
+        className={`relative min-h-0 flex-1 overflow-hidden touch-pan-y ${isPdf ? "bg-[#111113]" : "bg-[#09090b]"}`}
         data-scroll-lock-allow
-        onPointerDown={handlePointerDown}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={() => {
-          pointerStart.current = null
-        }}
-        onTouchStart={handleTouchStart}
-        onTouchEnd={handleTouchEnd}
+        onPointerDown={isPdf ? undefined : handlePointerDown}
+        onPointerUp={isPdf ? undefined : handlePointerUp}
+        onPointerCancel={
+          isPdf
+            ? undefined
+            : () => {
+                pointerStart.current = null
+              }
+        }
+        onTouchStart={isPdf ? undefined : handleTouchStart}
+        onTouchEnd={isPdf ? undefined : handleTouchEnd}
       >
-        <div className={`absolute inset-0 flex ${isPdf ? "flex-col" : "items-center justify-center"} p-2`}>
+        <div
+          className={`absolute inset-0 flex ${isPdf ? "flex-col" : "items-center justify-center"} ${isPdf ? "" : "p-2"}`}
+        >
           {isPdf ? (
             <MobilePdfViewer
               connection={connection}
@@ -390,9 +388,11 @@ export function AssetViewer({
           )}
         </div>
 
-        {/* dot indicators */}
+        {/* file switcher — above PDF toolbar when viewing PDF */}
         {assets.length > 1 && (
-          <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-1.5">
+          <div
+            className={`absolute left-0 right-0 z-10 flex justify-center gap-1.5 ${isPdf ? "top-2" : "bottom-3"}`}
+          >
             {assets.map((_, i) => (
               <button
                 key={i}
@@ -411,15 +411,23 @@ export function AssetViewer({
           </div>
         )}
 
-        {/* invisible edge tap zones */}
-        {hasPrev && (
-          <button type="button" onClick={() => goTo(currentIndex - 1)}
-            className="absolute left-0 top-0 h-full w-16 opacity-0" aria-label="Previous file" />
-        )}
-        {hasNext && (
-          <button type="button" onClick={() => goTo(currentIndex + 1)}
-            className="absolute right-0 top-0 h-full w-16 opacity-0" aria-label="Next file" />
-        )}
+        {/* edge tap zones — disabled for PDF so horizontal swipes turn pages, not files */}
+        {!isPdf && hasPrev ? (
+          <button
+            type="button"
+            onClick={() => goTo(currentIndex - 1)}
+            className="absolute left-0 top-0 h-full w-16 opacity-0"
+            aria-label="Previous file"
+          />
+        ) : null}
+        {!isPdf && hasNext ? (
+          <button
+            type="button"
+            onClick={() => goTo(currentIndex + 1)}
+            className="absolute right-0 top-0 h-full w-16 opacity-0"
+            aria-label="Next file"
+          />
+        ) : null}
       </div>
 
       {error ? (
