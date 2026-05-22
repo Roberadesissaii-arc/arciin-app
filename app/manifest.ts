@@ -7,10 +7,16 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "Your server, your control.",
     start_url: "/home",
     display: "standalone",
-    background_color: "#09090b",
-    theme_color: "#09090b",
+    background_color: "#f7f7f7",
+    theme_color: "#111111",
     orientation: "portrait",
     icons: [
+      {
+        src: "/favicon.svg",
+        sizes: "any",
+        type: "image/svg+xml",
+        purpose: "any",
+      },
       {
         src: "/icon-192.png",
         sizes: "192x192",

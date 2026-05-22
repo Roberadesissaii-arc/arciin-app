@@ -183,6 +183,23 @@ On your phone (same Wi‑Fi), open `http://<your-lan-ip>:3000`.
 
 ---
 
+## Browser & PWA icons
+
+The tab bar and “Add to Home Screen” use the Arciin mark (black tile + orange arch):
+
+| File | Use |
+|------|-----|
+| `favicon.svg` | Modern browsers (tab icon) |
+| `favicon.ico` / `favicon-32.png` | Legacy tab shortcut |
+| `apple-touch-icon.png` | iOS home screen |
+| `icon-192.png` / `icon-512.png` | PWA manifest |
+
+Regenerate from the desktop repo (requires Sharp):
+
+```bash
+cd ../arciin && pnpm icons:generate
+```
+
 ## Scripts
 
 | Command | Description |
