@@ -1,5 +1,6 @@
 "use client"
 
+import Image from "next/image"
 import Link from "next/link"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { flushSync } from "react-dom"
@@ -10,7 +11,6 @@ import {
   Plus,
   RotateCcw,
   Send,
-  Sparkles,
   Square,
   ThumbsDown,
   ThumbsUp,
@@ -82,7 +82,10 @@ const CHAT_SUGGESTIONS = [
   "What files did I upload recently?",
   "How much storage am I using?",
   "Show me all my videos",
+  "List my documents",
 ] as const
+
+const GEMINI_ICON = "/assets/icons/models/gemini-color.svg"
 
 function ChatWelcomePanel({
   ready,
@@ -154,17 +157,24 @@ function ChatWelcomePanel({
       <p className="max-w-xs text-center text-[13px] leading-relaxed text-[#717171]">
         Ask about your files, libraries, or instance.
       </p>
-      <div className="flex w-full max-w-sm flex-col gap-2">
+      <div className="grid w-full max-w-sm grid-cols-2 gap-2 px-1">
         {CHAT_SUGGESTIONS.map((s) => (
           <button
             key={s}
             type="button"
             onClick={() => onPickSuggestion(s)}
-            className="flex items-center gap-3 rounded-2xl bg-white px-4 py-3 text-left active:bg-[#f7f7f7]"
+            className="flex flex-col items-center justify-center gap-2 rounded-2xl bg-white px-3 py-3.5 text-center active:bg-[#f7f7f7]"
             style={{ border: "1px solid #e5e5e5" }}
           >
-            <Sparkles className="size-3.5 shrink-0 text-[#a0a0a0]" />
-            <span className="text-[12px] text-[#717171]">{s}</span>
+            <Image
+              src={GEMINI_ICON}
+              alt=""
+              width={20}
+              height={20}
+              className="size-5 shrink-0 object-contain"
+              aria-hidden
+            />
+            <span className="text-[11px] leading-snug text-[#717171]">{s}</span>
           </button>
         ))}
       </div>
