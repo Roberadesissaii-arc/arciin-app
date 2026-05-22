@@ -8,17 +8,32 @@ export function isServerConnected(serverReachable: boolean | null): boolean {
   return serverReachable === true
 }
 
-/** Greeting / identity copy before the server is confirmed online. */
-export const PLACEHOLDER_GREETING = "Hi there 👋"
+/** Shown only when the server is confirmed unreachable (not while probing). */
+export const OFFLINE_HOME_GREETING = "Hi there 👋"
 
+/**
+ * Home hero greeting.
+ * - `null` → still checking reachability (show skeleton, not "Hi there").
+ * - offline → "Hi there 👋"
+ * - online + name → "Hi, {name}"
+ */
 export function homeGreeting(
   connection: MobileConnection | null,
   serverReachable: boolean | null,
-): string {
-  if (!isServerConnected(serverReachable)) return PLACEHOLDER_GREETING
-  const first = connection?.user.name?.split(/\s+/)[0]
+  ready = true,
+): string | null {
+  if (!ready || serverReachable === null) return null
+  if (serverReachable === false) return OFFLINE_HOME_GREETING
+  const first = connection?.user.name?.split(/\s+/)[0]?.trim()
   if (first) return `Hi, ${first}`
   return "Overview"
+}
+
+export function isHomeGreetingLoading(
+  serverReachable: boolean | null,
+  ready = true,
+): boolean {
+  return !ready || serverReachable === null
 }
 
 export function homeSubtitle(

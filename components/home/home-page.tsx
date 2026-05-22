@@ -13,6 +13,7 @@ import {
 import { HomePageSkeleton } from "@/components/home/home-page-skeleton"
 import { useCachedHomeOverview } from "@/lib/hooks/use-cached-home-overview"
 import { PageFetchErrorAlert } from "@/components/shell/page-fetch-error-alert"
+import { Skeleton } from "@/components/ui/skeleton"
 import { useConnection } from "@/components/providers/connection-provider"
 import { homeGreeting, homeSubtitle } from "@/lib/connection/offline-ui"
 import {
@@ -92,9 +93,9 @@ function storagePercent(storage: NonNullable<HomeOverview["storage"]>) {
 }
 
 export function HomePage() {
-  const { connection, serverReachable } = useConnection()
+  const { connection, serverReachable, ready } = useConnection()
   const { data, error, reload } = useCachedHomeOverview()
-  const greeting = homeGreeting(connection, serverReachable)
+  const greeting = homeGreeting(connection, serverReachable, ready)
 
   const storage = data?.storage
   const storagePct = storage ? storagePercent(storage) : null
@@ -128,12 +129,19 @@ export function HomePage() {
   return (
     <div className="flex flex-col gap-5">
       <div>
-        <h2
-          className="text-[22px] font-bold tracking-tight text-[#222222]"
-          style={{ fontFamily: "var(--font-space-grotesk, sans-serif)" }}
-        >
-          {greeting}
-        </h2>
+        {greeting ? (
+          <h2
+            className="text-[22px] font-bold tracking-tight text-[#222222]"
+            style={{ fontFamily: "var(--font-space-grotesk, sans-serif)" }}
+          >
+            {greeting}
+          </h2>
+        ) : (
+          <Skeleton
+            className="h-7 w-40 max-w-full rounded-lg"
+            style={{ fontFamily: "var(--font-space-grotesk, sans-serif)" }}
+          />
+        )}
         <p className="mt-0.5 text-[13px] text-[#717171]">
           {homeSubtitle(connection, serverReachable)}
         </p>

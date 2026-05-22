@@ -60,16 +60,23 @@ function ActivityRowSkeleton() {
 }
 
 /** Full home overview placeholder — matches `HomePage` layout to avoid layout shift. */
-export function HomePageSkeleton({ greeting = "Overview" }: { greeting?: string }) {
+export function HomePageSkeleton({ greeting = null }: { greeting?: string | null }) {
   return (
     <div className="flex flex-col gap-5" aria-busy aria-label="Loading overview">
       <div>
-        <h2
-          className="text-[22px] font-bold tracking-tight text-[#222222]"
-          style={{ fontFamily: "var(--font-space-grotesk, sans-serif)" }}
-        >
-          {greeting}
-        </h2>
+        {greeting ? (
+          <h2
+            className="text-[22px] font-bold tracking-tight text-[#222222]"
+            style={{ fontFamily: "var(--font-space-grotesk, sans-serif)" }}
+          >
+            {greeting}
+          </h2>
+        ) : (
+          <Skeleton
+            className="h-7 w-40 max-w-full rounded-lg"
+            style={{ fontFamily: "var(--font-space-grotesk, sans-serif)" }}
+          />
+        )}
         <div className="mt-1.5">
           <Skeleton className="h-3.5 w-44 max-w-full rounded-md" />
         </div>
