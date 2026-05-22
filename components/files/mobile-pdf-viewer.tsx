@@ -2,15 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import type { PDFDocumentProxy } from "pdfjs-dist"
-import {
-  BookOpen,
-  ChevronLeft,
-  ChevronRight,
-  Loader2,
-  ScrollText,
-  ZoomIn,
-  ZoomOut,
-} from "lucide-react"
+import { BookOpen, Loader2, ScrollText, ZoomIn, ZoomOut } from "lucide-react"
 
 import { fetchPdfDocument } from "@/lib/files/pdf-thumbnail"
 import type { MobileConnection } from "@/lib/types/api"
@@ -144,8 +136,6 @@ function PdfToolbar({
   onZoomOut,
   canZoomIn,
   canZoomOut,
-  onPrevPage,
-  onNextPage,
 }: {
   mode: PdfViewMode
   onModeChange: (m: PdfViewMode) => void
@@ -156,25 +146,23 @@ function PdfToolbar({
   onZoomOut: () => void
   canZoomIn: boolean
   canZoomOut: boolean
-  onPrevPage: () => void
-  onNextPage: () => void
 }) {
   const zoomPct = Math.round(ZOOM_STEPS[zoomIndex]! * 100)
 
   return (
     <div
-      className="flex shrink-0 flex-col gap-2 border-t border-white/10 px-3 py-2.5"
+      className="flex shrink-0 items-center justify-between gap-2 border-t border-white/10 px-3 py-1.5"
       style={{
-        paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))",
+        paddingBottom: "max(0.35rem, env(safe-area-inset-bottom))",
         background: "linear-gradient(180deg, rgba(24,24,27,0.92) 0%, rgba(9,9,11,0.98) 100%)",
       }}
     >
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
         <div className="flex rounded-xl bg-white/8 p-0.5">
           <button
             type="button"
             onClick={() => onModeChange("book")}
-            className="flex items-center gap-1 rounded-[10px] px-2.5 py-1.5 text-[11px] font-semibold transition-colors"
+            className="flex items-center gap-1 rounded-[10px] px-2 py-1 text-[10px] font-semibold transition-colors"
             style={{
               backgroundColor: mode === "book" ? "rgba(255,79,18,0.9)" : "transparent",
               color: mode === "book" ? "#fff" : "#a1a1aa",
@@ -187,7 +175,7 @@ function PdfToolbar({
           <button
             type="button"
             onClick={() => onModeChange("scroll")}
-            className="flex items-center gap-1 rounded-[10px] px-2.5 py-1.5 text-[11px] font-semibold transition-colors"
+            className="flex items-center gap-1 rounded-[10px] px-2 py-1 text-[10px] font-semibold transition-colors"
             style={{
               backgroundColor: mode === "scroll" ? "rgba(255,79,18,0.9)" : "transparent",
               color: mode === "scroll" ? "#fff" : "#a1a1aa",
@@ -208,50 +196,25 @@ function PdfToolbar({
             type="button"
             onClick={onZoomOut}
             disabled={!canZoomOut}
-            className="flex size-8 items-center justify-center rounded-lg text-[#e4e4e7] active:bg-white/10 disabled:opacity-35"
+            className="flex size-7 items-center justify-center rounded-lg text-[#e4e4e7] active:bg-white/10 disabled:opacity-35"
             aria-label="Zoom out"
           >
-            <ZoomOut className="size-4" />
+            <ZoomOut className="size-3.5" />
           </button>
-          <span className="min-w-[2.5rem] text-center text-[11px] font-semibold tabular-nums text-[#a1a1aa]">
+          <span className="min-w-[2.25rem] text-center text-[10px] font-semibold tabular-nums text-[#a1a1aa]">
             {zoomPct}%
           </span>
           <button
             type="button"
             onClick={onZoomIn}
             disabled={!canZoomIn}
-            className="flex size-8 items-center justify-center rounded-lg text-[#e4e4e7] active:bg-white/10 disabled:opacity-35"
+            className="flex size-7 items-center justify-center rounded-lg text-[#e4e4e7] active:bg-white/10 disabled:opacity-35"
             aria-label="Zoom in"
           >
-            <ZoomIn className="size-4" />
+            <ZoomIn className="size-3.5" />
           </button>
         </div>
       </div>
-
-      {mode === "book" && total > 0 ? (
-        <div className="flex items-center justify-center gap-3">
-          <button
-            type="button"
-            onClick={onPrevPage}
-            disabled={page <= 1}
-            className="flex h-9 min-w-[4.5rem] items-center justify-center gap-1 rounded-xl border border-white/12 bg-white/6 text-[12px] font-semibold text-white active:bg-white/12 disabled:opacity-35"
-          >
-            <ChevronLeft className="size-4" />
-            Prev
-          </button>
-          <button
-            type="button"
-            onClick={onNextPage}
-            disabled={page >= total}
-            className="flex h-9 min-w-[4.5rem] items-center justify-center gap-1 rounded-xl border border-white/12 bg-white/6 text-[12px] font-semibold text-white active:bg-white/12 disabled:opacity-35"
-          >
-            Next
-            <ChevronRight className="size-4" />
-          </button>
-        </div>
-      ) : (
-        <p className="text-center text-[10px] text-[#71717a]">Scroll vertically · pinch or zoom controls</p>
-      )}
     </div>
   )
 }
@@ -543,8 +506,6 @@ export function MobilePdfViewer({
         onZoomOut={() => setZoomIndex((i) => Math.max(0, i - 1))}
         canZoomIn={zoomIndex < ZOOM_STEPS.length - 1}
         canZoomOut={zoomIndex > 0}
-        onPrevPage={() => goBookPage(bookPage - 1, "right")}
-        onNextPage={() => goBookPage(bookPage + 1, "left")}
       />
     </div>
   )

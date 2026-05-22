@@ -9,7 +9,7 @@ import { useConnection } from "@/components/providers/connection-provider"
 import type { HomeOverview } from "@/lib/types/models"
 
 const HOME_STALE_MS = 60_000
-const HOME_CACHE_VERSION = 2
+const HOME_CACHE_VERSION = 3
 
 const homeCache = new Map<
   string,
@@ -17,7 +17,12 @@ const homeCache = new Map<
 >()
 
 function isValidHomeOverview(data: HomeOverview | null | undefined): data is HomeOverview {
-  return Boolean(data && typeof data.jobCount === "number" && typeof data.runningJobs === "number")
+  return Boolean(
+    data &&
+      typeof data.jobCount === "number" &&
+      typeof data.runningJobs === "number" &&
+      Array.isArray(data.recentJobs),
+  )
 }
 
 export function useCachedHomeOverview() {

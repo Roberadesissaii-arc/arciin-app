@@ -11,7 +11,7 @@ import { dispatchAppForeground } from "@/lib/hooks/use-app-foreground"
 
 export function ServerReconnectBanner() {
   const pathname = usePathname()
-  const { connection, serverReachable, refresh } = useConnection()
+  const { connection, serverReachable, tryAutoReconnect } = useConnection()
   const [retrying, setRetrying] = useState(false)
 
   if (!connection || serverReachable !== false) return null
@@ -24,7 +24,7 @@ export function ServerReconnectBanner() {
   async function handleRetry() {
     setRetrying(true)
     try {
-      const ok = await refresh()
+      const ok = await tryAutoReconnect()
       if (ok) dispatchAppForeground()
     } finally {
       setRetrying(false)
@@ -53,8 +53,8 @@ export function ServerReconnectBanner() {
             </p>
             <p className="mt-1 text-[12px] leading-relaxed text-[#717171]">
               {publicUrl
-                ? "Your tunnel URL may have changed after a restart. On the same Wi‑Fi, Arciin will try to find the server automatically; otherwise update the address under Profile → Remote access."
-                : "Confirm Arciin is running and this phone is on the same Wi‑Fi as your server, or update the address under Profile → Remote access."}
+                ? "Your tunnel URL may have changed after a restart. Arciin checks every few seconds on Wi‑Fi and updates automatically — keep the app open or tap Try again."
+                : "Confirm Arciin is running and this phone is on the same Wi‑Fi as your server. Arciin will keep trying in the background."}
             </p>
             <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
               <Link

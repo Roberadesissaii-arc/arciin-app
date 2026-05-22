@@ -19,7 +19,9 @@ import {
   activityTypeLabel,
   Clock3,
 } from "@/lib/activity/icons"
+import { JobRow } from "@/components/jobs/job-row"
 import type { HomeOverview } from "@/lib/types/models"
+import type { MobileConnection } from "@/lib/types/api"
 import { formatBytes } from "@/lib/utils/format-bytes"
 import { formatRelativeDate } from "@/lib/utils/format-date"
 
@@ -89,9 +91,20 @@ function storagePercent(storage: NonNullable<HomeOverview["storage"]>) {
   return null
 }
 
+function homeGreeting(
+  connection: MobileConnection | null,
+  serverReachable: boolean | null,
+): string {
+  if (serverReachable === false) return "Hi there 👋"
+  const first = connection?.user.name?.split(/\s+/)[0]
+  if (first) return `Hi, ${first}`
+  return "Overview"
+}
+
 export function HomePage() {
-  const { connection } = useConnection()
+  const { connection, serverReachable } = useConnection()
   const { data, error, reload } = useCachedHomeOverview()
+  const greeting = homeGreeting(connection, serverReachable)
 
   const storage = data?.storage
   const storagePct = storage ? storagePercent(storage) : null
@@ -117,7 +130,7 @@ export function HomePage() {
   if (!data) {
     return (
       <div className="flex flex-col gap-5">
-        <HomePageSkeleton userName={connection?.user.name} />
+        <HomePageSkeleton greeting={greeting} />
       </div>
     )
   }
@@ -129,14 +142,14 @@ export function HomePage() {
           className="text-[22px] font-bold tracking-tight text-[#222222]"
           style={{ fontFamily: "var(--font-space-grotesk, sans-serif)" }}
         >
-          {connection?.user.name
-            ? `Hi, ${connection.user.name.split(" ")[0]}`
-            : "Overview"}
+          {greeting}
         </h2>
         <p className="mt-0.5 text-[13px] text-[#717171]">
-          {connection?.instanceName
-            ? `${connection.instanceName} at a glance`
-            : "Your Arciin instance at a glance."}
+          {serverReachable === false
+            ? "Your server is offline — reconnect to refresh this overview."
+            : connection?.instanceName
+              ? `${connection.instanceName} at a glance`
+              : "Your Arciin instance at a glance."}
         </p>
       </div>
 
@@ -148,9 +161,9 @@ export function HomePage() {
           value={String(data.jobCount)}
           sub={
             data.runningJobs > 0
-              ? `${data.runningJobs} running`
+              ? `${data.runningJobs} running now`
               : data.jobCount > 0
-                ? "all done"
+                ? "queue clear"
                 : "none yet"
           }
           icon={BriefcaseBusiness}
@@ -223,9 +236,43 @@ export function HomePage() {
       </div>
 
       <div>
-        <div className="mb-3 flex items-center gap-2">
-          <Activity className="size-4 text-[#a0a0a0]" />
-          <span className="text-[13px] font-semibold text-[#222222]">Recent activity</span>
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <BriefcaseBusiness className="size-4 text-[#a0a0a0]" />
+            <span className="text-[13px] font-semibold text-[#222222]">Recent jobs</span>
+          </div>
+          <Link href="/jobs" className="text-[12px] font-semibold text-[#ff4f12] active:opacity-70">
+            View all
+          </Link>
+        </div>
+        <div
+          className="overflow-hidden rounded-2xl bg-white"
+          style={{ border: "1px solid #e5e5e5" }}
+        >
+          {data.recentJobs.length ? (
+            data.recentJobs.map((job, i) => (
+              <div key={job.id}>
+                {i > 0 ? <div className="mx-4 h-px bg-[#f5f5f5]" /> : null}
+                <JobRow job={job} />
+              </div>
+            ))
+          ) : (
+            <p className="py-10 text-center text-[13px] text-[#a0a0a0]">
+              No background jobs yet
+            </p>
+          )}
+        </div>
+      </div>
+
+      <div>
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Activity className="size-4 text-[#a0a0a0]" />
+            <span className="text-[13px] font-semibold text-[#222222]">Recent activity</span>
+          </div>
+          <Link href="/activity" className="text-[12px] font-semibold text-[#ff4f12] active:opacity-70">
+            View timeline
+          </Link>
         </div>
         <div
           className="overflow-hidden rounded-2xl bg-white"

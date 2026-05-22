@@ -1,3 +1,5 @@
+import type { JobSummary } from "@/lib/api/jobs"
+
 export type ActivitySummary = {
   id: string
   type: string
@@ -219,4 +221,5 @@ export type HomeOverview = {
   recentEventsCount: number
   storage: StorageSettings | null
   recentActivity: ActivitySummary[]
+  recentJobs: JobSummary[]
 }

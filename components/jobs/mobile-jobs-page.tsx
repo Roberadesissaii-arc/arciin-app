@@ -1,89 +1,25 @@
 "use client"
 
+import Link from "next/link"
 import { useCallback, useEffect, useState } from "react"
-import { BriefcaseBusiness, ChevronLeft, ChevronRight, Loader2, RefreshCw, Search, X } from "lucide-react"
+import {
+  Activity,
+  BriefcaseBusiness,
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+  RefreshCw,
+  Search,
+  X,
+} from "lucide-react"
 
+import { JobRow } from "@/components/jobs/job-row"
 import { formatApiError } from "@/lib/api/errors"
 import { fetchJobs, type JobSummary } from "@/lib/api/jobs"
 import { PageFetchErrorAlert } from "@/components/shell/page-fetch-error-alert"
 import { useConnection } from "@/components/providers/connection-provider"
-import { formatRelativeDate } from "@/lib/utils/format-date"
 
-/* ── status helpers ───────────────────────────────────────────── */
-
-type StatusMeta = { label: string; bg: string; color: string }
-
-function statusMeta(status: string): StatusMeta {
-  switch (status) {
-    case "ACTIVE":
-      return { label: "Running",   bg: "#dcfce7", color: "#16a34a" }
-    case "QUEUED":
-      return { label: "Queued",    bg: "#fffbeb", color: "#d97706" }
-    case "COMPLETED":
-      return { label: "Completed", bg: "#f0fdf4", color: "#15803d" }
-    case "FAILED":
-      return { label: "Failed",    bg: "#fef2f2", color: "#b91c1c" }
-    default:
-      return { label: status,      bg: "#f7f7f7", color: "#717171" }
-  }
-}
-
-/* ── job row ──────────────────────────────────────────────────── */
-
-function JobRow({ job }: { job: JobSummary }) {
-  const s = statusMeta(job.status)
-  const isActive = job.status === "ACTIVE"
-
-  return (
-    <li className="flex items-start gap-3 px-4 py-4">
-      {/* icon */}
-      <div
-        className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl bg-[#f7f7f7]"
-        style={{ border: "1px solid #e8e8e8" }}
-      >
-        <BriefcaseBusiness className="size-[15px] text-[#717171]" />
-      </div>
-
-      {/* content */}
-      <div className="min-w-0 flex-1">
-        <div className="flex items-start justify-between gap-2">
-          <p className="text-[13px] font-semibold text-[#222222]">{job.type}</p>
-          <span className="shrink-0 text-[11px] text-[#a0a0a0]">
-            {formatRelativeDate(job.createdAt)}
-          </span>
-        </div>
-
-        {/* status badge */}
-        <span
-          className="mt-1 inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold"
-          style={{ backgroundColor: s.bg, color: s.color }}
-        >
-          {s.label}
-        </span>
-
-        {/* progress bar for active jobs */}
-        {isActive && job.progress > 0 ? (
-          <div className="mt-2">
-            <div className="mb-1 flex items-center justify-between">
-              <span className="text-[11px] text-[#a0a0a0]">Progress</span>
-              <span className="text-[11px] font-semibold tabular-nums" style={{ color: s.color }}>
-                {job.progress}%
-              </span>
-            </div>
-            <div className="h-1.5 overflow-hidden rounded-full bg-[#f0f0f0]">
-              <div
-                className="h-full rounded-full transition-all"
-                style={{ width: `${job.progress}%`, backgroundColor: s.color }}
-              />
-            </div>
-          </div>
-        ) : null}
-      </div>
-    </li>
-  )
-}
-
-/* ── main page ────────────────────────────────────────────────── */
+const PAGE_SIZE = 5
 
 export function MobileJobsPage() {
   const { connection, ready } = useConnection()
@@ -113,10 +49,13 @@ export function MobileJobsPage() {
     return () => controller.abort()
   }, [ready, connection, load])
 
-  const PAGE_SIZE = 5
   const active = jobs.filter((j) => j.status === "QUEUED" || j.status === "ACTIVE").length
   const filtered = query.trim()
-    ? jobs.filter((j) => j.type.toLowerCase().includes(query.toLowerCase()))
+    ? jobs.filter(
+        (j) =>
+          j.type.toLowerCase().includes(query.toLowerCase()) ||
+          j.status.toLowerCase().includes(query.toLowerCase()),
+      )
     : jobs
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
   const pageItems = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
@@ -130,29 +69,28 @@ export function MobileJobsPage() {
           className="overflow-hidden rounded-3xl"
           style={{ background: "linear-gradient(155deg, #ff6a30 0%, #c82d00 100%)" }}
         >
-          <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-5">
-            <div className="min-w-0 flex-1">
-              <p
-                className="text-[22px] font-black leading-none tracking-tight text-white"
-                style={{ fontFamily: "var(--font-space-grotesk, sans-serif)" }}
-              >
-                Active Jobs
-              </p>
-              <p className="mt-2 text-[12.5px] leading-relaxed" style={{ color: "rgba(255,255,255,0.72)" }}>
-                Track background tasks running on your Arciin instance — uploads, processing, and scheduled operations.
-              </p>
-              <p className="mt-2 text-[12px] font-semibold" style={{ color: "rgba(255,255,255,0.9)" }}>
-                {loading
-                  ? "Loading…"
-                  : active > 0
-                    ? `${active} running · ${jobs.length} total`
-                    : `${jobs.length} job${jobs.length === 1 ? "" : "s"} · all done`}
-              </p>
-            </div>
+          <div className="px-5 pt-5 pb-5">
+            <p
+              className="text-[22px] font-black leading-none tracking-tight text-white"
+              style={{ fontFamily: "var(--font-space-grotesk, sans-serif)" }}
+            >
+              Jobs
+            </p>
+            <p className="mt-2 text-[12.5px] leading-relaxed" style={{ color: "rgba(255,255,255,0.72)" }}>
+              Background work on your instance — media processing, storage scans, and maintenance tasks.
+            </p>
+            <p className="mt-2 text-[12px] font-semibold" style={{ color: "rgba(255,255,255,0.9)" }}>
+              {loading
+                ? "Loading…"
+                : active > 0
+                  ? `${active} running · ${jobs.length} total`
+                  : jobs.length > 0
+                    ? `${jobs.length} job${jobs.length === 1 ? "" : "s"} · queue clear`
+                    : "No background jobs yet"}
+            </p>
           </div>
         </div>
 
-        {/* search + refresh */}
         <div className="mt-2 flex items-center gap-2">
           <div
             className="flex flex-1 items-center gap-2 rounded-2xl bg-white px-3.5 py-2.5"
@@ -162,12 +100,22 @@ export function MobileJobsPage() {
             <input
               type="text"
               value={query}
-              onChange={(e) => { setQuery(e.target.value); setPage(0) }}
+              onChange={(e) => {
+                setQuery(e.target.value)
+                setPage(0)
+              }}
               placeholder="Search jobs…"
               className="min-w-0 flex-1 bg-transparent text-[13px] text-[#222222] outline-none placeholder:text-[#c0c0c0]"
             />
             {query ? (
-              <button type="button" onClick={() => { setQuery(""); setPage(0) }} className="shrink-0 text-[#c0c0c0] active:text-[#717171]">
+              <button
+                type="button"
+                onClick={() => {
+                  setQuery("")
+                  setPage(0)
+                }}
+                className="shrink-0 text-[#c0c0c0] active:text-[#717171]"
+              >
                 <X className="size-3.5" />
               </button>
             ) : null}
@@ -185,10 +133,8 @@ export function MobileJobsPage() {
         </div>
       </div>
 
-      {/* ── error ───────────────────────────────────────────────── */}
       <PageFetchErrorAlert error={error} onRetry={() => void load()} />
 
-      {/* ── list ────────────────────────────────────────────────── */}
       {loading ? (
         <div className="flex justify-center py-12">
           <Loader2 className="size-7 animate-spin text-[#c0c0c0]" />
@@ -207,7 +153,7 @@ export function MobileJobsPage() {
           <div className="text-center">
             <p className="text-[14px] font-semibold text-[#222222]">No jobs yet</p>
             <p className="mt-0.5 text-[12px] text-[#a0a0a0]">
-              Background tasks will appear here when triggered.
+              Uploads and settings changes will queue work here automatically.
             </p>
           </div>
         </div>
@@ -217,16 +163,19 @@ export function MobileJobsPage() {
             className="overflow-hidden rounded-2xl bg-white"
             style={{ border: "1px solid #e5e5e5" }}
           >
-            <ul className="divide-y divide-[#f0f0f0]">
-              {pageItems.map((job) => (
-                <JobRow key={job.id} job={job} />
-              ))}
-            </ul>
+            {pageItems.map((job, i) => (
+              <div key={job.id}>
+                {i > 0 ? <div className="mx-4 h-px bg-[#f5f5f5]" /> : null}
+                <JobRow job={job} />
+              </div>
+            ))}
           </div>
 
-          {/* ── pagination ──────────────────────────────────────── */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between gap-3 rounded-2xl bg-white px-4 py-3" style={{ border: "1px solid #e5e5e5" }}>
+          {totalPages > 1 ? (
+            <div
+              className="flex items-center justify-between gap-3 rounded-2xl bg-white px-4 py-3"
+              style={{ border: "1px solid #e5e5e5" }}
+            >
               <button
                 type="button"
                 disabled={page === 0}
@@ -267,9 +216,18 @@ export function MobileJobsPage() {
                 <ChevronRight className="size-4" />
               </button>
             </div>
-          )}
+          ) : null}
         </>
       )}
+
+      <Link
+        href="/activity"
+        className="flex items-center justify-center gap-2 rounded-2xl py-3 text-[13px] font-semibold text-[#717171] active:bg-[#f7f7f7]"
+        style={{ border: "1px solid #e5e5e5" }}
+      >
+        <Activity className="size-4" />
+        View activity timeline instead
+      </Link>
     </div>
   )
 }

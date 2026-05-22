@@ -1,5 +1,6 @@
 import { fetchApi } from "@/lib/api/client"
 import { ApiError } from "@/lib/api/errors"
+import { fetchJobs } from "@/lib/api/jobs"
 import type { MobileConnection } from "@/lib/types/api"
 import type { PasswordVaultList } from "@/lib/api/password-vault"
 import type {
@@ -40,7 +41,7 @@ export async function fetchHomeOverview(
 ): Promise<HomeOverview> {
   const opts = { connection, signal }
 
-  const [logsResult, activityResult, uploadsResult, storageResult, vaultResult] =
+  const [logsResult, activityResult, uploadsResult, storageResult, vaultResult, jobsResult] =
     await Promise.allSettled([
       fetchApi<LogsOverview>("/logs/overview", opts),
       fetchApi<ActivitySummary[]>("/activity", opts),
@@ -49,6 +50,7 @@ export async function fetchHomeOverview(
         (admin) => admin ?? fetchOptional<StorageSettings>("/instance/storage-summary", connection, signal),
       ),
       fetchOptional<PasswordVaultList>("/settings/password-vault", connection, signal),
+      fetchJobs(connection, signal),
     ])
 
   const firstError = [logsResult, activityResult, uploadsResult].find(
@@ -67,6 +69,7 @@ export async function fetchHomeOverview(
   const storage =
     storageResult.status === "fulfilled" ? storageResult.value : null
   const vault = vaultResult.status === "fulfilled" ? vaultResult.value : null
+  const jobs = jobsResult.status === "fulfilled" ? jobsResult.value : []
 
   const uploadInProgress = uploads.filter((u) => IN_PROGRESS_UPLOAD.has(u.status)).length
 
@@ -84,5 +87,6 @@ export async function fetchHomeOverview(
     recentEventsCount: activity.length,
     storage,
     recentActivity: activity.slice(0, 6),
+    recentJobs: jobs.slice(0, 4),
   }
 }

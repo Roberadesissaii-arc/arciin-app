@@ -8,6 +8,9 @@ export type JobSummary = {
   progress: number
   createdAt: string
   updatedAt?: string
+  completedAt?: string | null
+  error?: string | null
+  payload?: Record<string, unknown> | null
 }
 
 export async function fetchJobs(connection: MobileConnection, signal?: AbortSignal) {

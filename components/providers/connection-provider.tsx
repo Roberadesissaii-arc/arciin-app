@@ -19,6 +19,7 @@ import {
   pickClientApiBase,
 } from "@/lib/connection/merge-auth"
 import { isLoopbackApiBase } from "@/lib/connection/normalize-url"
+import { pickSocketOrigin } from "@/lib/connection/pick-socket-origin"
 import { reconnectToServer, type ReconnectResult } from "@/lib/connection/reconnect-server"
 import {
   applyServerEndpointsToConnection,
@@ -26,7 +27,7 @@ import {
 } from "@/lib/connection/resolve-reachable-server"
 import { serverProfileFromAuth } from "@/lib/connection/server-profile"
 import { notifyIfPublicWebUrlChanged } from "@/lib/connection/notify-url-change"
-import { getMobileSocketUrl } from "@/lib/realtime/socket-url"
+import { syncServerUrls, type SyncServerUrlsResult } from "@/lib/connection/sync-server-url"
 import { io, type Socket } from "socket.io-client"
 import type { SocketEventPayload } from "@/lib/types/events"
 import {
@@ -75,16 +76,42 @@ type ConnectionContextValue = {
 
 const ConnectionContext = createContext<ConnectionContextValue | null>(null)
 
+const URL_SYNC_INTERVAL_MS = 20_000
+
 export function ConnectionProvider({ children }: { children: ReactNode }) {
   const [connection, setConnection] = useState<MobileConnection | null>(null)
   const [ready, setReady] = useState(false)
   const [serverReachable, setServerReachable] = useState<boolean | null>(null)
   const [accountsTick, setAccountsTick] = useState(0)
+  /** Bumps when URLs change so Socket.IO reconnects to the new origin. */
+  const [socketGeneration, setSocketGeneration] = useState(0)
 
   const accounts = useMemo(() => {
     void accountsTick
     return listMobileAccounts()
   }, [accountsTick])
+
+  const applySyncResult = useCallback((result: SyncServerUrlsResult): boolean => {
+    if (!result.reachable) {
+      setServerReachable(false)
+      return false
+    }
+    saveServerProfile(result.server)
+    saveConnection(result.connection)
+    setConnection(result.connection)
+    setServerReachable(true)
+    if (result.urlChanged) setSocketGeneration((n) => n + 1)
+    return true
+  }, [])
+
+  const runServerSync = useCallback(async (signal?: AbortSignal): Promise<boolean> => {
+    const stored = loadConnection()
+    if (!stored || isConnectionExpired(stored) || isLoopbackApiBase(stored.apiBaseUrl)) {
+      return false
+    }
+    const result = await syncServerUrls(stored, loadServerProfile(), signal)
+    return applySyncResult(result)
+  }, [applySyncResult])
 
   const applyAuth = useCallback((auth: MobileAuthResult, requestApiBase?: string) => {
     const saved = loadServerProfile()?.apiBaseUrl
@@ -350,39 +377,19 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const tryAutoReconnect = useCallback(async (): Promise<boolean> => {
-    const stored = loadConnection()
-    if (!stored || isConnectionExpired(stored) || isLoopbackApiBase(stored.apiBaseUrl)) {
-      return false
-    }
-    const probeAbort = new AbortController()
-    const probeTimer = window.setTimeout(() => probeAbort.abort(), 10_000)
+    const controller = new AbortController()
+    const timer = window.setTimeout(() => controller.abort(), 12_000)
     try {
-      await fetchApi<{ status?: string }>("/health", {
-        connection: stored,
-        signal: probeAbort.signal,
-      })
-      setServerReachable(true)
-      await refresh()
-      return true
-    } catch {
-      const resolved = await resolveReachableServer(stored, loadServerProfile(), probeAbort.signal)
-      if (resolved) {
-        notifyIfPublicWebUrlChanged(stored.webUrl, resolved.server.webUrl)
-        saveServerProfile(resolved.server)
-        const next = applyServerEndpointsToConnection(stored, resolved.server)
-        saveConnection(next)
-        setConnection(next)
-        setServerReachable(true)
+      const ok = await runServerSync(controller.signal)
+      if (ok) {
         dispatchAppForeground()
         await refresh()
-        return true
       }
-      setServerReachable(false)
-      return false
+      return ok
     } finally {
-      window.clearTimeout(probeTimer)
+      window.clearTimeout(timer)
     }
-  }, [refresh])
+  }, [refresh, runServerSync])
 
   const probeServerOnForeground = useCallback(async () => {
     const ok = await tryAutoReconnect()
@@ -394,60 +401,101 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
   })
 
   useEffect(() => {
-    const active = connection ?? loadConnection()
-    if (!active || isConnectionExpired(active)) return
+    if (!ready || !connection) return
+    const id = window.setInterval(() => {
+      if (document.visibilityState === "hidden") return
+      void runServerSync().then((ok) => {
+        if (ok) dispatchAppForeground()
+      })
+    }, URL_SYNC_INTERVAL_MS)
+    return () => window.clearInterval(id)
+  }, [ready, connection?.sessionToken, runServerSync])
 
-    const socketUrl = getMobileSocketUrl(active)
-    const socket: Socket = io(socketUrl, {
-      path: "/socket.io",
-      transports: ["polling", "websocket"],
-      auth: { token: active.sessionToken },
-      extraHeaders: { Authorization: `Bearer ${active.sessionToken}` },
-    })
+  useEffect(() => {
+    let cancelled = false
+    let socket: Socket | null = null
+    let syncTimer: number | null = null
 
-    const onUrlsUpdated = (event: SocketEventPayload) => {
-      const data = event.data as
-        | {
-            apiBaseUrl?: string
-            socketUrl?: string
-            webUrl?: string
-            instanceName?: string
-            previousPublicUrl?: string | null
-          }
-        | undefined
-      if (!data?.apiBaseUrl) return
-      const current = loadConnection()
-      if (!current || isConnectionExpired(current)) return
+    const scheduleSync = () => {
+      if (syncTimer !== null) window.clearTimeout(syncTimer)
+      syncTimer = window.setTimeout(() => {
+        void runServerSync().then((ok) => {
+          if (ok) dispatchAppForeground()
+        })
+      }, 600)
+    }
 
-      const profile = loadServerProfile()
-      const nextWebUrl = data.webUrl ?? data.apiBaseUrl.replace(/\/api\/?$/, "")
-      const previousUrl =
-        typeof data.previousPublicUrl === "string" ? data.previousPublicUrl : null
+    void (async () => {
+      const active = connection ?? loadConnection()
+      if (!active || isConnectionExpired(active)) return
 
-      notifyIfPublicWebUrlChanged(previousUrl ?? current.webUrl, nextWebUrl)
+      const origin = await pickSocketOrigin(active, loadServerProfile())
+      if (cancelled) return
 
-      const server = {
-        apiBaseUrl: data.apiBaseUrl,
-        socketUrl: data.socketUrl ?? data.apiBaseUrl.replace(/\/api\/?$/, ""),
-        webUrl: nextWebUrl,
-        instanceName: data.instanceName ?? profile?.instanceName ?? current.instanceName,
-        instanceId: profile?.instanceId,
-        canonicalPublicUrl: nextWebUrl,
-        lanFallbackUrls: profile?.lanFallbackUrls,
+      socket = io(origin, {
+        path: "/socket.io",
+        transports: ["polling", "websocket"],
+        reconnection: true,
+        reconnectionAttempts: 8,
+        reconnectionDelay: 2000,
+        reconnectionDelayMax: 8000,
+        auth: { token: active.sessionToken },
+        extraHeaders: { Authorization: `Bearer ${active.sessionToken}` },
+      })
+
+      const onUrlsUpdated = (event: SocketEventPayload) => {
+        const data = event.data as
+          | {
+              apiBaseUrl?: string
+              socketUrl?: string
+              webUrl?: string
+              instanceName?: string
+              previousPublicUrl?: string | null
+            }
+          | undefined
+        if (!data?.apiBaseUrl) return
+        const current = loadConnection()
+        if (!current || isConnectionExpired(current)) return
+
+        const profile = loadServerProfile()
+        const nextWebUrl = data.webUrl ?? data.apiBaseUrl.replace(/\/api\/?$/, "")
+        const previousUrl =
+          typeof data.previousPublicUrl === "string" ? data.previousPublicUrl : null
+
+        notifyIfPublicWebUrlChanged(previousUrl ?? current.webUrl, nextWebUrl)
+
+        const server = {
+          apiBaseUrl: data.apiBaseUrl,
+          socketUrl: data.socketUrl ?? data.apiBaseUrl.replace(/\/api\/?$/, ""),
+          webUrl: nextWebUrl,
+          instanceName: data.instanceName ?? profile?.instanceName ?? current.instanceName,
+          instanceId: profile?.instanceId,
+          canonicalPublicUrl: nextWebUrl,
+          lanFallbackUrls: profile?.lanFallbackUrls,
+        }
+        saveServerProfile(server)
+        const next = applyServerEndpointsToConnection(current, server)
+        saveConnection(next)
+        setConnection(next)
+        setServerReachable(true)
+        setSocketGeneration((n) => n + 1)
       }
-      saveServerProfile(server)
-      const next = applyServerEndpointsToConnection(current, server)
-      saveConnection(next)
-      setConnection(next)
-      setServerReachable(true)
-    }
 
-    socket.on("instance.urls.updated", onUrlsUpdated)
+      socket.on("instance.urls.updated", onUrlsUpdated)
+      socket.on("disconnect", scheduleSync)
+      socket.io.on("reconnect_failed", scheduleSync)
+    })()
+
     return () => {
-      socket.off("instance.urls.updated", onUrlsUpdated)
-      socket.disconnect()
+      cancelled = true
+      if (syncTimer !== null) window.clearTimeout(syncTimer)
+      if (socket) {
+        socket.off("disconnect")
+        socket.io.off("reconnect_failed")
+        socket.disconnect()
+      }
     }
-  }, [connection?.sessionToken, connection?.apiBaseUrl])
+  }, [connection?.sessionToken, connection?.apiBaseUrl, connection?.webUrl, socketGeneration, runServerSync])
 
   const value = useMemo(
     () => ({
