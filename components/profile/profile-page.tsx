@@ -26,6 +26,7 @@ import { ChangePasswordPanel } from "@/components/profile/change-password-panel"
 import { ChangeServerInlinePanel } from "@/components/profile/change-server-inline-panel"
 import { DatabaseInlinePanel } from "@/components/profile/database-inline-panel"
 import { IntegrationsInlinePanel } from "@/components/profile/integrations-inline-panel"
+import { NotificationsInlinePanel } from "@/components/profile/notifications-inline-panel"
 import { PreferencesInlinePanel } from "@/components/profile/preferences-inline-panel"
 import { RemoteAccessInlinePanel } from "@/components/profile/remote-access-inline-panel"
 import { SessionsInlinePanel } from "@/components/profile/sessions-inline-panel"
@@ -335,14 +336,16 @@ export function ProfilePage() {
             label="Notifications"
             sub={profileSectionSubtitle(
               serverReachable,
-              "Activity from your server",
+              "Activity feed & alert preferences",
               "Available when connected",
             )}
-            open={false}
-            onToggle={() => {}}
+            open={sectionOpen("notifications")}
+            onToggle={() => toggleSection("notifications")}
             footerHref="/notifications"
-            footerLabel="Open activity notifications"
-          />
+            footerLabel="Open notifications feed"
+          >
+            <NotificationsInlinePanel enabled={sectionOpen("notifications")} />
+          </SettingsGroupItem>
         </SettingsGroup>
       </div>
 
