@@ -44,3 +44,41 @@ export function renameFolder(connection: MobileConnection, folderId: string, nam
     body: { name },
   })
 }
+
+export type FolderCredentialInput = { password?: string; pin?: string }
+
+export function lockFolder(
+  connection: MobileConnection,
+  folderId: string,
+  input: FolderCredentialInput,
+) {
+  return fetchApi<FolderSummary>(`/folders/${folderId}/lock`, {
+    connection,
+    method: "POST",
+    body: input,
+  })
+}
+
+export function unlockFolder(
+  connection: MobileConnection,
+  folderId: string,
+  input: FolderCredentialInput,
+) {
+  return fetchApi<FolderSummary>(`/folders/${folderId}/unlock`, {
+    connection,
+    method: "POST",
+    body: input,
+  })
+}
+
+export function removeFolderLock(
+  connection: MobileConnection,
+  folderId: string,
+  input: FolderCredentialInput,
+) {
+  return fetchApi<FolderSummary>(`/folders/${folderId}/remove-lock`, {
+    connection,
+    method: "POST",
+    body: input,
+  })
+}

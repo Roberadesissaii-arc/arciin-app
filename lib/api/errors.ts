@@ -47,13 +47,26 @@ export function networkErrorMessage(serverAddress?: string | null): string {
   return `Could not reach your Arciin server. Confirm Arciin is running and this phone is on the same Wi‑Fi as the server. ${retry}`
 }
 
+/** Cloudflare / reverse-proxy / tunnel errors — server may be up on a different URL. */
+export function isTransientUpstreamStatus(status: number): boolean {
+  return (
+    status === 0 ||
+    status === 502 ||
+    status === 503 ||
+    status === 504 ||
+    status === 530 ||
+    (status >= 520 && status <= 524)
+  )
+}
+
 export function isNetworkError(err: unknown): boolean {
   if (err instanceof ApiError) {
     return (
       err.code === "NETWORK_ERROR" ||
       err.code === "LAN_BLOCKED" ||
       err.code === "UPSTREAM_UNREACHABLE" ||
-      err.status === 0
+      err.status === 0 ||
+      isTransientUpstreamStatus(err.status)
     )
   }
   if (err instanceof Error) {
@@ -74,6 +87,9 @@ export function formatApiError(err: unknown, serverAddress?: string | null): str
       return networkErrorMessage(serverAddress)
     }
     if (err.code === "UPSTREAM_UNREACHABLE") {
+      return networkErrorMessage(serverAddress)
+    }
+    if (isTransientUpstreamStatus(err.status)) {
       return networkErrorMessage(serverAddress)
     }
     if (err.code === "FORBIDDEN" || err.status === 403) {
@@ -100,8 +116,8 @@ export async function parseApiError(response: Response): Promise<ApiError> {
   const code = body?.error?.code ?? "REQUEST_FAILED"
   const message =
     body?.error?.message ??
-    (response.status === 0
-      ? "Could not reach the server. Check the address and try again."
+    (response.status === 0 || isTransientUpstreamStatus(response.status)
+      ? networkErrorMessage()
       : `Request failed (${response.status}).`)
   return new ApiError(response.status, code, message, body?.error?.details)
 }

@@ -85,7 +85,9 @@ export function isConnectionUnreachableMessage(error: string | null | undefined)
     /check the (public https )?address/i.test(error) ||
     /confirm arciin is running/i.test(error) ||
     /tunnel url may have changed/i.test(error) ||
-    /same wi[-‑]fi/i.test(error)
+    /same wi[-‑]fi/i.test(error) ||
+    /request failed \((502|503|504|520|521|522|523|524|530)\)/i.test(error) ||
+    /upstream unreachable/i.test(error)
   )
 }
 

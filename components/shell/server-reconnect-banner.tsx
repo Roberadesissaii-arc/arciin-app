@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Loader2, Server } from "lucide-react"
 
 import { useConnection } from "@/components/providers/connection-provider"
@@ -13,6 +13,12 @@ export function ServerReconnectBanner() {
   const pathname = usePathname()
   const { connection, serverReachable, tryAutoReconnect } = useConnection()
   const [retrying, setRetrying] = useState(false)
+
+  useEffect(() => {
+    if (serverReachable !== false) return
+    setRetrying(true)
+    void tryAutoReconnect().finally(() => setRetrying(false))
+  }, [serverReachable, tryAutoReconnect])
 
   if (!connection || serverReachable !== false) return null
   if (pathname.startsWith("/sign-in")) return null
@@ -49,12 +55,14 @@ export function ServerReconnectBanner() {
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-[14px] font-semibold tracking-tight text-[#222222]">
-              Your server is disconnected
+              {retrying ? "Reconnecting to your server…" : "Your server is disconnected"}
             </p>
             <p className="mt-1 text-[12px] leading-relaxed text-[#717171]">
-              {publicUrl
-                ? "Your tunnel URL may have changed after a restart. Arciin checks every few seconds on Wi‑Fi and updates automatically — keep the app open or tap Try again."
-                : "Confirm Arciin is running and this phone is on the same Wi‑Fi as your server. Arciin will keep trying in the background."}
+              {retrying
+                ? "Arciin is checking your saved address and LAN fallbacks. Cached screens may still show until the connection is back."
+                : publicUrl
+                  ? "Your tunnel URL may have changed after a restart. Arciin retries automatically every few seconds on Wi‑Fi — keep the app open or tap Try again."
+                  : "Confirm Arciin is running and this phone is on the same Wi‑Fi as your server. Arciin will keep trying in the background."}
             </p>
             <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
               <Link

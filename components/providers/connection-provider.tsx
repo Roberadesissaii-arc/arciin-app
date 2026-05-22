@@ -13,7 +13,12 @@ import {
 import { getAuthMe } from "@/lib/api/auth"
 import { fetchApi } from "@/lib/api/client"
 import { ApiError, isNetworkError } from "@/lib/api/errors"
-import { dispatchAppForeground, useAppForeground } from "@/lib/hooks/use-app-foreground"
+import {
+  ARCIIN_RECONNECT_EVENT,
+  dispatchAppForeground,
+  useAppForeground,
+} from "@/lib/hooks/use-app-foreground"
+import { isTransientUpstreamStatus } from "@/lib/api/errors"
 import {
   authWithClientApiBase,
   pickClientApiBase,
@@ -77,6 +82,7 @@ type ConnectionContextValue = {
 const ConnectionContext = createContext<ConnectionContextValue | null>(null)
 
 const URL_SYNC_INTERVAL_MS = 20_000
+const OFFLINE_RECONNECT_INTERVAL_MS = 6_000
 
 export function ConnectionProvider({ children }: { children: ReactNode }) {
   const [connection, setConnection] = useState<MobileConnection | null>(null)
@@ -127,7 +133,9 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
     saveServerProfile(serverProfileFromAuth(merged))
     saveConnection(next)
     setConnection(next)
+    setServerReachable(true)
     setAccountsTick((n) => n + 1)
+    dispatchAppForeground()
   }, [])
 
   const refresh = useCallback(async () => {
@@ -158,7 +166,10 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
         setServerReachable(null)
         return false
       }
-      if (isNetworkError(err)) {
+      if (
+        isNetworkError(err) ||
+        (err instanceof ApiError && isTransientUpstreamStatus(err.status))
+      ) {
         const resolved = await resolveReachableServer(stored, loadServerProfile())
         if (resolved) {
           notifyIfPublicWebUrlChanged(stored.webUrl, resolved.server.webUrl)
@@ -250,7 +261,10 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
             clearSession()
             setConnection(null)
             setServerReachable(null)
-          } else if (isNetworkError(err)) {
+          } else if (
+            isNetworkError(err) ||
+            (err instanceof ApiError && isTransientUpstreamStatus(err.status))
+          ) {
             const resolved = await resolveReachableServer(stored, loadServerProfile())
             if (!cancelled && resolved) {
               notifyIfPublicWebUrlChanged(stored.webUrl, resolved.server.webUrl)
@@ -294,11 +308,13 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
   const signOut = useCallback(() => {
     clearSession()
     setConnection(null)
+    setServerReachable(null)
   }, [])
 
   const forgetServer = useCallback(() => {
     clearSession()
     setConnection(null)
+    setServerReachable(null)
     setAccountsTick((n) => n + 1)
   }, [])
 
@@ -363,7 +379,30 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
         setAccountsTick((n) => n + 1)
         return false
       }
-      if (isNetworkError(err)) {
+      if (
+        isNetworkError(err) ||
+        (err instanceof ApiError && isTransientUpstreamStatus(err.status))
+      ) {
+        const resolved = await resolveReachableServer(stored, loadServerProfile())
+        if (resolved) {
+          notifyIfPublicWebUrlChanged(stored.webUrl, resolved.server.webUrl)
+          saveServerProfile(resolved.server)
+          const next = applyServerEndpointsToConnection(stored, resolved.server)
+          saveConnection(next)
+          setConnection(next)
+          setServerReachable(true)
+          setAccountsTick((n) => n + 1)
+          dispatchAppForeground()
+          try {
+            const me = await getAuthMe(next)
+            const verified = { ...next, user: me.user }
+            saveConnection(verified)
+            setConnection(verified)
+          } catch {
+            /* connected on new URL */
+          }
+          return true
+        }
         setConnection(stored)
         setServerReachable(false)
         setAccountsTick((n) => n + 1)
@@ -380,12 +419,17 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
     const controller = new AbortController()
     const timer = window.setTimeout(() => controller.abort(), 12_000)
     try {
-      const ok = await runServerSync(controller.signal)
-      if (ok) {
+      if (await refresh()) {
+        dispatchAppForeground()
+        await runServerSync(controller.signal)
+        return true
+      }
+      const synced = await runServerSync(controller.signal)
+      if (synced) {
         dispatchAppForeground()
         await refresh()
       }
-      return ok
+      return synced
     } finally {
       window.clearTimeout(timer)
     }
@@ -401,15 +445,32 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
   })
 
   useEffect(() => {
+    const onReconnectNeeded = () => {
+      setServerReachable(false)
+      void tryAutoReconnect()
+    }
+    window.addEventListener(ARCIIN_RECONNECT_EVENT, onReconnectNeeded)
+    return () => window.removeEventListener(ARCIIN_RECONNECT_EVENT, onReconnectNeeded)
+  }, [tryAutoReconnect])
+
+  useEffect(() => {
+    if (!ready || !connection || serverReachable !== false) return
+    void tryAutoReconnect()
+    const id = window.setInterval(() => {
+      if (document.visibilityState === "hidden") return
+      void tryAutoReconnect()
+    }, OFFLINE_RECONNECT_INTERVAL_MS)
+    return () => window.clearInterval(id)
+  }, [ready, connection?.sessionToken, serverReachable, tryAutoReconnect])
+
+  useEffect(() => {
     if (!ready || !connection) return
     const id = window.setInterval(() => {
       if (document.visibilityState === "hidden") return
-      void runServerSync().then((ok) => {
-        if (ok) dispatchAppForeground()
-      })
+      void tryAutoReconnect()
     }, URL_SYNC_INTERVAL_MS)
     return () => window.clearInterval(id)
-  }, [ready, connection?.sessionToken, runServerSync])
+  }, [ready, connection?.sessionToken, tryAutoReconnect])
 
   useEffect(() => {
     let cancelled = false

@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { Loader2, Pencil, Trash2, X } from "lucide-react"
+import { FolderLock, Loader2, Pencil, Trash2, X } from "lucide-react"
 import { createPortal } from "react-dom"
 
 import type { FolderSummary } from "@/lib/types/folders"
@@ -175,17 +175,34 @@ export function RenameFolderSheet({
 
 /* ── list row tile (used in the "top 2" preview) ─────────────── */
 
+function folderNeedsUnlock(folder: FolderSummary) {
+  return Boolean(folder.isLocked && !folder.accessGranted)
+}
+
 export function FolderTile({
   folder,
   onOpen,
   onDelete,
   onRename,
+  onRequestUnlock,
+  onLockFolder,
+  onRemoveLock,
 }: {
   folder: FolderSummary
   onOpen: () => void
   onDelete: () => Promise<void>
   onRename: (newName: string) => Promise<void>
+  onRequestUnlock?: () => void
+  onLockFolder?: () => void
+  onRemoveLock?: () => void
 }) {
+  const tryOpen = () => {
+    if (folderNeedsUnlock(folder) && onRequestUnlock) {
+      onRequestUnlock()
+      return
+    }
+    onOpen()
+  }
   const [sheet, setSheet] = useState<"none" | "rename" | "delete">("none")
   const [mounted, setMounted] = useState(false)
 
@@ -195,17 +212,50 @@ export function FolderTile({
     <>
       <div className="flex items-center gap-3 px-4 py-3.5">
         {/* folder icon */}
-        <button type="button" onClick={onOpen} className="shrink-0 active:opacity-75" aria-label={`Open ${folder.name}`}>
+        <button
+          type="button"
+          onClick={tryOpen}
+          className="relative shrink-0 active:opacity-75"
+          aria-label={`Open ${folder.name}`}
+        >
           <FolderSvg width={42} height={36} />
+          {folder.isLocked ? (
+            <span className="absolute -bottom-0.5 -right-0.5 flex size-5 items-center justify-center rounded-md bg-white shadow-sm ring-1 ring-[#e5e5e5]">
+              <FolderLock className="size-3 text-[#ff4f12]" aria-hidden />
+            </span>
+          ) : null}
         </button>
 
         {/* name + count */}
-        <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-left">
+        <button
+          type="button"
+          onClick={tryOpen}
+          className="min-w-0 flex-1 text-left"
+        >
           <p className="truncate text-[14px] font-semibold text-[#222222]">{folder.name}</p>
           <p className="text-[11px] text-[#a0a0a0]">{folder.assetCount} item{folder.assetCount !== 1 ? "s" : ""}</p>
         </button>
 
         <div className="flex shrink-0 items-center gap-1">
+          {folder.isLocked && onRemoveLock ? (
+            <button
+              type="button"
+              onClick={onRemoveLock}
+              className="flex size-8 items-center justify-center rounded-xl text-[#ff4f12] active:bg-[#fff7f4]"
+              aria-label="Remove lock"
+            >
+              <FolderLock className="size-3.5" />
+            </button>
+          ) : onLockFolder ? (
+            <button
+              type="button"
+              onClick={onLockFolder}
+              className="flex size-8 items-center justify-center rounded-xl text-[#a0a0a0] active:bg-[#f0f0f0]"
+              aria-label="Lock folder"
+            >
+              <FolderLock className="size-3.5" />
+            </button>
+          ) : null}
           <button type="button" onClick={() => setSheet("rename")}
             className="flex size-8 items-center justify-center rounded-xl text-[#a0a0a0] active:bg-[#f0f0f0] active:text-[#222222]" aria-label="Rename">
             <Pencil className="size-3.5" />
@@ -234,12 +284,25 @@ export function FolderGridTile({
   onOpen,
   onDelete,
   onRename,
+  onRequestUnlock,
+  onLockFolder,
+  onRemoveLock,
 }: {
   folder: FolderSummary
   onOpen: () => void
   onDelete: () => Promise<void>
   onRename: (newName: string) => Promise<void>
+  onRequestUnlock?: () => void
+  onLockFolder?: () => void
+  onRemoveLock?: () => void
 }) {
+  const tryOpen = () => {
+    if (folderNeedsUnlock(folder) && onRequestUnlock) {
+      onRequestUnlock()
+      return
+    }
+    onOpen()
+  }
   const [sheet, setSheet] = useState<"none" | "rename" | "delete">("none")
   const [mounted, setMounted] = useState(false)
 
@@ -251,7 +314,7 @@ export function FolderGridTile({
         {/* folder graphic — tappable */}
         <button
           type="button"
-          onClick={onOpen}
+          onClick={tryOpen}
           className="group relative w-full active:scale-[0.97] active:opacity-90"
           style={{ aspectRatio: "1.1" }}
           aria-label={`Open ${folder.name}`}
@@ -297,6 +360,11 @@ export function FolderGridTile({
             <span className="absolute bottom-2.5 right-3 text-[13px] font-bold tabular-nums text-[#ff4f12]">
               {folder.assetCount}
             </span>
+            {folder.isLocked ? (
+              <span className="absolute bottom-2.5 left-3 flex size-7 items-center justify-center rounded-lg border border-[#e5e5e5] bg-white/95 text-[#ff4f12] shadow-sm">
+                <FolderLock className="size-3.5" aria-hidden />
+              </span>
+            ) : null}
           </div>
         </button>
 
@@ -306,6 +374,25 @@ export function FolderGridTile({
             {folder.assetCount} item{folder.assetCount !== 1 ? "s" : ""}
           </p>
           <div className="flex items-center gap-0.5">
+            {folder.isLocked && onRemoveLock ? (
+              <button
+                type="button"
+                onClick={onRemoveLock}
+                className="flex size-7 items-center justify-center rounded-lg text-[#ff4f12] active:bg-[#fff7f4]"
+                aria-label="Remove lock"
+              >
+                <FolderLock className="size-3" />
+              </button>
+            ) : onLockFolder ? (
+              <button
+                type="button"
+                onClick={onLockFolder}
+                className="flex size-7 items-center justify-center rounded-lg text-[#b0b0b0] active:bg-[#f0f0f0]"
+                aria-label="Lock folder"
+              >
+                <FolderLock className="size-3" />
+              </button>
+            ) : null}
             <button type="button" onClick={() => setSheet("rename")}
               className="flex size-7 items-center justify-center rounded-lg text-[#b0b0b0] active:bg-[#f0f0f0] active:text-[#222222]" aria-label="Rename">
               <Pencil className="size-3" />

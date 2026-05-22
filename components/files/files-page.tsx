@@ -13,7 +13,17 @@ import { useConnection } from "@/components/providers/connection-provider"
 import { getAssets } from "@/lib/api/assets"
 import { formatApiError } from "@/lib/api/errors"
 import { suppressFetchErrorWhenOffline } from "@/lib/connection/offline-ui"
-import { deleteFolder, listFolders, renameFolder } from "@/lib/api/folders"
+import {
+  deleteFolder,
+  listFolders,
+  lockFolder,
+  removeFolderLock,
+  renameFolder,
+  unlockFolder,
+  type FolderCredentialInput,
+} from "@/lib/api/folders"
+import { getPasswordVault } from "@/lib/api/password-vault"
+import { MobileFolderCredentialSheet } from "@/components/files/mobile-folder-credential-sheet"
 import { listLibraries } from "@/lib/api/libraries"
 import { uploadFile } from "@/lib/api/uploads"
 import { getUserPreferences } from "@/lib/api/user-preferences"
@@ -109,8 +119,26 @@ export function FilesPage() {
   const [allFoldersOpen, setAllFoldersOpen] = useState(false)
   const [hasCache, setHasCache] = useState(false)
   const [documentThumbnailsEnabled, setDocumentThumbnailsEnabled] = useState(false)
+  const [folderCredential, setFolderCredential] = useState<{
+    folderId: string
+    mode: "open" | "lock" | "remove-lock"
+  } | null>(null)
+  const [pinConfigured, setPinConfigured] = useState(false)
 
   const libraryScoped = filter !== "all"
+
+  useEffect(() => {
+    if (!connection) return
+    let cancelled = false
+    void getPasswordVault(connection)
+      .then((vault) => {
+        if (!cancelled) setPinConfigured(vault.pinConfigured)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [connection])
 
   useEffect(() => {
     if (!connection) return
@@ -243,11 +271,57 @@ export function FilesPage() {
 
   const openFolder = useCallback(
     (id: string) => {
+      const target = folders.find((f) => f.id === id)
+      if (target?.isLocked && !target.accessGranted) {
+        setFolderCredential({ folderId: id, mode: "open" })
+        return
+      }
       setFolderId(id)
       void load(undefined, false, { folderId: id })
     },
-    [load],
+    [folders, load],
   )
+
+  const applyFolderCredential = useCallback(
+    async (input: FolderCredentialInput) => {
+      if (!connection || !folderCredential) return
+      const { folderId, mode } = folderCredential
+      if (mode === "lock") {
+        const updated = await lockFolder(connection, folderId, input)
+        setFolders((prev) => prev.map((f) => (f.id === folderId ? { ...f, ...updated } : f)))
+        return
+      }
+      if (mode === "remove-lock") {
+        const updated = await removeFolderLock(connection, folderId, input)
+        setFolders((prev) => prev.map((f) => (f.id === folderId ? { ...f, ...updated } : f)))
+        return
+      }
+      const updated = await unlockFolder(connection, folderId, input)
+      setFolders((prev) => prev.map((f) => (f.id === folderId ? { ...f, ...updated } : f)))
+      setFolderId(folderId)
+      void load(undefined, false, { folderId })
+    },
+    [connection, folderCredential, load],
+  )
+
+  const folderCredentialCopy =
+    folderCredential?.mode === "lock"
+      ? {
+          title: "Lock folder",
+          description: "Enter your password or vault PIN. The lock syncs to all devices.",
+          submit: "Lock folder",
+        }
+      : folderCredential?.mode === "remove-lock"
+        ? {
+            title: "Remove lock",
+            description: "Enter your credentials to unlock this folder for everyone.",
+            submit: "Remove lock",
+          }
+        : {
+            title: "Unlock folder",
+            description: "Enter your credentials to open this folder for 15 minutes.",
+            submit: "Unlock",
+          }
 
   const handleDeleteFolder = useCallback(async (id: string) => {
     if (!connection) return
@@ -456,6 +530,17 @@ export function FilesPage() {
         onCreated={() => void load(undefined, true)}
       />
 
+      {folderCredential ? (
+        <MobileFolderCredentialSheet
+          pinConfigured={pinConfigured}
+          title={folderCredentialCopy.title}
+          description={folderCredentialCopy.description}
+          submitLabel={folderCredentialCopy.submit}
+          onClose={() => setFolderCredential(null)}
+          onSubmit={applyFolderCredential}
+        />
+      ) : null}
+
       {/* ── all folders inline view — swaps out main content ─── */}
       {allFoldersOpen ? (
         <AllFoldersList
@@ -466,6 +551,9 @@ export function FilesPage() {
           onDelete={(id) => handleDeleteFolder(id)}
           onRename={(id, name) => handleRenameFolder(id, name)}
           onRefresh={() => void load(undefined, true)}
+          onRequestUnlock={(id) => setFolderCredential({ folderId: id, mode: "open" })}
+          onLockFolder={(id) => setFolderCredential({ folderId: id, mode: "lock" })}
+          onRemoveLock={(id) => setFolderCredential({ folderId: id, mode: "remove-lock" })}
         />
       ) : (
         <>
@@ -538,6 +626,15 @@ export function FilesPage() {
                               onOpen={() => openFolder(folder.id)}
                               onDelete={() => handleDeleteFolder(folder.id)}
                               onRename={(name) => handleRenameFolder(folder.id, name)}
+                              onRequestUnlock={() =>
+                                setFolderCredential({ folderId: folder.id, mode: "open" })
+                              }
+                              onLockFolder={() =>
+                                setFolderCredential({ folderId: folder.id, mode: "lock" })
+                              }
+                              onRemoveLock={() =>
+                                setFolderCredential({ folderId: folder.id, mode: "remove-lock" })
+                              }
                             />
                           </div>
                         ))}
@@ -634,6 +731,9 @@ function AllFoldersList({
   onDelete,
   onRename,
   onRefresh,
+  onRequestUnlock,
+  onLockFolder,
+  onRemoveLock,
 }: {
   folders: FolderSummary[]
   refreshing: boolean
@@ -642,6 +742,9 @@ function AllFoldersList({
   onDelete: (id: string) => Promise<void>
   onRename: (id: string, name: string) => Promise<void>
   onRefresh: () => void
+  onRequestUnlock: (id: string) => void
+  onLockFolder: (id: string) => void
+  onRemoveLock: (id: string) => void
 }) {
   const [query, setQuery] = useState("")
 
@@ -735,6 +838,9 @@ function AllFoldersList({
                 onOpen={() => onOpen(folder.id)}
                 onDelete={() => onDelete(folder.id)}
                 onRename={(name) => onRename(folder.id, name)}
+                onRequestUnlock={() => onRequestUnlock(folder.id)}
+                onLockFolder={() => onLockFolder(folder.id)}
+                onRemoveLock={() => onRemoveLock(folder.id)}
               />
             </div>
           ))}

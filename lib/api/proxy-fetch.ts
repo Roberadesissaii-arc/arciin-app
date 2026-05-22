@@ -4,7 +4,8 @@ import {
   needsArciinSameOriginProxy,
 } from "@/lib/api/arciin-proxy"
 import { lanBlockedFromHostedApp } from "@/lib/api/hosted-app"
-import { ApiError, parseApiError } from "@/lib/api/errors"
+import { ApiError, isNetworkError, isTransientUpstreamStatus, parseApiError } from "@/lib/api/errors"
+import { dispatchReconnectNeeded } from "@/lib/hooks/use-app-foreground"
 import { normalizeApiBase } from "@/lib/connection/normalize-url"
 import type { MobileConnection } from "@/lib/types/api"
 
@@ -49,7 +50,11 @@ export async function fetchArciinProxiedWithBase<T>(
   })
 
   if (!res.ok) {
-    throw await parseApiError(res)
+    const apiErr = await parseApiError(res)
+    if (isTransientUpstreamStatus(apiErr.status) || isNetworkError(apiErr)) {
+      dispatchReconnectNeeded()
+    }
+    throw apiErr
   }
 
   if (res.status === 204) {

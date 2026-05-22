@@ -1,7 +1,14 @@
 import { fetchArciinProxiedWithBase } from "@/lib/api/proxy-fetch"
 import { lanBlockedFromHostedApp } from "@/lib/api/hosted-app"
 import { needsArciinSameOriginProxy } from "@/lib/api/arciin-proxy"
-import { ApiError, networkErrorMessage, parseApiError } from "@/lib/api/errors"
+import {
+  ApiError,
+  isNetworkError,
+  isTransientUpstreamStatus,
+  networkErrorMessage,
+  parseApiError,
+} from "@/lib/api/errors"
+import { dispatchReconnectNeeded } from "@/lib/hooks/use-app-foreground"
 import {
   deriveMobileServerUrlsFromApiBase,
   normalizeApiBase,
@@ -150,13 +157,21 @@ export async function fetchApi<T>(path: string, options: FetchOptions = {}): Pro
       throw new ApiError(0, "LAN_BLOCKED", networkErrorMessage(serverHint))
     }
     if (lastFailed) {
-      throw await parseApiError(lastFailed)
+      const apiErr = await parseApiError(lastFailed)
+      if (isTransientUpstreamStatus(apiErr.status) || isNetworkError(apiErr)) {
+        dispatchReconnectNeeded()
+      }
+      throw apiErr
     }
     throw new ApiError(0, "NETWORK_ERROR", networkErrorMessage(serverHint))
   }
 
   if (!response.ok) {
-    throw await parseApiError(response)
+    const apiErr = await parseApiError(response)
+    if (isTransientUpstreamStatus(apiErr.status) || isNetworkError(apiErr)) {
+      dispatchReconnectNeeded()
+    }
+    throw apiErr
   }
 
   if (response.status === 204) {

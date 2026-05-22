@@ -15,6 +15,9 @@ export function classifyFile(file: File): MediaType {
     return "IMAGE"
   }
   if (["mov", "mp4", "m4v", "webm", "mkv", "avi"].includes(ext)) return "VIDEO"
+  if (["mp3", "wav", "flac", "aac", "m4a", "ogg", "opus", "wma"].includes(ext)) {
+    return "AUDIO"
+  }
 
   if (["pdf", "doc", "docx", "txt", "rtf", "odt", "xls", "xlsx", "ppt", "pptx"].includes(ext)) {
     return "DOCUMENT"

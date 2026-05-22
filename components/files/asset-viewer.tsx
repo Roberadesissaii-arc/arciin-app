@@ -25,6 +25,12 @@ import {
 } from "@/lib/api/assets"
 import { formatApiError } from "@/lib/api/errors"
 import { isTextPreviewableAsset } from "@/lib/files/is-text-previewable"
+import {
+  INLINE_STREAM_MAX_BYTES,
+  isAudioAsset,
+  isInlineStreamableAsset,
+  isVideoAsset,
+} from "@/lib/files/streamable-asset"
 import { loadThumbnail } from "@/lib/files/thumbnail-cache"
 import type { MobileConnection } from "@/lib/types/api"
 import type { AssetSummary, LibrarySummary } from "@/lib/types/assets"
@@ -91,6 +97,7 @@ export function AssetViewer({
     null,
   )
   const [textPreviewError, setTextPreviewError] = useState<string | null>(null)
+  const [mediaPreviewError, setMediaPreviewError] = useState<string | null>(null)
   const [pdfPage, setPdfPage] = useState(1)
   const [pdfTotal, setPdfTotal] = useState(0)
   const pointerStart = useRef<{ x: number; y: number } | null>(null)
@@ -100,7 +107,9 @@ export function AssetViewer({
   const hasNext = currentIndex < assets.length - 1
 
   const isPdf = isPdfAsset(asset)
-  const streamsInline = asset.mediaType === "VIDEO" || asset.mediaType === "AUDIO"
+  const streamsInline = isInlineStreamableAsset(asset)
+  const isAudio = isAudioAsset(asset)
+  const isVideo = isVideoAsset(asset)
   const loadsTextPreview = isTextPreviewableAsset(asset)
   const loadsMediaBlob = asset.mediaType === "IMAGE"
   const [previewLoading, setPreviewLoading] = useState(
@@ -130,6 +139,7 @@ export function AssetViewer({
     setPreviewSrc(null)
     setTextPreview(null)
     setTextPreviewError(null)
+    setMediaPreviewError(null)
     setPdfPage(1)
     setPdfTotal(0)
     setPreviewLoading(isPdf ? false : loadsMediaBlob || loadsTextPreview)
@@ -144,6 +154,42 @@ export function AssetViewer({
     }
 
     if (streamsInline) {
+      let cancelled = false
+      let objectUrl: string | null = null
+      setPreviewLoading(true)
+      setPreviewSrc(null)
+      setMediaPreviewError(null)
+
+      const useBlob =
+        asset.sizeBytes <= 0 || asset.sizeBytes <= INLINE_STREAM_MAX_BYTES
+
+      if (useBlob) {
+        const url = assetDownloadFetchUrl(connection, asset.id, true)
+        void fetch(url, assetDownloadRequestInit(connection))
+          .then((res) => {
+            if (!res.ok) throw new Error("stream")
+            return res.blob()
+          })
+          .then((blob) => {
+            if (cancelled) return
+            objectUrl = URL.createObjectURL(blob)
+            setPreviewSrc(objectUrl)
+          })
+          .catch(() => {
+            if (!cancelled) {
+              setMediaPreviewError("Couldn't play this file. Try Download, or check your connection.")
+            }
+          })
+          .finally(() => {
+            if (!cancelled) setPreviewLoading(false)
+          })
+
+        return () => {
+          cancelled = true
+          if (objectUrl) URL.revokeObjectURL(objectUrl)
+        }
+      }
+
       setPreviewSrc(assetStreamUrl(connection, asset.id))
       setPreviewLoading(false)
       return
@@ -376,10 +422,29 @@ export function AssetViewer({
             </div>
           ) : textPreviewError ? (
             <p className="px-4 text-center text-[13px] text-[#a1a1aa]">{textPreviewError}</p>
-          ) : asset.mediaType === "VIDEO" && previewSrc ? (
-            <video src={previewSrc} controls playsInline className="max-h-full max-w-full object-contain" />
-          ) : asset.mediaType === "AUDIO" && previewSrc ? (
-            <audio src={previewSrc} controls playsInline preload="metadata" className="w-full max-w-md" />
+          ) : mediaPreviewError ? (
+            <p className="px-4 text-center text-[13px] text-[#a1a1aa]">{mediaPreviewError}</p>
+          ) : isVideo && previewSrc ? (
+            <video
+              src={previewSrc}
+              controls
+              playsInline
+              className="max-h-full max-w-full object-contain"
+              onError={() =>
+                setMediaPreviewError("Couldn't play this video. Try Download, or check your connection.")
+              }
+            />
+          ) : isAudio && previewSrc ? (
+            <audio
+              src={previewSrc}
+              controls
+              playsInline
+              preload="metadata"
+              className="w-full max-w-md"
+              onError={() =>
+                setMediaPreviewError("Couldn't play this track. Try Download, or check your connection.")
+              }
+            />
           ) : previewSrc ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={previewSrc} alt={title} className="h-full w-full object-contain" draggable={false} />

@@ -25,8 +25,14 @@ export function useAppForeground(onForeground: () => void) {
 }
 
 export const ARCIIN_FOREGROUND_EVENT = "arciin:foreground"
+export const ARCIIN_RECONNECT_EVENT = "arciin:reconnect"
 
 export function dispatchAppForeground() {
   if (typeof window === "undefined") return
   window.dispatchEvent(new CustomEvent(ARCIIN_FOREGROUND_EVENT))
+}
+
+export function dispatchReconnectNeeded() {
+  if (typeof window === "undefined") return
+  window.dispatchEvent(new CustomEvent(ARCIIN_RECONNECT_EVENT))
 }

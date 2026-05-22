@@ -32,25 +32,34 @@ async function proxyUpstream(request: Request, context: RouteContext) {
     )
   }
 
-  if (!isPublic && !auth?.startsWith("Bearer ")) {
+  const search = new URL(request.url).search
+  const searchParams = new URL(request.url).searchParams
+  const queryToken = searchParams.get("access_token")?.trim() ?? ""
+
+  let bearer = auth?.startsWith("Bearer ") ? auth : null
+  if (!bearer && queryToken && !queryToken.startsWith("arc_")) {
+    bearer = `Bearer ${queryToken}`
+  }
+
+  if (!isPublic && !bearer) {
     return NextResponse.json(
       { error: { code: "UNAUTHORIZED", message: "Missing session or server address." } },
       { status: 401 },
     )
   }
 
-  const search = new URL(request.url).search
   const upstream = `${apiBase}/${subPath}${search}`
 
   const method = request.method
   const hasBody = method !== "GET" && method !== "HEAD"
   const requestBody = hasBody ? await request.text() : undefined
 
+  const acceptHeader = request.headers.get("accept")
   const upstreamHeaders: Record<string, string> = {
-    Accept: request.headers.get("accept") ?? "application/json",
+    Accept: acceptHeader ?? "application/json",
   }
-  if (auth?.startsWith("Bearer ")) {
-    upstreamHeaders.Authorization = auth
+  if (bearer) {
+    upstreamHeaders.Authorization = bearer
   }
   if (hasBody && requestBody) {
     upstreamHeaders["Content-Type"] =

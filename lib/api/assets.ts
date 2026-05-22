@@ -122,16 +122,17 @@ export async function fetchAssetTextContent(
   }
 }
 
-/** Stream URL for `<audio>` / `<video>` — browser cannot send Bearer headers on media elements. */
+/** Stream URL for `<audio>` / `<video>` when blob fetch is not used (large files). */
 export function assetStreamUrl(connection: MobileConnection, assetId: string) {
   const params = new URLSearchParams({
     inline: "1",
     access_token: connection.sessionToken,
   })
-  return buildApiUrl(
-    connection.apiBaseUrl,
-    `/assets/${assetId}/download?${params.toString()}`,
-  )
+  const q = params.toString()
+  if (shouldUseArciinProxy(connection)) {
+    return `/api/arciin/assets/${encodeURIComponent(assetId)}/download?${q}`
+  }
+  return buildApiUrl(connection.apiBaseUrl, `/assets/${assetId}/download?${q}`)
 }
 
 export function getAsset(connection: MobileConnection, assetId: string, signal?: AbortSignal) {

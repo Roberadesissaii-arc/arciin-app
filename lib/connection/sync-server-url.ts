@@ -1,6 +1,6 @@
 import { getMobileServerEndpoints } from "@/lib/api/mobile"
 import { fetchApi } from "@/lib/api/client"
-import { isNetworkError } from "@/lib/api/errors"
+import { ApiError, isNetworkError, isTransientUpstreamStatus } from "@/lib/api/errors"
 import { isLoopbackApiBase } from "@/lib/connection/normalize-url"
 import { notifyIfPublicWebUrlChanged } from "@/lib/connection/notify-url-change"
 import {
@@ -16,6 +16,9 @@ async function probeHealth(apiBaseUrl: string, signal?: AbortSignal): Promise<bo
     await fetchApi<{ status?: string }>("/health", { apiBaseUrl, signal })
     return true
   } catch (err) {
+    if (err instanceof ApiError && isTransientUpstreamStatus(err.status)) {
+      return false
+    }
     return !isNetworkError(err)
   }
 }

@@ -11,7 +11,7 @@ type PageFetchErrorAlertProps = {
 
 /** Inline page error — hidden when the shell offline banner already explains the failure. */
 export function PageFetchErrorAlert({ error, onRetry, className }: PageFetchErrorAlertProps) {
-  const { serverReachable } = useConnection()
+  const { serverReachable, tryAutoReconnect } = useConnection()
 
   if (!shouldShowPageFetchError(serverReachable, error) || !error) {
     return null
@@ -27,7 +27,11 @@ export function PageFetchErrorAlert({ error, onRetry, className }: PageFetchErro
       {onRetry ? (
         <button
           type="button"
-          onClick={() => void onRetry()}
+          onClick={() => {
+            void tryAutoReconnect().then((ok) => {
+              if (ok) onRetry()
+            })
+          }}
           className="mt-2 font-semibold text-[#ff4f12]"
         >
           Try again
