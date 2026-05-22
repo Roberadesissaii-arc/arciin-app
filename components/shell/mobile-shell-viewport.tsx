@@ -30,7 +30,7 @@ export function MobileShellViewport({ children }: { children: React.ReactNode })
             isChat ? "min-h-0 flex-1 gap-0" : "gap-4",
           )}
         >
-          <ServerReconnectBanner />
+          {!isChat ? <ServerReconnectBanner /> : null}
           {children}
         </div>
       </main>

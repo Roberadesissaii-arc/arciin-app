@@ -85,14 +85,40 @@ const CHAT_SUGGESTIONS = [
 ] as const
 
 function ChatWelcomePanel({
+  ready,
+  connection,
+  serverOnline,
   profilesLoading,
   needsModelSetup,
   onPickSuggestion,
 }: {
+  ready: boolean
+  connection: MobileConnection | null
+  serverOnline: boolean
   profilesLoading: boolean
   needsModelSetup: boolean
   onPickSuggestion: (text: string) => void
 }) {
+  if (!ready || !connection || !serverOnline) {
+    return (
+      <div className="chat-welcome flex flex-1 flex-col items-center justify-center gap-5 px-6">
+        <ArciinMark size="lg" />
+        <p className="max-w-[18rem] text-center text-[13px] leading-relaxed text-[#717171]">
+          {!connection
+            ? "Connect this app to your Arciin server before you can chat with your libraries and files."
+            : "Your server isn’t reachable yet. Open server settings when Arciin is running on your network."}
+        </p>
+        <Link
+          href="/profile"
+          className="rounded-2xl px-6 py-3 text-[13px] font-semibold text-white active:opacity-90"
+          style={{ backgroundColor: "#ff4f12" }}
+        >
+          {!connection ? "Connect your server" : "Server settings"}
+        </Link>
+      </div>
+    )
+  }
+
   if (profilesLoading) {
     return (
       <div className="chat-welcome flex flex-1 flex-col items-center justify-center gap-4 px-6">
@@ -1072,6 +1098,9 @@ export function ChatPage() {
       <div ref={scrollRef} className="chat-page-messages flex flex-1 flex-col gap-3 scrollbar-hide">
         {showWelcome ? (
           <ChatWelcomePanel
+            ready={ready}
+            connection={connection}
+            serverOnline={serverOnline}
             profilesLoading={profilesLoading}
             needsModelSetup={needsModelSetup}
             onPickSuggestion={setInput}

@@ -95,7 +95,7 @@ export function chatComposerFooterNote(input: {
   activityNote?: string
 }): string {
   const { serverOnline, profilesLoading, streaming, hasModel, activityNote } = input
-  if (!serverOnline) return "Server disconnected"
+  if (!serverOnline) return "Connect your server to chat"
   if (profilesLoading) return "Loading models…"
   if (streaming && activityNote) return activityNote
   if (!hasModel) return "No AI model configured — open Models"
@@ -110,7 +110,7 @@ export function chatComposerPlaceholder(input: {
   hasModel: boolean
 }): string {
   const { serverOnline, profilesLoading, streaming, hasModel } = input
-  if (!serverOnline) return "Server disconnected"
+  if (!serverOnline) return "Connect your server first"
   if (streaming) return "Generating… tap Stop to interrupt"
   if (profilesLoading) return "Loading…"
   if (!hasModel) return "No AI model configured"
