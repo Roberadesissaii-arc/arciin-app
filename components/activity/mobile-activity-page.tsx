@@ -8,6 +8,10 @@ import { formatApiError } from "@/lib/api/errors"
 import { fetchRecentActivity } from "@/lib/api/notifications"
 import { PageFetchErrorAlert } from "@/components/shell/page-fetch-error-alert"
 import { useConnection } from "@/components/providers/connection-provider"
+import {
+  isServerConnected,
+  suppressFetchErrorWhenOffline,
+} from "@/lib/connection/offline-ui"
 import type { ActivitySummary } from "@/lib/types/models"
 import { formatRelativeDate } from "@/lib/utils/format-date"
 
@@ -27,7 +31,7 @@ function badgeStyleFor(event: ActivitySummary) {
 }
 
 export function MobileActivityPage({ title = "Activity" }: { title?: string }) {
-  const { connection, ready } = useConnection()
+  const { connection, ready, serverReachable } = useConnection()
   const [items, setItems] = useState<ActivitySummary[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -42,18 +46,27 @@ export function MobileActivityPage({ title = "Activity" }: { title?: string }) {
       setItems(await fetchRecentActivity(connection, signal))
       setPage(0)
     } catch (err) {
-      if (!signal?.aborted) setError(formatApiError(err))
+      if (!signal?.aborted) {
+        setError(suppressFetchErrorWhenOffline(serverReachable, formatApiError(err)))
+      }
     } finally {
       if (!signal?.aborted) setLoading(false)
     }
-  }, [connection])
+  }, [connection, serverReachable])
 
   useEffect(() => {
-    if (!ready || !connection) return
+    if (serverReachable === false) {
+      setError(null)
+      setLoading(false)
+    }
+  }, [serverReachable])
+
+  useEffect(() => {
+    if (!ready || !connection || !isServerConnected(serverReachable)) return
     const controller = new AbortController()
     void load(controller.signal)
     return () => controller.abort()
-  }, [ready, connection, load])
+  }, [ready, connection, load, serverReachable])
 
   const filtered = query.trim()
     ? items.filter((e) =>

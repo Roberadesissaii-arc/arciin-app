@@ -52,10 +52,26 @@ export function profileDisplayEmail(
   return user?.email?.trim() || null
 }
 
+/** Subtitle for collapsed profile / account rows when the server is not live. */
+export function profileSectionSubtitle(
+  serverReachable: boolean | null,
+  connectedSub: string,
+  offlineSub = "Reconnect to view or edit",
+): string {
+  if (!isServerConnected(serverReachable)) return offlineSub
+  return connectedSub
+}
+
 /** Matches `formatApiError` / `networkErrorMessage` offline copy. */
 export function isConnectionUnreachableMessage(error: string | null | undefined): boolean {
   if (!error) return false
-  return /could not reach/i.test(error)
+  return (
+    /could not reach/i.test(error) ||
+    /check the (public https )?address/i.test(error) ||
+    /confirm arciin is running/i.test(error) ||
+    /tunnel url may have changed/i.test(error) ||
+    /same wi[-‑]fi/i.test(error)
+  )
 }
 
 /**
@@ -66,8 +82,11 @@ export function suppressFetchErrorWhenOffline(
   error: string | null,
 ): string | null {
   if (!error) return null
+  // Top banner already explains offline — never duplicate on every page.
   if (serverReachable === false) return null
-  if (serverReachable !== true && isConnectionUnreachableMessage(error)) return null
+  if (!isServerConnected(serverReachable) && isConnectionUnreachableMessage(error)) {
+    return null
+  }
   if (isConnectionUnreachableMessage(error)) return null
   return error
 }

@@ -14,6 +14,10 @@ import {
 } from "@/lib/api/auth"
 import { clearCachedUserAvatar } from "@/lib/utils/user-avatar-cache"
 import { formatApiError } from "@/lib/api/errors"
+import {
+  isServerConnected,
+  suppressFetchErrorWhenOffline,
+} from "@/lib/connection/offline-ui"
 import { joinDisplayName, splitDisplayName } from "@/lib/utils/display-name"
 
 function Field({
@@ -50,7 +54,7 @@ function Field({
 }
 
 export function ProfileInlinePanel({ enabled }: { enabled: boolean }) {
-  const { connection, ready, updateUser } = useConnection()
+  const { connection, ready, updateUser, serverReachable } = useConnection()
   const fileRef = useRef<HTMLInputElement>(null)
   const [firstName, setFirstName] = useState("")
   const [lastName, setLastName] = useState("")
@@ -70,8 +74,15 @@ export function ProfileInlinePanel({ enabled }: { enabled: boolean }) {
   connectionRef.current = connection
   const refreshedSessionRef = useRef<string | null>(null)
 
+  const serverConnected = isServerConnected(serverReachable)
+  const visibleError = suppressFetchErrorWhenOffline(serverReachable, error)
+
   useEffect(() => {
-    if (!user || !enabled) return
+    if (serverReachable === false) setError(null)
+  }, [serverReachable])
+
+  useEffect(() => {
+    if (!user || !enabled || !serverConnected) return
     const { first, last } = splitDisplayName(user.name)
     setFirstName(first)
     setLastName(last)
@@ -79,10 +90,10 @@ export function ProfileInlinePanel({ enabled }: { enabled: boolean }) {
     setInitialFirst(first)
     setInitialLast(last)
     setInitialEmail(user.email)
-  }, [user, enabled])
+  }, [user, enabled, serverConnected])
 
   useEffect(() => {
-    if (!enabled || !ready || !sessionKey) return
+    if (!enabled || !ready || !sessionKey || !serverConnected) return
     if (refreshedSessionRef.current === sessionKey) return
 
     const conn = connectionRef.current
@@ -103,7 +114,7 @@ export function ProfileInlinePanel({ enabled }: { enabled: boolean }) {
     return () => {
       cancelled = true
     }
-  }, [enabled, ready, sessionKey, updateUser])
+  }, [enabled, ready, sessionKey, updateUser, serverConnected])
 
   useEffect(() => {
     if (sessionKey && refreshedSessionRef.current && refreshedSessionRef.current !== sessionKey) {
@@ -112,6 +123,15 @@ export function ProfileInlinePanel({ enabled }: { enabled: boolean }) {
   }, [sessionKey])
 
   if (!enabled || !connection) return null
+
+  if (!serverConnected) {
+    return (
+      <p className="text-[12px] leading-relaxed text-[#717171]">
+        Your server is disconnected. Reconnect using the banner above, then edit your
+        name and photo here.
+      </p>
+    )
+  }
 
   const displayName = joinDisplayName(firstName, lastName)
   const initialDisplayName = joinDisplayName(initialFirst, initialLast)
@@ -265,9 +285,9 @@ export function ProfileInlinePanel({ enabled }: { enabled: boolean }) {
         placeholder="you@example.com"
       />
 
-      {error ? (
+      {visibleError ? (
         <p className="rounded-xl px-3 py-2 text-[12px] text-[#b91c1c] bg-[#fef2f2] border border-[#fecaca]">
-          {error}
+          {visibleError}
         </p>
       ) : null}
       {message ? (

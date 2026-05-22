@@ -6,6 +6,7 @@ import { fetchHomeOverview } from "@/lib/api/dashboard"
 import { formatApiError } from "@/lib/api/errors"
 import { ARCIIN_FOREGROUND_EVENT } from "@/lib/hooks/use-app-foreground"
 import { useConnection } from "@/components/providers/connection-provider"
+import { suppressFetchErrorWhenOffline } from "@/lib/connection/offline-ui"
 import type { HomeOverview } from "@/lib/types/models"
 
 const HOME_STALE_MS = 60_000
@@ -26,10 +27,12 @@ function isValidHomeOverview(data: HomeOverview | null | undefined): data is Hom
 }
 
 export function useCachedHomeOverview() {
-  const { connection, ready } = useConnection()
+  const { connection, ready, serverReachable } = useConnection()
   const sessionKey = connection?.sessionToken ?? null
   const connectionRef = useRef(connection)
   connectionRef.current = connection
+  const serverReachableRef = useRef(serverReachable)
+  serverReachableRef.current = serverReachable
 
   const [data, setData] = useState<HomeOverview | null>(() => {
     if (!sessionKey) return null
@@ -63,7 +66,14 @@ export function useCachedHomeOverview() {
           })
         }
       } catch (err) {
-        if (!opts?.signal?.aborted) setError(formatApiError(err))
+        if (!opts?.signal?.aborted) {
+          setError(
+            suppressFetchErrorWhenOffline(
+              serverReachableRef.current,
+              formatApiError(err),
+            ),
+          )
+        }
       } finally {
         if (!opts?.signal?.aborted) {
           setLoading(false)
@@ -75,7 +85,12 @@ export function useCachedHomeOverview() {
   )
 
   useEffect(() => {
+    if (serverReachable === false) setError(null)
+  }, [serverReachable])
+
+  useEffect(() => {
     if (!ready || !sessionKey || !connection) return
+    if (serverReachable === false) return
 
     const hit = homeCache.get(sessionKey)
     const validHit =
@@ -94,7 +109,7 @@ export function useCachedHomeOverview() {
       signal: controller.signal,
     })
     return () => controller.abort()
-  }, [ready, sessionKey, connection, load])
+  }, [ready, sessionKey, connection, load, serverReachable])
 
   useEffect(() => {
     const onForeground = () => {

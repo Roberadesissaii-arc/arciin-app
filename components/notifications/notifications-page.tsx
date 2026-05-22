@@ -5,6 +5,8 @@ import { Bell, ChevronLeft, ChevronRight, Clock3, Loader2, RefreshCw, Search, X 
 
 import { activityIconFor, activityTypeLabel } from "@/lib/activity/icons"
 import { formatApiError } from "@/lib/api/errors"
+import { PageFetchErrorAlert } from "@/components/shell/page-fetch-error-alert"
+import { isServerConnected, suppressFetchErrorWhenOffline } from "@/lib/connection/offline-ui"
 import {
   countUnreadActivity,
   fetchRecentActivity,
@@ -109,7 +111,7 @@ function NotificationRow({
 /* ── main page ────────────────────────────────────────────────── */
 
 export function NotificationsPage() {
-  const { connection, ready } = useConnection()
+  const { connection, ready, serverReachable } = useConnection()
   const [items, setItems] = useState<ActivitySummary[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -126,27 +128,36 @@ export function NotificationsPage() {
       setItems(activity)
       setPage(0)
     } catch (err) {
-      if (!signal?.aborted) setError(formatApiError(err))
+      if (!signal?.aborted) {
+        setError(suppressFetchErrorWhenOffline(serverReachable, formatApiError(err)))
+      }
     } finally {
       if (!signal?.aborted) setLoading(false)
     }
-  }, [connection])
+  }, [connection, serverReachable])
 
   useEffect(() => { setLastSeen(getNotificationsLastSeen()) }, [])
 
   useEffect(() => {
-    if (!ready || !connection) return
+    if (serverReachable === false) {
+      setError(null)
+      setLoading(false)
+    }
+  }, [serverReachable])
+
+  useEffect(() => {
+    if (!ready || !connection || !isServerConnected(serverReachable)) return
     const controller = new AbortController()
     void load(controller.signal)
     return () => controller.abort()
-  }, [ready, connection, load])
+  }, [ready, connection, load, serverReachable])
 
   useEffect(() => {
-    if (!ready || !connection) return
+    if (!ready || !connection || !isServerConnected(serverReachable)) return
     return subscribePublicUrlChanged(() => {
       void load()
     })
-  }, [ready, connection, load])
+  }, [ready, connection, load, serverReachable])
 
   useEffect(() => {
     if (!loading && !error) {
@@ -245,16 +256,7 @@ export function NotificationsPage() {
         </div>
       </div>
 
-      {/* ── error ───────────────────────────────────────────────── */}
-      {error ? (
-        <div
-          className="rounded-2xl px-4 py-3 text-[12px] text-[#b91c1c]"
-          style={{ backgroundColor: "#fef2f2", border: "1px solid #fecaca" }}
-          role="alert"
-        >
-          {error}
-        </div>
-      ) : null}
+      <PageFetchErrorAlert error={error} onRetry={() => void load()} />
 
       {/* ── list ────────────────────────────────────────────────── */}
       {loading ? (

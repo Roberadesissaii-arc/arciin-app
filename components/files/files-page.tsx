@@ -316,7 +316,7 @@ export function FilesPage() {
 
       await load(undefined, true, { filter: reloadFilter, folderId: reloadFolderId })
     } catch (err) {
-      setError(formatApiError(err))
+      setError(suppressFetchErrorWhenOffline(serverReachable, formatApiError(err)))
     } finally {
       setUploading(false)
       setUploadProgress(null)

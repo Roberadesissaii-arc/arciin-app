@@ -42,11 +42,12 @@ import { useConnection } from "@/components/providers/connection-provider"
 import { ArciinDarkGradientPanel } from "@/components/ui/arciin-dark-gradient-panel"
 import { getAuthMe } from "@/lib/api/auth"
 import { formatApiError } from "@/lib/api/errors"
+import { PageFetchErrorAlert } from "@/components/shell/page-fetch-error-alert"
 import {
   isServerConnected,
   profileDisplayEmail,
   profileDisplayName,
-  suppressFetchErrorWhenOffline,
+  profileSectionSubtitle,
 } from "@/lib/connection/offline-ui"
 import { listLibraries } from "@/lib/api/libraries"
 
@@ -166,7 +167,14 @@ export function ProfilePage() {
   }, [ready, sessionKey, connection, updateUser])
 
   useEffect(() => {
-    if (!ready || !sessionKey || !connection) return
+    if (serverReachable === false) setError(null)
+  }, [serverReachable])
+
+  useEffect(() => {
+    if (!ready || !sessionKey || !connection || !isServerConnected(serverReachable)) {
+      setLoadingStats(false)
+      return
+    }
 
     const cache = profileStatsCache.current.get(sessionKey)
     const fresh = cache && Date.now() - cache.fetchedAt <= PROFILE_STATS_STALE_MS
@@ -210,14 +218,13 @@ export function ProfilePage() {
       cancelled = true
       ac.abort()
     }
-  }, [ready, sessionKey, connection])
+  }, [ready, sessionKey, connection, serverReachable])
 
   const user = connection?.user
   const serverConnected = isServerConnected(serverReachable)
   const displayName = profileDisplayName(user, serverReachable)
   const displayEmail = profileDisplayEmail(user, serverReachable)
   const roleLabel = serverConnected ? (user?.role ?? "Member") : "—"
-  const statsError = suppressFetchErrorWhenOffline(serverReachable, error)
   const avatarCacheKey = `${user?.id ?? ""}-${user?.avatarUrl ?? ""}-${user?.updatedAt ?? ""}`
 
   return (
@@ -290,14 +297,7 @@ export function ProfilePage() {
         </div>
       </ArciinDarkGradientPanel>
 
-      {statsError ? (
-        <p
-          className="rounded-xl px-4 py-3 text-center text-[12px] text-[#b91c1c]"
-          style={{ backgroundColor: "#fef2f2", border: "1px solid #fecaca" }}
-        >
-          {statsError}
-        </p>
-      ) : null}
+      <PageFetchErrorAlert error={error} className="text-center" />
 
       <div>
         <SectionLabel label="Profile" />
@@ -305,7 +305,10 @@ export function ProfilePage() {
           <SettingsGroupItem
             icon={User}
             label="Profile"
-            sub={user?.email ?? "Name, email & photo"}
+            sub={profileSectionSubtitle(
+              serverReachable,
+              user?.email ?? "Name, email & photo",
+            )}
             open={profileOpen}
             onToggle={() => setProfileOpen((o) => !o)}
           >
@@ -330,11 +333,15 @@ export function ProfilePage() {
           <SettingsGroupItem
             icon={Bell}
             label="Notifications"
-            sub="Alerts & toasts"
+            sub={profileSectionSubtitle(
+              serverReachable,
+              "Activity from your server",
+              "Available when connected",
+            )}
             open={false}
             onToggle={() => {}}
-            footerHref="/profile/notifications"
-            footerLabel="Open notifications"
+            footerHref="/notifications"
+            footerLabel="Open activity notifications"
           />
         </SettingsGroup>
       </div>

@@ -13,15 +13,16 @@ import {
 } from "@/lib/api/notifications"
 import { subscribePublicUrlChanged } from "@/lib/notifications/public-url-changed"
 import { useConnection } from "@/components/providers/connection-provider"
+import { isServerConnected } from "@/lib/connection/offline-ui"
 
 /** Home-only top bar: logo, search, notifications. Stays fixed while scrolling. */
 export function MobileHeader() {
   const pathname = usePathname()
-  const { connection, ready } = useConnection()
+  const { connection, ready, serverReachable } = useConnection()
   const [unreadCount, setUnreadCount] = useState(0)
 
   useEffect(() => {
-    if (!ready || !connection) {
+    if (!ready || !connection || !isServerConnected(serverReachable)) {
       setUnreadCount(0)
       return
     }
@@ -44,10 +45,10 @@ export function MobileHeader() {
       cancelled = true
       controller.abort()
     }
-  }, [ready, connection])
+  }, [ready, connection, serverReachable])
 
   useEffect(() => {
-    if (!ready || !connection) return
+    if (!ready || !connection || !isServerConnected(serverReachable)) return
     let controller: AbortController | null = null
     const reloadBadge = () => {
       controller?.abort()
@@ -66,7 +67,7 @@ export function MobileHeader() {
       unsub()
       controller?.abort()
     }
-  }, [ready, connection])
+  }, [ready, connection, serverReachable])
 
   if (pathname !== "/home") return null
 

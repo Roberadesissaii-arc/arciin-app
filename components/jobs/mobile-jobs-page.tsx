@@ -18,11 +18,15 @@ import { formatApiError } from "@/lib/api/errors"
 import { fetchJobs, type JobSummary } from "@/lib/api/jobs"
 import { PageFetchErrorAlert } from "@/components/shell/page-fetch-error-alert"
 import { useConnection } from "@/components/providers/connection-provider"
+import {
+  isServerConnected,
+  suppressFetchErrorWhenOffline,
+} from "@/lib/connection/offline-ui"
 
 const PAGE_SIZE = 5
 
 export function MobileJobsPage() {
-  const { connection, ready } = useConnection()
+  const { connection, ready, serverReachable } = useConnection()
   const [jobs, setJobs] = useState<JobSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -36,18 +40,27 @@ export function MobileJobsPage() {
     try {
       setJobs(await fetchJobs(connection, signal))
     } catch (err) {
-      if (!signal?.aborted) setError(formatApiError(err))
+      if (!signal?.aborted) {
+        setError(suppressFetchErrorWhenOffline(serverReachable, formatApiError(err)))
+      }
     } finally {
       if (!signal?.aborted) setLoading(false)
     }
-  }, [connection])
+  }, [connection, serverReachable])
 
   useEffect(() => {
-    if (!ready || !connection) return
+    if (serverReachable === false) {
+      setError(null)
+      setLoading(false)
+    }
+  }, [serverReachable])
+
+  useEffect(() => {
+    if (!ready || !connection || !isServerConnected(serverReachable)) return
     const controller = new AbortController()
     void load(controller.signal)
     return () => controller.abort()
-  }, [ready, connection, load])
+  }, [ready, connection, load, serverReachable])
 
   const active = jobs.filter((j) => j.status === "QUEUED" || j.status === "ACTIVE").length
   const filtered = query.trim()
