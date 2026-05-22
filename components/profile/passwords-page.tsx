@@ -22,8 +22,8 @@ import { formatApiError } from "@/lib/api/errors"
 import {
   getPasswordVault,
   lockPasswordVault,
+  revealPasswordVaultEntry,
   unlockPasswordVault,
-  verifyPasswordVault,
   type PasswordVaultEntry,
   type PasswordVaultList,
   type VaultUnlockInput,
@@ -107,10 +107,19 @@ function UnlockSheet({
   )
 }
 
+function entryPlainPassword(
+  entry: PasswordVaultEntry,
+  ephemeral: Record<string, string>,
+): string | null {
+  if (ephemeral[entry.id]) return ephemeral[entry.id]!
+  return entry.password ?? null
+}
+
 function EntryRow({
   entry,
   maskStyle,
   secretsVisible,
+  ephemeralPasswords,
   revealed,
   onEyeClick,
   onCopy,
@@ -118,13 +127,15 @@ function EntryRow({
   entry: PasswordVaultEntry
   maskStyle: "dots" | "asterisk" | "block"
   secretsVisible: boolean
+  ephemeralPasswords: Record<string, string>
   revealed: boolean
   onEyeClick: () => void
   onCopy: (text: string, label: string) => void
 }) {
   const hasPassword = entryHasPassword(entry)
-  const visible = Boolean(secretsVisible && entry.password && revealed)
-  const displayPassword = visible && entry.password ? entry.password : maskPassword(entry, maskStyle)
+  const plain = entryPlainPassword(entry, ephemeralPasswords)
+  const visible = Boolean(plain && revealed)
+  const displayPassword = visible && plain ? plain : maskPassword(entry, maskStyle)
 
   return (
     <li
@@ -168,10 +179,10 @@ function EntryRow({
           >
             {visible ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
           </button>
-          {visible && entry.password ? (
+          {visible && plain ? (
             <button
               type="button"
-              onClick={() => onCopy(entry.password!, "Password")}
+              onClick={() => onCopy(plain, "Password")}
               className="flex size-8 shrink-0 items-center justify-center rounded-lg text-[#717171] active:bg-white"
               aria-label="Copy password"
             >
@@ -202,8 +213,10 @@ export function PasswordsPage() {
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [unlockOpen, setUnlockOpen] = useState(false)
+  const [pendingVaultUnlock, setPendingVaultUnlock] = useState(false)
   const [pendingRevealId, setPendingRevealId] = useState<string | null>(null)
   const [revealed, setRevealed] = useState<Record<string, boolean>>({})
+  const [ephemeralPasswords, setEphemeralPasswords] = useState<Record<string, string>>({})
   const [copyMsg, setCopyMsg] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
 
@@ -248,26 +261,48 @@ export function PasswordsPage() {
   const filteredEntries = entries.filter((entry) => entryMatchesQuery(entry, searchQuery))
   const maskStyle = vault?.display?.maskStyle ?? "dots"
 
-  function openVaultUnlock(revealEntryId?: string) {
-    setPendingRevealId(revealEntryId ?? null)
+  function openVaultUnlock() {
+    setPendingVaultUnlock(true)
+    setPendingRevealId(null)
     setUnlockOpen(true)
+  }
+
+  function openRevealForEntry(entryId: string) {
+    setPendingVaultUnlock(false)
+    setPendingRevealId(entryId)
+    setUnlockOpen(true)
+  }
+
+  function revealOnlyEntry(entryId: string) {
+    setRevealed({ [entryId]: true })
+    setEphemeralPasswords((prev) => {
+      const next: Record<string, string> = {}
+      if (prev[entryId]) next[entryId] = prev[entryId]!
+      return next
+    })
   }
 
   function onEyeClick(entry: PasswordVaultEntry) {
     if (!entryHasPassword(entry)) return
 
-    const visible = Boolean(secretsVisible && entry.password && revealed[entry.id])
+    const plain = entryPlainPassword(entry, ephemeralPasswords)
+    const visible = Boolean(plain && revealed[entry.id])
     if (visible) {
       setRevealed((prev) => ({ ...prev, [entry.id]: false }))
+      setEphemeralPasswords((prev) => {
+        const next = { ...prev }
+        delete next[entry.id]
+        return next
+      })
       return
     }
 
     if (secretsVisible) {
-      setRevealed((prev) => ({ ...prev, [entry.id]: true }))
+      revealOnlyEntry(entry.id)
       return
     }
 
-    openVaultUnlock(entry.id)
+    openRevealForEntry(entry.id)
   }
 
   async function handleUnlock(input: VaultUnlockInput) {
@@ -275,23 +310,23 @@ export function PasswordsPage() {
 
     const revealAfter = pendingRevealId
 
-    if (!secretsVisible) {
+    if (pendingVaultUnlock) {
       await unlockPasswordVault(connection, input)
-    } else {
-      await verifyPasswordVault(connection, input)
+      setEphemeralPasswords({})
+      setRevealed({})
+    } else if (revealAfter) {
+      const entry = await revealPasswordVaultEntry(connection, revealAfter, input)
+      if (entry.password) {
+        setEphemeralPasswords((prev) => ({ ...prev, [revealAfter]: entry.password! }))
+        revealOnlyEntry(revealAfter)
+      }
     }
 
     await load(undefined, true)
     const fresh = await getPasswordVault(connection)
     setVault(fresh)
 
-    if (revealAfter) {
-      const entry = fresh.entries.find((e) => e.id === revealAfter)
-      if (entry?.password) {
-        setRevealed((prev) => ({ ...prev, [revealAfter]: true }))
-      }
-    }
-
+    setPendingVaultUnlock(false)
     setPendingRevealId(null)
   }
 
@@ -299,6 +334,7 @@ export function PasswordsPage() {
     if (!connection) return
     await lockPasswordVault(connection)
     setRevealed({})
+    setEphemeralPasswords({})
     await load(undefined, true)
   }
 
@@ -312,12 +348,18 @@ export function PasswordsPage() {
     }
   }
 
-  const unlockTitle = pendingRevealId && !secretsVisible ? "Unlock to view" : "Unlock vault"
-  const unlockDescription = pinConfigured
-    ? "Enter your vault PIN. While unlocked, tap the eye on any entry without entering it again."
-    : secretsVisible
-      ? "Enter your account password to view this password."
-      : "Enter your Arciin account password to unlock the vault on this device."
+  const unlockTitle = pendingVaultUnlock
+    ? "Unlock vault"
+    : pendingRevealId
+      ? "View this password"
+      : "Unlock vault"
+  const unlockDescription = pendingVaultUnlock
+    ? pinConfigured
+      ? "Unlock once to use the eye on any entry without entering your PIN again."
+      : "Unlock once to use the eye on any entry without entering your password again."
+    : pinConfigured
+      ? "View this password only. The vault stays locked for other entries."
+      : "View this password only. The vault stays locked for other entries."
 
   return (
     <div className="flex flex-col gap-5">
@@ -469,6 +511,7 @@ export function PasswordsPage() {
               entry={entry}
               maskStyle={maskStyle}
               secretsVisible={secretsVisible}
+              ephemeralPasswords={ephemeralPasswords}
               revealed={Boolean(revealed[entry.id])}
               onEyeClick={() => onEyeClick(entry)}
               onCopy={copyText}
@@ -484,6 +527,7 @@ export function PasswordsPage() {
           description={unlockDescription}
           onClose={() => {
             setUnlockOpen(false)
+            setPendingVaultUnlock(false)
             setPendingRevealId(null)
           }}
           onUnlock={handleUnlock}

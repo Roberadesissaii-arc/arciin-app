@@ -54,6 +54,18 @@ export function verifyPasswordVault(connection: MobileConnection, input: VaultUn
   })
 }
 
+export function revealPasswordVaultEntry(
+  connection: MobileConnection,
+  id: string,
+  input: VaultUnlockInput,
+) {
+  return fetchApi<PasswordVaultEntry>(`/settings/password-vault/${id}/reveal`, {
+    connection,
+    method: "POST",
+    body: input,
+  })
+}
+
 export function lockPasswordVault(connection: MobileConnection) {
   return fetchApi<{ locked: boolean }>("/settings/password-vault/lock", {
     connection,
