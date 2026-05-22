@@ -11,15 +11,19 @@ import {
   Plus,
   RotateCcw,
   Send,
+  Sparkles,
   Square,
   ThumbsDown,
   ThumbsUp,
   Trash2,
+  User,
+  Volume2,
   X,
 } from "lucide-react"
 
 import { syncChatKeyboardOffset, useChatKeyboard } from "@/hooks/use-chat-keyboard"
-import { ChatMarkdown } from "@/components/chat/chat-markdown"
+import { useTextToSpeech } from "@/hooks/use-text-to-speech"
+import { ChatMarkdownContent } from "@/components/chat/chat-markdown-content"
 import { ChatModelBar } from "@/components/chat/chat-model-bar"
 import { ChatReasoningBlock } from "@/components/chat/chat-reasoning-block"
 import { ArciinMark } from "@/components/ui/arciin-mark"
@@ -53,6 +57,7 @@ import {
   hasVisibleAssistantAnswer,
   resolveFinalAssistantMessage,
 } from "@/lib/chat/reasoning"
+import { plainTextFromMessage } from "@/lib/chat/plain-text-from-message"
 import { ARCIIN_MOBILE_SYSTEM_INSTRUCTION } from "@/lib/chat/system-prompt"
 import { formatApiError, isNetworkError } from "@/lib/api/errors"
 import type { MobileConnection } from "@/lib/types/api"
@@ -384,15 +389,26 @@ function MessageActions({
   const btn =
     "flex size-8 items-center justify-center rounded-lg text-[#717171] active:bg-[#f7f7f7]"
   const [copied, setCopied] = useState(false)
+  const { supported: ttsSupported, speaking, speak, stop: stopSpeech } = useTextToSpeech()
+  const plain = plainTextFromMessage(content)
 
   async function handleCopy() {
     try {
-      await navigator.clipboard.writeText(content)
+      await navigator.clipboard.writeText(plain || content)
       setCopied(true)
       window.setTimeout(() => setCopied(false), 1500)
     } catch {
       /* clipboard denied */
     }
+  }
+
+  async function handleListen() {
+    if (!plain || !ttsSupported) return
+    if (speaking) {
+      stopSpeech()
+      return
+    }
+    await speak(plain)
   }
 
   return (
@@ -429,6 +445,17 @@ function MessageActions({
           <Copy className="size-3.5" />
         )}
       </button>
+      {ttsSupported ? (
+        <button
+          type="button"
+          className={cn(btn, speaking && "text-[#ff4f12]")}
+          aria-label={speaking ? "Stop read aloud" : "Listen to response"}
+          disabled={!plain}
+          onClick={() => void handleListen()}
+        >
+          {speaking ? <Square className="size-3.5 fill-current" /> : <Volume2 className="size-3.5" />}
+        </button>
+      ) : null}
     </div>
   )
 }
@@ -457,52 +484,73 @@ function MessageBubble({
   const showWorking =
     !isUser && msg.pending && !hasAnswer && !hasThinkingText && !isStreaming
   const showActions = !isUser && !msg.pending && !isStreaming && hasAnswer
-  const hasAssetEmbed = /\[\[(?:ASSETS|ASSET_LIST)/i.test(msg.content)
-  const usePlainStream = isStreaming && !hasAssetEmbed
 
   return (
-    <div className={cn("flex w-full flex-col", isUser ? "items-end" : "items-start")}>
-      {showReasoning ? (
-        <ChatReasoningBlock content={msg.thinking ?? ""} live={liveReasoning} />
-      ) : null}
+    <div
+      className={cn(
+        "flex w-full gap-2.5",
+        isUser ? "flex-row-reverse" : "flex-row",
+      )}
+    >
+      <div
+        className={cn(
+          "flex size-8 shrink-0 items-center justify-center rounded-full",
+          isUser ? "bg-[#ff4f12] text-white" : "border border-[#e5e5e5] bg-white text-[#ff4f12]",
+        )}
+      >
+        {isUser ? <User className="size-4" /> : <Sparkles className="size-4" />}
+      </div>
 
-      {!hideAnswerBubble ? (
-        <div
-          className={cn(
-            "max-w-[92%] rounded-2xl px-4 py-3 text-[14px] leading-relaxed",
-            isUser
-              ? "rounded-br-md bg-[#ff4f12] text-white shadow-sm"
-              : "rounded-bl-md bg-white text-[#222222] shadow-[0_1px_8px_rgba(0,0,0,0.04)]",
-          )}
-          style={isUser ? undefined : { border: "1px solid #e5e5e5" }}
-        >
-          {showWorking ? (
-            <span className="flex items-center gap-2 text-[#717171]">
-              <Loader2 className="size-3.5 animate-spin text-[#ff4f12]" />
-              Working…
-            </span>
-          ) : isUser || usePlainStream ? (
-            <p className="whitespace-pre-wrap break-words">
-              {msg.content}
-              {isStreaming && hasAnswer ? (
-                <span className="chat-stream-cursor" aria-hidden />
-              ) : null}
-            </p>
-          ) : (
-            <ChatMarkdown content={msg.content} />
-          )}
-        </div>
-      ) : null}
+      <div
+        className={cn(
+          "min-w-0 flex flex-col",
+          isUser ? "max-w-[85%] items-end" : "max-w-[calc(100%-2.75rem)] flex-1 items-start",
+        )}
+      >
+        {showReasoning ? (
+          <ChatReasoningBlock content={msg.thinking ?? ""} live={liveReasoning} />
+        ) : null}
 
-      {showActions ? (
-        <MessageActions
-          content={msg.content}
-          feedback={msg.feedback}
-          canRegenerate={canRegenerate}
-          onRegenerate={onRegenerate}
-          onFeedback={onFeedback}
-        />
-      ) : null}
+        {!hideAnswerBubble ? (
+          <div
+            className={cn(
+              "min-w-0 rounded-2xl px-3.5 py-2.5 text-[13px] leading-relaxed",
+              isUser
+                ? "rounded-tr-sm bg-[#ff4f12] text-white shadow-sm"
+                : "rounded-tl-sm border border-[#e5e5e5] bg-[#fafafa]/90 text-[#222222] shadow-[0_1px_6px_rgba(0,0,0,0.04)]",
+            )}
+          >
+            {showWorking ? (
+              <span className="flex items-center gap-2 text-[#717171]">
+                <Loader2 className="size-3.5 animate-spin text-[#ff4f12]" />
+                Working…
+              </span>
+            ) : isUser ? (
+              <span className="whitespace-pre-wrap break-words">{msg.content}</span>
+            ) : (
+              <div className="min-w-0">
+                <ChatMarkdownContent content={msg.content} />
+                {isStreaming && hasAnswer ? (
+                  <span
+                    className="ml-0.5 inline-block h-[1em] w-0.5 translate-y-px animate-pulse bg-[#ff4f12]/80 align-middle"
+                    aria-hidden
+                  />
+                ) : null}
+              </div>
+            )}
+          </div>
+        ) : null}
+
+        {showActions ? (
+          <MessageActions
+            content={msg.content}
+            feedback={msg.feedback}
+            canRegenerate={canRegenerate}
+            onRegenerate={onRegenerate}
+            onFeedback={onFeedback}
+          />
+        ) : null}
+      </div>
     </div>
   )
 }

@@ -1,3 +1,5 @@
+import { normalizeAssistantDisplayText } from "@/lib/chat/strip-stream-markup"
+
 /** Split Ollama/Qwen reasoning from user-visible answer (ported from desktop chat). */
 
 const REASONING_OPEN_TAG =
@@ -61,38 +63,53 @@ function splitPlainTextReasoningBlock(accumulated: string): {
   return { thinking: lead, answer: "", matched: true }
 }
 
+function withNormalizedAnswer(result: {
+  thinking: string
+  answer: string
+  inReasoningBlock: boolean
+}) {
+  return {
+    ...result,
+    answer: normalizeAssistantDisplayText(result.answer),
+  }
+}
+
 export function deriveStreamingThinkingAndAnswer(
   accumulated: string,
   dedicatedThinking: string,
 ): { thinking: string; answer: string; inReasoningBlock: boolean } {
   if (dedicatedThinking) {
     const tagged = parseThinking(accumulated)
-    return {
+    return withNormalizedAnswer({
       thinking: dedicatedThinking,
       answer: tagged.response || (tagged.inThink ? "" : accumulated),
       inReasoningBlock: false,
-    }
+    })
   }
 
   const plain = splitPlainTextReasoningBlock(accumulated)
   if (plain.matched) {
-    return {
+    return withNormalizedAnswer({
       thinking: plain.thinking,
       answer: plain.answer,
       inReasoningBlock: !plain.answer.trim(),
-    }
+    })
   }
 
   const tagged = parseThinking(accumulated)
   if (tagged.thinking || tagged.inThink) {
-    return {
+    return withNormalizedAnswer({
       thinking: tagged.thinking,
       answer: tagged.response,
       inReasoningBlock: tagged.inThink,
-    }
+    })
   }
 
-  return { thinking: "", answer: accumulated, inReasoningBlock: false }
+  return withNormalizedAnswer({
+    thinking: "",
+    answer: accumulated,
+    inReasoningBlock: false,
+  })
 }
 
 export function resolveFinalAssistantMessage(
@@ -117,6 +134,11 @@ export function resolveFinalAssistantMessage(
 
   if (!content) {
     content = accumulated.replace(REASONING_OPEN_TAG, "").replace(REASONING_CLOSE_TAG, "").trim()
+  }
+
+  content = normalizeAssistantDisplayText(content)
+  if (thinking) {
+    thinking = normalizeAssistantDisplayText(thinking)
   }
 
   if (content && thinking && content === thinking) {
