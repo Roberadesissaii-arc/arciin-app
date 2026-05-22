@@ -1,6 +1,56 @@
 "use client"
 
 import { useConnection } from "@/components/providers/connection-provider"
+import type { MobileConnection } from "@/lib/types/api"
+
+/** True only after a live reachability check succeeded — not while probing or offline. */
+export function isServerConnected(serverReachable: boolean | null): boolean {
+  return serverReachable === true
+}
+
+/** Greeting / identity copy before the server is confirmed online. */
+export const PLACEHOLDER_GREETING = "Hi there 👋"
+
+export function homeGreeting(
+  connection: MobileConnection | null,
+  serverReachable: boolean | null,
+): string {
+  if (!isServerConnected(serverReachable)) return PLACEHOLDER_GREETING
+  const first = connection?.user.name?.split(/\s+/)[0]
+  if (first) return `Hi, ${first}`
+  return "Overview"
+}
+
+export function homeSubtitle(
+  connection: MobileConnection | null,
+  serverReachable: boolean | null,
+): string {
+  if (serverReachable === false) {
+    return "Your server is offline — reconnect to refresh this overview."
+  }
+  if (!isServerConnected(serverReachable)) {
+    return "Connecting to your server…"
+  }
+  return connection?.instanceName
+    ? `${connection.instanceName} at a glance`
+    : "Your Arciin instance at a glance."
+}
+
+export function profileDisplayName(
+  user: MobileConnection["user"] | undefined,
+  serverReachable: boolean | null,
+): string {
+  if (!isServerConnected(serverReachable)) return "Your profile"
+  return user?.name?.trim() || "—"
+}
+
+export function profileDisplayEmail(
+  user: MobileConnection["user"] | undefined,
+  serverReachable: boolean | null,
+): string | null {
+  if (!isServerConnected(serverReachable)) return null
+  return user?.email?.trim() || null
+}
 
 /** Matches `formatApiError` / `networkErrorMessage` offline copy. */
 export function isConnectionUnreachableMessage(error: string | null | undefined): boolean {

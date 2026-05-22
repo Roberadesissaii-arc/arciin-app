@@ -86,12 +86,10 @@ const CHAT_SUGGESTIONS = [
 
 function ChatWelcomePanel({
   profilesLoading,
-  serverOffline,
   needsModelSetup,
   onPickSuggestion,
 }: {
   profilesLoading: boolean
-  serverOffline: boolean
   needsModelSetup: boolean
   onPickSuggestion: (text: string) => void
 }) {
@@ -101,25 +99,6 @@ function ChatWelcomePanel({
         <Skeleton className="h-8 w-[7.5rem] rounded-lg" />
         <Skeleton className="h-3.5 w-52 max-w-full rounded-md" />
         <Skeleton className="h-3.5 w-44 max-w-full rounded-md" />
-      </div>
-    )
-  }
-
-  if (serverOffline) {
-    return (
-      <div className="chat-welcome flex flex-1 flex-col items-center justify-center gap-5 px-6">
-        <ArciinMark size="lg" />
-        <p className="max-w-[17rem] text-center text-[13px] leading-relaxed text-[#717171]">
-          Your Arciin server is disconnected. Reconnect under Profile → Change server, or use Try
-          again on the banner above.
-        </p>
-        <Link
-          href="/profile"
-          className="rounded-2xl px-6 py-3 text-[13px] font-semibold text-white active:opacity-90"
-          style={{ backgroundColor: "#ff4f12" }}
-        >
-          Open Profile
-        </Link>
       </div>
     )
   }
@@ -1038,7 +1017,6 @@ export function ChatPage() {
   }
 
   const showWelcome = messages.length === 0
-  const serverOffline = !serverOnline
   const needsModelSetup = serverOnline && !profilesLoading && profiles.length === 0
   const hasModel = Boolean(selectedProfile)
   const canSend =
@@ -1095,7 +1073,6 @@ export function ChatPage() {
         {showWelcome ? (
           <ChatWelcomePanel
             profilesLoading={profilesLoading}
-            serverOffline={serverOffline}
             needsModelSetup={needsModelSetup}
             onPickSuggestion={setInput}
           />

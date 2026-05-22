@@ -14,6 +14,7 @@ import { HomePageSkeleton } from "@/components/home/home-page-skeleton"
 import { useCachedHomeOverview } from "@/lib/hooks/use-cached-home-overview"
 import { PageFetchErrorAlert } from "@/components/shell/page-fetch-error-alert"
 import { useConnection } from "@/components/providers/connection-provider"
+import { homeGreeting, homeSubtitle } from "@/lib/connection/offline-ui"
 import {
   activityIconFor,
   activityTypeLabel,
@@ -21,7 +22,6 @@ import {
 } from "@/lib/activity/icons"
 import { JobRow } from "@/components/jobs/job-row"
 import type { HomeOverview } from "@/lib/types/models"
-import type { MobileConnection } from "@/lib/types/api"
 import { formatBytes } from "@/lib/utils/format-bytes"
 import { formatRelativeDate } from "@/lib/utils/format-date"
 
@@ -91,16 +91,6 @@ function storagePercent(storage: NonNullable<HomeOverview["storage"]>) {
   return null
 }
 
-function homeGreeting(
-  connection: MobileConnection | null,
-  serverReachable: boolean | null,
-): string {
-  if (serverReachable === false) return "Hi there 👋"
-  const first = connection?.user.name?.split(/\s+/)[0]
-  if (first) return `Hi, ${first}`
-  return "Overview"
-}
-
 export function HomePage() {
   const { connection, serverReachable } = useConnection()
   const { data, error, reload } = useCachedHomeOverview()
@@ -145,11 +135,7 @@ export function HomePage() {
           {greeting}
         </h2>
         <p className="mt-0.5 text-[13px] text-[#717171]">
-          {serverReachable === false
-            ? "Your server is offline — reconnect to refresh this overview."
-            : connection?.instanceName
-              ? `${connection.instanceName} at a glance`
-              : "Your Arciin instance at a glance."}
+          {homeSubtitle(connection, serverReachable)}
         </p>
       </div>
 

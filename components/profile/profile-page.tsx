@@ -42,7 +42,12 @@ import { useConnection } from "@/components/providers/connection-provider"
 import { ArciinDarkGradientPanel } from "@/components/ui/arciin-dark-gradient-panel"
 import { getAuthMe } from "@/lib/api/auth"
 import { formatApiError } from "@/lib/api/errors"
-import { suppressFetchErrorWhenOffline } from "@/lib/connection/offline-ui"
+import {
+  isServerConnected,
+  profileDisplayEmail,
+  profileDisplayName,
+  suppressFetchErrorWhenOffline,
+} from "@/lib/connection/offline-ui"
 import { listLibraries } from "@/lib/api/libraries"
 
 function SectionLabel({ label }: { label: string }) {
@@ -208,7 +213,10 @@ export function ProfilePage() {
   }, [ready, sessionKey, connection])
 
   const user = connection?.user
-  const roleLabel = user?.role ?? "Member"
+  const serverConnected = isServerConnected(serverReachable)
+  const displayName = profileDisplayName(user, serverReachable)
+  const displayEmail = profileDisplayEmail(user, serverReachable)
+  const roleLabel = serverConnected ? (user?.role ?? "Member") : "—"
   const statsError = suppressFetchErrorWhenOffline(serverReachable, error)
   const avatarCacheKey = `${user?.id ?? ""}-${user?.avatarUrl ?? ""}-${user?.updatedAt ?? ""}`
 
@@ -216,7 +224,7 @@ export function ProfilePage() {
     <div className="flex flex-col gap-5">
       <ArciinDarkGradientPanel className="p-6">
         <div className="flex flex-col items-center gap-4">
-          {connection ? (
+          {connection && serverConnected ? (
             <UserAvatarImage
               key={avatarCacheKey}
               connection={connection}
@@ -230,10 +238,10 @@ export function ProfilePage() {
             />
           ) : (
             <div
-              className="flex size-16 items-center justify-center rounded-2xl bg-zinc-800 text-lg font-semibold text-[#ff4f12] ring-2 ring-white/15"
+              className="flex size-16 items-center justify-center rounded-2xl bg-zinc-800 ring-2 ring-white/15"
               aria-hidden
             >
-              ?
+              <User className="size-8 text-zinc-500" strokeWidth={1.5} />
             </div>
           )}
           <div className="text-center">
@@ -241,10 +249,10 @@ export function ProfilePage() {
               className="text-[20px] font-bold text-white"
               style={{ fontFamily: "var(--font-space-grotesk, sans-serif)", letterSpacing: "-0.3px" }}
             >
-              {user?.name?.trim() || "—"}
+              {displayName}
             </p>
-            {user?.email ? (
-              <p className="mt-1 text-[12px] text-zinc-400">{user.email}</p>
+            {displayEmail ? (
+              <p className="mt-1 text-[12px] text-zinc-400">{displayEmail}</p>
             ) : null}
             <div className="mt-2 inline-block rounded-xl border border-white/10 bg-white/[0.06] px-3 py-1">
               <p className="text-[11px] font-bold uppercase tracking-wide text-zinc-300">
@@ -255,7 +263,9 @@ export function ProfilePage() {
           <div className="flex w-full items-center justify-center border-t border-white/[0.08] pt-4">
             <div className="flex flex-1 flex-col items-center gap-1">
               <p className="text-[24px] font-black text-white tabular-nums">
-                {loadingStats ? (
+                {!serverConnected ? (
+                  "—"
+                ) : loadingStats ? (
                   <Loader2 className="mx-auto size-6 animate-spin text-zinc-500" />
                 ) : (
                   (fileCount ?? "—")
@@ -266,7 +276,9 @@ export function ProfilePage() {
             <div className="h-10 w-px bg-white/10" />
             <div className="flex flex-1 flex-col items-center gap-1">
               <p className="text-[24px] font-black text-white tabular-nums">
-                {loadingStats ? (
+                {!serverConnected ? (
+                  "—"
+                ) : loadingStats ? (
                   <Loader2 className="mx-auto size-6 animate-spin text-zinc-500" />
                 ) : (
                   (libraryCount ?? "—")
