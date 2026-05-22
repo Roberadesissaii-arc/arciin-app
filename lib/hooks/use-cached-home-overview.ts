@@ -109,7 +109,7 @@ export function useCachedHomeOverview() {
       signal: controller.signal,
     })
     return () => controller.abort()
-  }, [ready, sessionKey, connection, load, serverReachable])
+  }, [ready, sessionKey, load, serverReachable])
 
   useEffect(() => {
     const onForeground = () => {

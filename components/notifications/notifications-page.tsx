@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { Bell, ChevronLeft, ChevronRight, Clock3, Loader2, RefreshCw, Search, X } from "lucide-react"
 
 import { activityIconFor, activityTypeLabel } from "@/lib/activity/icons"
@@ -112,6 +112,11 @@ function NotificationRow({
 
 export function NotificationsPage() {
   const { connection, ready, serverReachable } = useConnection()
+  const connectionRef = useRef(connection)
+  connectionRef.current = connection
+  const serverReachableRef = useRef(serverReachable)
+  serverReachableRef.current = serverReachable
+
   const [items, setItems] = useState<ActivitySummary[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -120,21 +125,23 @@ export function NotificationsPage() {
   const [query, setQuery] = useState("")
 
   const load = useCallback(async (signal?: AbortSignal) => {
-    if (!connection) return
+    const conn = connectionRef.current
+    const reachable = serverReachableRef.current
+    if (!conn) return
     setLoading(true)
     setError(null)
     try {
-      const activity = await fetchRecentActivity(connection, signal)
+      const activity = await fetchRecentActivity(conn, signal)
       setItems(activity)
       setPage(0)
     } catch (err) {
       if (!signal?.aborted) {
-        setError(suppressFetchErrorWhenOffline(serverReachable, formatApiError(err)))
+        setError(suppressFetchErrorWhenOffline(reachable, formatApiError(err)))
       }
     } finally {
       if (!signal?.aborted) setLoading(false)
     }
-  }, [connection, serverReachable])
+  }, [])
 
   useEffect(() => { setLastSeen(getNotificationsLastSeen()) }, [])
 
@@ -150,14 +157,16 @@ export function NotificationsPage() {
     const controller = new AbortController()
     void load(controller.signal)
     return () => controller.abort()
-  }, [ready, connection, load, serverReachable])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, connection?.sessionToken, serverReachable])
 
   useEffect(() => {
     if (!ready || !connection || !isServerConnected(serverReachable)) return
     return subscribePublicUrlChanged(() => {
       void load()
     })
-  }, [ready, connection, load, serverReachable])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, connection?.sessionToken, serverReachable])
 
   useEffect(() => {
     if (!loading && !error) {

@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import {
   Activity,
   BriefcaseBusiness,
@@ -27,6 +27,11 @@ const PAGE_SIZE = 5
 
 export function MobileJobsPage() {
   const { connection, ready, serverReachable } = useConnection()
+  const connectionRef = useRef(connection)
+  connectionRef.current = connection
+  const serverReachableRef = useRef(serverReachable)
+  serverReachableRef.current = serverReachable
+
   const [jobs, setJobs] = useState<JobSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -34,19 +39,21 @@ export function MobileJobsPage() {
   const [page, setPage] = useState(0)
 
   const load = useCallback(async (signal?: AbortSignal) => {
-    if (!connection) return
+    const conn = connectionRef.current
+    const reachable = serverReachableRef.current
+    if (!conn) return
     setLoading(true)
     setError(null)
     try {
-      setJobs(await fetchJobs(connection, signal))
+      setJobs(await fetchJobs(conn, signal))
     } catch (err) {
       if (!signal?.aborted) {
-        setError(suppressFetchErrorWhenOffline(serverReachable, formatApiError(err)))
+        setError(suppressFetchErrorWhenOffline(reachable, formatApiError(err)))
       }
     } finally {
       if (!signal?.aborted) setLoading(false)
     }
-  }, [connection, serverReachable])
+  }, [])
 
   useEffect(() => {
     if (serverReachable === false) {
@@ -60,7 +67,8 @@ export function MobileJobsPage() {
     const controller = new AbortController()
     void load(controller.signal)
     return () => controller.abort()
-  }, [ready, connection, load, serverReachable])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, connection?.sessionToken, serverReachable])
 
   const active = jobs.filter((j) => j.status === "QUEUED" || j.status === "ACTIVE").length
   const filtered = query.trim()

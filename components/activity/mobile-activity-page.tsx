@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { Activity, Loader2, RefreshCw, Search, X } from "lucide-react"
 
 import { activityIconFor, activityTypeLabel, Clock3 } from "@/lib/activity/icons"
@@ -32,6 +32,11 @@ function badgeStyleFor(event: ActivitySummary) {
 
 export function MobileActivityPage({ title = "Activity" }: { title?: string }) {
   const { connection, ready, serverReachable } = useConnection()
+  const connectionRef = useRef(connection)
+  connectionRef.current = connection
+  const serverReachableRef = useRef(serverReachable)
+  serverReachableRef.current = serverReachable
+
   const [items, setItems] = useState<ActivitySummary[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -39,20 +44,22 @@ export function MobileActivityPage({ title = "Activity" }: { title?: string }) {
   const [page, setPage] = useState(0)
 
   const load = useCallback(async (signal?: AbortSignal) => {
-    if (!connection) return
+    const conn = connectionRef.current
+    const reachable = serverReachableRef.current
+    if (!conn) return
     setLoading(true)
     setError(null)
     try {
-      setItems(await fetchRecentActivity(connection, signal))
+      setItems(await fetchRecentActivity(conn, signal))
       setPage(0)
     } catch (err) {
       if (!signal?.aborted) {
-        setError(suppressFetchErrorWhenOffline(serverReachable, formatApiError(err)))
+        setError(suppressFetchErrorWhenOffline(reachable, formatApiError(err)))
       }
     } finally {
       if (!signal?.aborted) setLoading(false)
     }
-  }, [connection, serverReachable])
+  }, [])
 
   useEffect(() => {
     if (serverReachable === false) {
@@ -66,7 +73,8 @@ export function MobileActivityPage({ title = "Activity" }: { title?: string }) {
     const controller = new AbortController()
     void load(controller.signal)
     return () => controller.abort()
-  }, [ready, connection, load, serverReachable])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, connection?.sessionToken, serverReachable])
 
   const filtered = query.trim()
     ? items.filter((e) =>

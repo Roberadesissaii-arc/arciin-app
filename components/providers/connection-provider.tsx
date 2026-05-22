@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react"
@@ -58,6 +59,21 @@ function isAuthFailure(err: unknown): boolean {
   return err instanceof ApiError && (err.status === 401 || err.status === 403)
 }
 
+function connectionsEqual(a: MobileConnection | null, b: MobileConnection | null): boolean {
+  if (a === b) return true
+  if (!a || !b) return false
+  return (
+    a.sessionToken === b.sessionToken &&
+    a.apiBaseUrl === b.apiBaseUrl &&
+    a.webUrl === b.webUrl &&
+    a.socketUrl === b.socketUrl &&
+    a.instanceName === b.instanceName &&
+    a.user?.id === b.user?.id &&
+    a.user?.name === b.user?.name &&
+    a.user?.email === b.user?.email
+  )
+}
+
 type ConnectionContextValue = {
   connection: MobileConnection | null
   ready: boolean
@@ -91,6 +107,8 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
   const [accountsTick, setAccountsTick] = useState(0)
   /** Bumps when URLs change so Socket.IO reconnects to the new origin. */
   const [socketGeneration, setSocketGeneration] = useState(0)
+  /** True while the initial getAuthMe is in flight — prevents a duplicate foreground probe. */
+  const initializingRef = useRef(true)
 
   const accounts = useMemo(() => {
     void accountsTick
@@ -104,7 +122,7 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
     }
     saveServerProfile(result.server)
     saveConnection(result.connection)
-    setConnection(result.connection)
+    setConnection((prev) => connectionsEqual(prev, result.connection) ? prev : result.connection)
     setServerReachable(true)
     if (result.urlChanged) setSocketGeneration((n) => n + 1)
     return true
@@ -156,7 +174,7 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
       const me = await getAuthMe(stored)
       const next = { ...stored, user: me.user }
       saveConnection(next)
-      setConnection(next)
+      setConnection((prev) => connectionsEqual(prev, next) ? prev : next)
       setServerReachable(true)
       return true
     } catch (err) {
@@ -176,24 +194,24 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
           saveServerProfile(resolved.server)
           const next = applyServerEndpointsToConnection(stored, resolved.server)
           saveConnection(next)
-          setConnection(next)
+          setConnection((prev) => connectionsEqual(prev, next) ? prev : next)
           setServerReachable(true)
           dispatchAppForeground()
           try {
             const me = await getAuthMe(next)
             const verified = { ...next, user: me.user }
             saveConnection(verified)
-            setConnection(verified)
+            setConnection((prev) => connectionsEqual(prev, verified) ? prev : verified)
           } catch {
             /* session still valid on new base; user refresh can retry */
           }
           return true
         }
-        setConnection(stored)
+        setConnection((prev) => connectionsEqual(prev, stored) ? prev : stored)
         setServerReachable(false)
         return false
       }
-      setConnection(stored)
+      setConnection((prev) => connectionsEqual(prev, stored) ? prev : stored)
       setServerReachable(true)
       return true
     }
@@ -243,6 +261,7 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
 
     if (!cancelled) {
       setConnection(stored)
+      setServerReachable(true)
       setReady(true)
     }
 
@@ -252,7 +271,7 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
         if (!cancelled) {
           const next = { ...stored, user: me.user }
           saveConnection(next)
-          setConnection(next)
+          setConnection((prev) => connectionsEqual(prev, next) ? prev : next)
           setServerReachable(true)
         }
       } catch (err) {
@@ -271,14 +290,14 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
               saveServerProfile(resolved.server)
               const next = applyServerEndpointsToConnection(stored, resolved.server)
               saveConnection(next)
-              setConnection(next)
+              setConnection((prev) => connectionsEqual(prev, next) ? prev : next)
               setServerReachable(true)
               try {
                 const me = await getAuthMe(next)
                 if (!cancelled) {
                   const verified = { ...next, user: me.user }
                   saveConnection(verified)
-                  setConnection(verified)
+                  setConnection((prev) => connectionsEqual(prev, verified) ? prev : verified)
                 }
               } catch {
                 /* connected on new URL; profile refresh can retry */
@@ -288,6 +307,8 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
             }
           }
         }
+      } finally {
+        if (!cancelled) initializingRef.current = false
       }
     })()
 
@@ -436,6 +457,7 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
   }, [refresh, runServerSync])
 
   const probeServerOnForeground = useCallback(async () => {
+    if (initializingRef.current) return
     const ok = await tryAutoReconnect()
     if (ok) dispatchAppForeground()
   }, [tryAutoReconnect])
@@ -537,7 +559,7 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
         saveServerProfile(server)
         const next = applyServerEndpointsToConnection(current, server)
         saveConnection(next)
-        setConnection(next)
+        setConnection((prev) => connectionsEqual(prev, next) ? prev : next)
         setServerReachable(true)
         setSocketGeneration((n) => n + 1)
       }
