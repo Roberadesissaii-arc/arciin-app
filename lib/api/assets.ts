@@ -128,11 +128,13 @@ export function assetStreamUrl(connection: MobileConnection, assetId: string) {
     inline: "1",
     access_token: connection.sessionToken,
   })
-  const q = params.toString()
   if (shouldUseArciinProxy(connection)) {
-    return `/api/arciin/assets/${encodeURIComponent(assetId)}/download?${q}`
+    // <video>/<audio> elements can't send custom headers, so embed api_base in the query
+    // so the proxy route can extract it without the x-arciin-api-base header.
+    params.set("api_base", btoa(connection.apiBaseUrl))
+    return `/api/arciin/assets/${encodeURIComponent(assetId)}/download?${params.toString()}`
   }
-  return buildApiUrl(connection.apiBaseUrl, `/assets/${assetId}/download?${q}`)
+  return buildApiUrl(connection.apiBaseUrl, `/assets/${assetId}/download?${params.toString()}`)
 }
 
 export function getAsset(connection: MobileConnection, assetId: string, signal?: AbortSignal) {

@@ -25,16 +25,26 @@ async function proxyUpstream(request: Request, context: RouteContext) {
   const subPath = path.join("/")
   const isPublic = isPublicProxyPath(subPath)
 
-  if (!apiBase) {
+  const reqUrl = new URL(request.url)
+  const search = reqUrl.search
+  const searchParams = reqUrl.searchParams
+  const queryToken = searchParams.get("access_token")?.trim() ?? ""
+
+  // <video>/<audio> elements can't send custom headers — accept api_base from query param
+  let resolvedApiBase = apiBase
+  if (!resolvedApiBase) {
+    const encoded = searchParams.get("api_base")
+    if (encoded) {
+      try { resolvedApiBase = atob(encoded).replace(/\/+$/, "") } catch { /* ignore */ }
+    }
+  }
+
+  if (!resolvedApiBase) {
     return NextResponse.json(
       { error: { code: "BAD_REQUEST", message: "Missing server address." } },
       { status: 400 },
     )
   }
-
-  const search = new URL(request.url).search
-  const searchParams = new URL(request.url).searchParams
-  const queryToken = searchParams.get("access_token")?.trim() ?? ""
 
   let bearer = auth?.startsWith("Bearer ") ? auth : null
   if (!bearer && queryToken && !queryToken.startsWith("arc_")) {
@@ -48,7 +58,7 @@ async function proxyUpstream(request: Request, context: RouteContext) {
     )
   }
 
-  const upstream = `${apiBase}/${subPath}${search}`
+  const upstream = `${resolvedApiBase}/${subPath}${search}`
 
   const method = request.method
   const hasBody = method !== "GET" && method !== "HEAD"
@@ -64,6 +74,11 @@ async function proxyUpstream(request: Request, context: RouteContext) {
   if (hasBody && requestBody) {
     upstreamHeaders["Content-Type"] =
       request.headers.get("content-type") ?? "application/json"
+  }
+  // Forward Range header so video/audio seeking works through the proxy
+  const rangeHeader = request.headers.get("range")
+  if (rangeHeader) {
+    upstreamHeaders.Range = rangeHeader
   }
 
   let res: Response
@@ -97,13 +112,19 @@ async function proxyUpstream(request: Request, context: RouteContext) {
     })
   }
 
-  const responseBody = await res.arrayBuffer()
-  return new NextResponse(responseBody, {
+  // Stream binary responses (video, audio, images) — never buffer the whole body.
+  // Forward Range-related headers so the browser's media engine can seek.
+  const binaryHeaders: Record<string, string> = {
+    "Content-Type": contentType,
+    "Cache-Control": res.headers.get("cache-control") ?? "private, max-age=300",
+  }
+  for (const h of ["Content-Range", "Accept-Ranges", "Content-Length", "Content-Disposition"]) {
+    const v = res.headers.get(h)
+    if (v) binaryHeaders[h] = v
+  }
+  return new NextResponse(res.body, {
     status: res.status,
-    headers: {
-      "Content-Type": contentType,
-      "Cache-Control": res.headers.get("cache-control") ?? "private, max-age=300",
-    },
+    headers: binaryHeaders,
   })
 }
 
