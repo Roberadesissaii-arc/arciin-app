@@ -75,6 +75,32 @@ export function isNetworkError(err: unknown): boolean {
   return false
 }
 
+/** User-facing copy for chat stream / provider failures (Ollama, model missing, etc.). */
+export function formatChatProviderError(message: string): string {
+  const trimmed = message.trim()
+  if (!trimmed) return "Chat failed. Try again or pick a different model."
+
+  if (/choose an ollama model/i.test(trimmed)) return trimmed
+
+  if (/model.*not found|pull.*model|does not exist/i.test(trimmed)) {
+    return `${trimmed} Tap the boxes icon below and choose a model installed on your Arciin server.`
+  }
+
+  if (/ollama cloud rejected|api key/i.test(trimmed)) return trimmed
+
+  if (/could not verify ollama cloud/i.test(trimmed)) {
+    return `${trimmed} Add or rotate your key under Models → Ollama Cloud.`
+  }
+
+  if (/empty response body from ollama/i.test(trimmed)) {
+    return "Ollama returned an empty reply. Check that Ollama is running on your Arciin server and the model is installed."
+  }
+
+  if (/provider error|ollama/i.test(trimmed)) return trimmed
+
+  return trimmed
+}
+
 export function formatApiError(err: unknown, serverAddress?: string | null): string {
   if (err instanceof ApiError) {
     if (err.code === "INVALID_PAIRING_CODE") {

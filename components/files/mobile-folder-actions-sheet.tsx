@@ -68,7 +68,7 @@ export function MobileFolderActionsSheet({
               className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#f7f7f7] text-[14px] font-semibold text-[#222222] active:bg-[#ececec]"
               style={{ border: "1px solid #e5e5e5" }}
             >
-              <Folder className="size-4 text-[#ff4f12]" />
+              <Folder className="text-accent size-4" />
               Open folder
             </button>
             <button

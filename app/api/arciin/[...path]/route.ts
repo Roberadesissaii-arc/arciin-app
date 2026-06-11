@@ -1,21 +1,48 @@
 import { NextResponse } from "next/server"
 
 import { ARCIIN_API_BASE_HEADER } from "@/lib/api/arciin-proxy"
+import {
+  buildUpstreamSearch,
+  isCoLocatedProxyTarget,
+  validateProxyApiBase,
+} from "@/lib/security/validate-proxy-upstream"
 
 type RouteContext = { params: Promise<{ path: string[] }> }
 
-const PUBLIC_API_PREFIXES = [
+const ALWAYS_PUBLIC_PREFIXES = [
   "health",
   "mobile/discover",
   "mobile/pair/verify",
   "mobile/login",
   "mobile/pair",
+  "instance/status",
+  "auth/login",
 ] as const
 
-function isPublicProxyPath(subPath: string): boolean {
-  return PUBLIC_API_PREFIXES.some(
+/** Pre-auth setup/recovery — allowed on hosted companion (Vercel) or co-located LAN only. */
+const COLOCATED_OR_HOSTED_PUBLIC_PREFIXES = [
+  "instance/storage-discovery",
+  "instance/storage-prepare",
+  "instance/claim",
+  "auth/recovery/lookup",
+  "auth/recovery/reset",
+] as const
+
+function matchesPrefix(subPath: string, prefixes: readonly string[]): boolean {
+  return prefixes.some(
     (prefix) => subPath === prefix || subPath.startsWith(`${prefix}/`),
   )
+}
+
+function isPublicProxyPath(subPath: string): boolean {
+  return (
+    matchesPrefix(subPath, ALWAYS_PUBLIC_PREFIXES) ||
+    matchesPrefix(subPath, COLOCATED_OR_HOSTED_PUBLIC_PREFIXES)
+  )
+}
+
+function isSensitivePublicProxyPath(subPath: string): boolean {
+  return matchesPrefix(subPath, COLOCATED_OR_HOSTED_PUBLIC_PREFIXES)
 }
 
 async function proxyUpstream(request: Request, context: RouteContext) {
@@ -26,7 +53,6 @@ async function proxyUpstream(request: Request, context: RouteContext) {
   const isPublic = isPublicProxyPath(subPath)
 
   const reqUrl = new URL(request.url)
-  const search = reqUrl.search
   const searchParams = reqUrl.searchParams
   const queryToken = searchParams.get("access_token")?.trim() ?? ""
 
@@ -46,6 +72,15 @@ async function proxyUpstream(request: Request, context: RouteContext) {
     )
   }
 
+  const validatedBase = validateProxyApiBase(resolvedApiBase)
+  if (!validatedBase.ok) {
+    return NextResponse.json(
+      { error: { code: validatedBase.code, message: validatedBase.message } },
+      { status: validatedBase.code === "BAD_REQUEST" ? 400 : 403 },
+    )
+  }
+  resolvedApiBase = validatedBase.normalizedBase
+
   let bearer = auth?.startsWith("Bearer ") ? auth : null
   if (!bearer && queryToken && !queryToken.startsWith("arc_")) {
     bearer = `Bearer ${queryToken}`
@@ -58,36 +93,71 @@ async function proxyUpstream(request: Request, context: RouteContext) {
     )
   }
 
-  const upstream = `${resolvedApiBase}/${subPath}${search}`
+  if (
+    isPublic &&
+    !bearer &&
+    isSensitivePublicProxyPath(subPath) &&
+    !process.env.VERCEL &&
+    !isCoLocatedProxyTarget(resolvedApiBase)
+  ) {
+    return NextResponse.json(
+      {
+        error: {
+          code: "FORBIDDEN",
+          message: "Unauthenticated proxy requests must target this instance's API.",
+        },
+      },
+      { status: 403 },
+    )
+  }
+
+  const upstream = `${resolvedApiBase}/${subPath}${buildUpstreamSearch(searchParams)}`
 
   const method = request.method
   const hasBody = method !== "GET" && method !== "HEAD"
-  const requestBody = hasBody ? await request.text() : undefined
+  const contentType = request.headers.get("content-type") ?? ""
+  const isMultipart = contentType.includes("multipart/form-data")
+  const isUploadPath = subPath === "uploads" || subPath.startsWith("uploads/")
 
+  const isDownloadPath = /\/download$/.test(subPath)
   const acceptHeader = request.headers.get("accept")
   const upstreamHeaders: Record<string, string> = {
-    Accept: acceptHeader ?? "application/json",
+    Accept: acceptHeader ?? (isDownloadPath ? "*/*" : "application/json"),
   }
   if (bearer) {
     upstreamHeaders.Authorization = bearer
   }
-  if (hasBody && requestBody) {
-    upstreamHeaders["Content-Type"] =
-      request.headers.get("content-type") ?? "application/json"
+
+  let requestBody: BodyInit | undefined
+  if (hasBody) {
+    if (isMultipart) {
+      requestBody = await request.formData()
+    } else {
+      const text = await request.text()
+      requestBody = text.length > 0 ? text : undefined
+      if (requestBody) {
+        upstreamHeaders["Content-Type"] = contentType || "application/json"
+      }
+    }
   }
+
   // Forward Range header so video/audio seeking works through the proxy
   const rangeHeader = request.headers.get("range")
   if (rangeHeader) {
     upstreamHeaders.Range = rangeHeader
   }
 
+  const timeoutMs = isUploadPath ? 3_600_000 : isDownloadPath ? 600_000 : 15_000
+
   let res: Response
   try {
     res = await fetch(upstream, {
       method,
       headers: upstreamHeaders,
-      body: hasBody && requestBody ? requestBody : undefined,
+      body: requestBody,
       cache: "no-store",
+      redirect: "manual",
+      signal: AbortSignal.timeout(timeoutMs),
     })
   } catch {
     return NextResponse.json(
@@ -101,21 +171,33 @@ async function proxyUpstream(request: Request, context: RouteContext) {
     )
   }
 
-  const contentType = res.headers.get("content-type") ?? "application/json"
-  const isJson = contentType.includes("application/json")
+  if (res.status >= 300 && res.status < 400) {
+    return NextResponse.json(
+      {
+        error: {
+          code: "UPSTREAM_REDIRECT",
+          message: "Upstream redirect is not allowed.",
+        },
+      },
+      { status: 502 },
+    )
+  }
+
+  const responseContentType = res.headers.get("content-type") ?? "application/json"
+  const isJson = responseContentType.includes("application/json")
 
   if (isJson) {
     const text = await res.text()
     return new NextResponse(text || null, {
       status: res.status,
-      headers: { "Content-Type": contentType },
+      headers: { "Content-Type": responseContentType },
     })
   }
 
   // Stream binary responses (video, audio, images) — never buffer the whole body.
   // Forward Range-related headers so the browser's media engine can seek.
   const binaryHeaders: Record<string, string> = {
-    "Content-Type": contentType,
+    "Content-Type": responseContentType,
     "Cache-Control": res.headers.get("cache-control") ?? "private, max-age=300",
   }
   for (const h of ["Content-Range", "Accept-Ranges", "Content-Length", "Content-Disposition"]) {
@@ -133,3 +215,6 @@ export const POST = proxyUpstream
 export const DELETE = proxyUpstream
 export const PATCH = proxyUpstream
 export const PUT = proxyUpstream
+
+/** Allow large file uploads through the proxy (server-side ingest can take minutes). */
+export const maxDuration = 3600

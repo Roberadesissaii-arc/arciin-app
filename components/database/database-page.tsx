@@ -7,7 +7,6 @@ import {
   ChevronRight,
   Database,
   Layers2,
-  Loader2,
   RefreshCw,
 } from "lucide-react"
 
@@ -59,68 +58,71 @@ function StatPill({
 function TableCardSkeleton() {
   return (
     <div
-      className="flex animate-pulse flex-col gap-3 rounded-2xl bg-white p-4"
-      style={{ border: "1px solid #e5e5e5" }}
+      className="flex animate-pulse flex-col overflow-hidden rounded-2xl bg-white"
+      style={{ border: "1px solid #e5e5e5", boxShadow: "0 2px 16px rgba(0,0,0,0.04)" }}
     >
-      <div className="flex items-center gap-3">
-        <div className="size-11 rounded-2xl bg-[#ececec]" />
-        <div className="flex-1 space-y-2">
-          <div className="h-3.5 w-24 rounded bg-[#ececec]" />
-          <div className="h-2.5 w-full rounded bg-[#f0f0f0]" />
+      <div className="flex items-start gap-3 p-4 pb-2">
+        <div className="size-12 rounded-2xl bg-[#ececec]" />
+        <div className="flex-1 space-y-2 pt-0.5">
+          <div className="h-4 w-28 rounded-md bg-[#ececec]" />
+          <div className="h-2.5 w-16 rounded bg-[#f0f0f0]" />
         </div>
       </div>
-      <div className="h-2 w-full rounded-full bg-[#f0f0f0]" />
+      <div className="mx-4 h-2.5 rounded bg-[#f5f5f5]" />
+      <div className="mt-3 px-4 py-3">
+        <div className="h-4 w-14 animate-pulse rounded bg-[#ececec]" />
+      </div>
     </div>
   )
 }
 
 function SchemaTableCard({ table }: { table: AdminTable }) {
   const Icon = tableIconFor(table.name)
-  const maxHint = 100_000
-  const barPct = Math.min(100, Math.round((table.count / maxHint) * 100)) || (table.count > 0 ? 4 : 0)
 
   return (
     <Link
       href={`/database/${table.name}`}
-      className="group flex flex-col gap-3 rounded-2xl bg-white p-4 active:scale-[0.99] active:opacity-90"
+      className="group flex flex-col overflow-hidden rounded-2xl bg-white active:scale-[0.985] active:opacity-95"
       style={{
         border: "1px solid #e5e5e5",
-        boxShadow: "0 2px 12px rgba(0,0,0,0.04)",
+        boxShadow: "0 2px 16px rgba(0,0,0,0.06)",
       }}
     >
-      <div className="flex items-start gap-3">
+      <div className="flex items-start gap-3 p-4 pb-2">
         <div
-          className="flex size-11 shrink-0 items-center justify-center rounded-2xl"
-          style={{
-            background: "linear-gradient(145deg, rgba(255,79,18,0.14) 0%, rgba(255,79,18,0.04) 100%)",
-            border: "1px solid rgba(255,79,18,0.2)",
-          }}
+          className="page-intro-hero flex size-12 shrink-0 items-center justify-center rounded-2xl"
+          style={{ boxShadow: "0 4px 14px var(--arciin-accent-ring, rgba(255, 79, 18, 0.28))" }}
         >
-          <Icon className="size-5 text-[#ff4f12]" strokeWidth={2} />
+          <Icon className="size-5 text-white" strokeWidth={2} aria-hidden />
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
-            <p className="text-[14px] font-semibold leading-tight text-[#222222]">{table.label}</p>
-            <ChevronRight className="size-4 shrink-0 text-[#c0c0c0] transition-transform group-active:translate-x-0.5" />
+            <p
+              className="text-[15px] font-bold leading-tight tracking-tight text-[#222222]"
+              style={{ fontFamily: "var(--font-space-grotesk, sans-serif)" }}
+            >
+              {table.label}
+            </p>
+            <ChevronRight className="text-accent mt-0.5 size-4 shrink-0 opacity-40 transition-all group-active:translate-x-0.5 group-active:opacity-100" />
           </div>
-          <p className="mt-1 line-clamp-2 text-[11px] leading-snug text-[#a0a0a0]">{table.description}</p>
+          <p className="mt-0.5 truncate font-mono text-[10px] text-[#a0a0a0]">{table.name}</p>
         </div>
       </div>
-      <div>
-        <div className="mb-1.5 flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider">
-          <span className="text-[#a0a0a0]">Records</span>
-          <span className="tabular-nums text-[#222222]">{table.count.toLocaleString()}</span>
-        </div>
-        <div className="h-1.5 overflow-hidden rounded-full bg-[#f0f0f0]">
-          <div
-            className="h-full rounded-full transition-all"
-            style={{
-              width: `${barPct}%`,
-              minWidth: table.count > 0 ? "6%" : 0,
-              background: "linear-gradient(90deg, #ff4f12 0%, #ff6a33 100%)",
-            }}
-          />
-        </div>
+
+      <p className="line-clamp-2 px-4 pb-3 text-[11px] leading-relaxed text-[#717171]">
+        {table.description}
+      </p>
+
+      <div className="page-intro-hero flex items-center justify-between px-4 py-2.5">
+        <span
+          className="text-[10px] font-semibold uppercase tracking-wider"
+          style={{ color: "rgba(255,255,255,0.72)" }}
+        >
+          Rows
+        </span>
+        <span className="text-[14px] font-bold tabular-nums text-white">
+          {table.count.toLocaleString()}
+        </span>
       </div>
     </Link>
   )
@@ -290,17 +292,10 @@ export function DatabasePage() {
         </p>
         <Link
           href="/database/app-data"
-          className="flex items-center gap-3 rounded-2xl bg-white p-4 active:opacity-80"
-          style={{
-            border: "1px solid #ff4f12",
-            background: "linear-gradient(135deg, #fff7f4 0%, #ffffff 60%)",
-          }}
+          className="accent-link-card flex items-center gap-3 rounded-2xl p-4 active:opacity-80"
         >
-          <div
-            className="flex size-10 shrink-0 items-center justify-center rounded-xl"
-            style={{ backgroundColor: "rgba(255,79,18,0.12)", border: "1px solid rgba(255,79,18,0.25)" }}
-          >
-            <Layers2 className="size-5 text-[#ff4f12]" />
+          <div className="accent-icon-tile flex size-10 shrink-0 items-center justify-center rounded-xl">
+            <Layers2 className="text-accent size-5" />
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-[13px] font-semibold text-[#222222]">App data databases</p>
@@ -314,14 +309,17 @@ export function DatabasePage() {
                 {appDbCount}
               </span>
             ) : null}
-            <ArrowRight className="size-4 text-[#ff4f12]" />
+            <ArrowRight className="text-accent size-4" />
           </div>
         </Link>
       </div>
 
       <div>
-        <p className="mb-3 ml-1 text-[11px] font-semibold uppercase tracking-wider text-[#a0a0a0]">
+        <p className="mb-2 ml-1 text-[11px] font-semibold uppercase tracking-wider text-[#a0a0a0]">
           Schema tables
+        </p>
+        <p className="mb-3 ml-1 text-[11px] leading-relaxed text-[#a0a0a0]">
+          Tap a table to browse live PostgreSQL rows.
         </p>
         {loading && tables.length === 0 && !adminDenied ? (
           <div className="grid gap-3">

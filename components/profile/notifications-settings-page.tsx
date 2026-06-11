@@ -3,50 +3,52 @@
 import Link from "next/link"
 import { Bell, ChevronRight } from "lucide-react"
 
+import { NotificationsInlinePanel } from "@/components/profile/notifications-inline-panel"
 import { useConnection } from "@/components/providers/connection-provider"
 import { profileSectionSubtitle } from "@/lib/connection/offline-ui"
 
-function SectionLabel({ label }: { label: string }) {
-  return (
-    <p className="mb-2 ml-1 text-[11px] font-semibold uppercase tracking-widest text-[#a0a0a0]">
-      {label}
-    </p>
-  )
-}
-
 /**
- * Mobile uses the activity notifications screen (bell), not desktop-style toast popups.
+ * Notification preferences plus link to the activity feed (bell on Home).
  */
 export function NotificationsSettingsPage() {
   const { serverReachable } = useConnection()
 
   return (
-    <div className="flex flex-col gap-5">
+    <div
+      className="-mx-4 -mt-4 flex flex-col gap-5 px-4 pb-2"
+      style={{ paddingTop: "max(1rem, env(safe-area-inset-top, 0px))" }}
+    >
       <div
         className="overflow-hidden rounded-2xl bg-white p-5"
         style={{ border: "1px solid #e5e5e5" }}
       >
         <div className="flex size-12 items-center justify-center rounded-2xl bg-[#fff4f0]">
-          <Bell className="size-6 text-[#ff4f12]" />
+          <Bell className="text-accent size-6" />
         </div>
         <h1
           className="mt-4 text-[20px] font-bold tracking-tight text-[#222222]"
           style={{ fontFamily: "var(--font-space-grotesk, sans-serif)" }}
         >
-          Activity notifications
+          Notifications
         </h1>
         <p className="mt-2 text-[13px] leading-relaxed text-[#717171]">
-          On mobile, uploads and activity from your Arciin server appear in the
-          notifications list — the same feed as on desktop, without separate toast
-          popups on this device.
+          Choose which events appear in your activity feed. Uploads and security alerts from your
+          Arciin server show up under the bell on Home.
         </p>
         <p className="mt-2 text-[12px] text-[#a0a0a0]">
           {profileSectionSubtitle(
             serverReachable,
-            "Open the bell on Home to see recent events.",
-            "Reconnect your server to load notifications.",
+            "Changes save to your account on this server.",
+            "Reconnect your server to change preferences.",
           )}
         </p>
+      </div>
+
+      <div
+        className="overflow-hidden rounded-2xl bg-white px-4 py-4"
+        style={{ border: "1px solid #e5e5e5" }}
+      >
+        <NotificationsInlinePanel enabled />
       </div>
 
       <Link
@@ -61,7 +63,7 @@ export function NotificationsSettingsPage() {
           <Bell className="size-5 text-[#717171]" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-[14px] font-semibold text-[#222222]">Open notifications</p>
+          <p className="text-[14px] font-semibold text-[#222222]">Open activity feed</p>
           <p className="text-[11px] text-[#a0a0a0]">Uploads, files, and security activity</p>
         </div>
         <ChevronRight className="size-4 text-[#c0c0c0]" />

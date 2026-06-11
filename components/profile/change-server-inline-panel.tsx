@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation"
 import { Check, Loader2, Plus, Server, Trash2 } from "lucide-react"
 
 import { RemoveServerSheet } from "@/components/profile/remove-server-sheet"
+import { PanelStatusBanner } from "@/components/settings/panel-status-banner"
 import { useConnection } from "@/components/providers/connection-provider"
+import { usePanelStatusMessage } from "@/lib/hooks/use-panel-status-message"
 import { formatApiError } from "@/lib/api/errors"
 import {
   connectionFromAccount,
@@ -90,7 +92,7 @@ export function ChangeServerInlinePanel({ enabled }: { enabled: boolean }) {
     useConnection()
   const [switchingId, setSwitchingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [message, setMessage] = useState<string | null>(null)
+  const { message, showStatus, clearStatus } = usePanelStatusMessage(enabled)
   const [probeById, setProbeById] = useState<Record<string, ProbeStatus>>({})
   const [removeTarget, setRemoveTarget] = useState<MobileAccount | null>(null)
 
@@ -99,8 +101,8 @@ export function ChangeServerInlinePanel({ enabled }: { enabled: boolean }) {
   useEffect(() => {
     if (!enabled) return
     setError(null)
-    setMessage(null)
-  }, [enabled, connection?.apiBaseUrl])
+    clearStatus()
+  }, [enabled, connection?.apiBaseUrl, clearStatus])
 
   useEffect(() => {
     if (!enabled || accounts.length === 0) return
@@ -137,7 +139,7 @@ export function ChangeServerInlinePanel({ enabled }: { enabled: boolean }) {
       if (account.id === activeId && connection) return
       setSwitchingId(account.id)
       setError(null)
-      setMessage(null)
+      clearStatus()
       try {
         const conn = connectionFromAccount(account)
         if (!conn || isConnectionExpired(conn)) {
@@ -147,7 +149,7 @@ export function ChangeServerInlinePanel({ enabled }: { enabled: boolean }) {
         }
         const ok = await switchAccount(account.id)
         if (ok) {
-          setMessage(`Switched to ${account.server.instanceName}.`)
+          showStatus(`Switched to ${account.server.instanceName}.`)
           await refresh()
         } else {
           router.push("/sign-in")
@@ -164,7 +166,7 @@ export function ChangeServerInlinePanel({ enabled }: { enabled: boolean }) {
   async function handleRemoveServer(account: MobileAccount) {
     const onlyServer = accounts.length <= 1
     deleteServer(account.id)
-    setMessage(`Removed ${account.server.instanceName} from this phone.`)
+    showStatus(`Removed ${account.server.instanceName} from this phone.`)
     if (onlyServer) {
       router.push("/sign-in")
     }
@@ -193,7 +195,7 @@ export function ChangeServerInlinePanel({ enabled }: { enabled: boolean }) {
       </div>
 
       {error ? <p className="text-[12px] text-[#b91c1c]">{error}</p> : null}
-      {message ? <p className="text-[12px] text-[#15803d]">{message}</p> : null}
+      <PanelStatusBanner message={message} />
 
       <ul className="flex flex-col gap-2">
         {sorted.length === 0 ? (
@@ -225,13 +227,13 @@ export function ChangeServerInlinePanel({ enabled }: { enabled: boolean }) {
                 <div
                   className={cn(
                     "flex items-center gap-2 rounded-xl bg-white pr-2",
-                    isActive && "ring-1 ring-[#ff4f12]/30",
+                    isActive && "ring-1 ring-[var(--arciin-accent-ring)]",
                   )}
                   style={{
                     border: isActive
-                      ? "1.5px solid rgba(255,79,18,0.45)"
+                      ? "1.5px solid var(--arciin-accent-ring)"
                       : "1px solid #e5e5e5",
-                    backgroundColor: isActive ? "#fff7f4" : "#ffffff",
+                    backgroundColor: isActive ? "var(--arciin-accent-soft)" : "#ffffff",
                   }}
                 >
                   <button
@@ -241,17 +243,15 @@ export function ChangeServerInlinePanel({ enabled }: { enabled: boolean }) {
                     className="flex min-w-0 flex-1 items-center gap-3 px-3.5 py-3 text-left active:bg-[#f7f7f7] disabled:opacity-60"
                   >
                     <div
-                      className="flex size-10 shrink-0 items-center justify-center rounded-xl"
-                      style={{
-                        backgroundColor: isActive
-                          ? "rgba(255,79,18,0.12)"
-                          : "rgba(255,79,18,0.08)",
-                      }}
+                      className={cn(
+                        "flex size-10 shrink-0 items-center justify-center rounded-xl",
+                        isActive ? "accent-icon-tile" : "bg-accent-soft",
+                      )}
                     >
                       <Server
                         className={cn(
                           "size-5",
-                          status.tone === "offline" ? "text-[#a0a0a0]" : "text-[#ff4f12]",
+                          status.tone === "offline" ? "text-[#a0a0a0]" : "text-accent",
                         )}
                       />
                     </div>
@@ -269,7 +269,7 @@ export function ChangeServerInlinePanel({ enabled }: { enabled: boolean }) {
                     {busy ? (
                       <Loader2 className="size-4 shrink-0 animate-spin text-[#a0a0a0]" />
                     ) : isActive ? (
-                      <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-[#ff4f12]">
+                      <span className="bg-accent flex size-6 shrink-0 items-center justify-center rounded-full">
                         <Check className="size-3.5 text-white" />
                       </span>
                     ) : null}

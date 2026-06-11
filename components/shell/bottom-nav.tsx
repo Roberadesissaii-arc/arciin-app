@@ -1,8 +1,13 @@
 "use client"
 
+import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { createPortal } from "react-dom"
 import { Boxes, Files, LayoutGrid, Sparkles, User } from "lucide-react"
+
+import { useBottomNavViewport } from "@/hooks/use-bottom-nav-viewport"
+import { isBottomNavActive } from "@/lib/mobile/bottom-nav-active"
 
 const ALL_ITEMS = [
   { href: "/home", label: "Home", icon: LayoutGrid },
@@ -12,26 +17,33 @@ const ALL_ITEMS = [
   { href: "/profile", label: "Profile", icon: User },
 ] as const
 
-function isActive(pathname: string, href: string) {
-  if (href === "/home") return pathname === "/home"
-  return pathname === href || pathname.startsWith(`${href}/`)
-}
-
-/** Floating bottom nav — offset via `.mobile-bottom-nav` in globals.css */
+/** Floating bottom nav — portaled to body so sheets/keyboard cannot shift it. */
 export function BottomNav() {
   const pathname = usePathname()
+  const [mounted, setMounted] = useState(false)
+  const navRef = useRef<HTMLElement>(null)
+  const isChat = pathname === "/chat" || pathname.startsWith("/chat/")
 
-  if (pathname === "/chat" || pathname.startsWith("/chat/")) {
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  useBottomNavViewport(navRef, mounted && !isChat)
+
+  if (isChat) {
     return null
   }
 
-  return (
+  if (!mounted) return null
+
+  return createPortal(
     <nav
+      ref={navRef}
       aria-label="Main navigation"
-      className="mobile-bottom-nav pointer-events-auto fixed inset-x-4 z-30 flex h-16 items-center rounded-3xl border border-[#2a2a2a] bg-[#111111] shadow-[0_4px_28px_rgba(0,0,0,0.22)]"
+      className="mobile-bottom-nav mobile-bottom-nav-portal pointer-events-auto flex h-16 items-center rounded-3xl border border-[#2a2a2a] bg-[#111111] shadow-[0_4px_28px_rgba(0,0,0,0.22)]"
     >
       {ALL_ITEMS.map(({ href, label, icon: Icon }) => {
-        const active = isActive(pathname, href)
+        const active = isBottomNavActive(pathname, href)
         return (
           <Link
             key={href}
@@ -42,17 +54,21 @@ export function BottomNav() {
           >
             <Icon
               className="size-[22px]"
-              style={{ color: active ? "#ff4f12" : "#666666" }}
+              style={{ color: active ? "var(--arciin-accent, #ff4f12)" : "#666666" }}
             />
             <span
               className="text-[10px] font-semibold"
-              style={{ color: active ? "#ff4f12" : "#666666", letterSpacing: "0.02em" }}
+              style={{
+                color: active ? "var(--arciin-accent, #ff4f12)" : "#666666",
+                letterSpacing: "0.02em",
+              }}
             >
               {label}
             </span>
           </Link>
         )
       })}
-    </nav>
+    </nav>,
+    document.body,
   )
 }

@@ -1,5 +1,9 @@
 import { fetchApi } from "@/lib/api/client"
 import type { MobileConnection } from "@/lib/types/api"
+import {
+  buildSingleEntryImportText,
+  type PasswordEntryDraft,
+} from "@/lib/password-vault/import-text"
 
 export type PasswordVaultDisplaySettings = {
   showUsername: boolean
@@ -34,6 +38,54 @@ export type PasswordVaultList = {
 }
 
 export type VaultUnlockInput = { password?: string; pin?: string }
+
+export type PasswordVaultImportResult = {
+  imported: number
+}
+
+export function importPasswordVault(
+  connection: MobileConnection,
+  input: { text: string; fileName?: string; replace?: boolean },
+) {
+  return fetchApi<PasswordVaultImportResult>("/settings/password-vault/import", {
+    connection,
+    method: "POST",
+    body: input,
+  })
+}
+
+export function createPasswordVaultEntry(connection: MobileConnection, entry: PasswordEntryDraft) {
+  return importPasswordVault(connection, {
+    text: buildSingleEntryImportText(entry),
+    fileName: "manual-entry.csv",
+  })
+}
+
+export function updatePasswordVaultEntry(
+  connection: MobileConnection,
+  id: string,
+  input: {
+    name?: string
+    username?: string
+    password?: string
+    url?: string
+    notes?: string
+    category?: string
+  },
+) {
+  return fetchApi<PasswordVaultEntry>(`/settings/password-vault/${id}`, {
+    connection,
+    method: "PATCH",
+    body: input,
+  })
+}
+
+export function deletePasswordVaultEntry(connection: MobileConnection, id: string) {
+  return fetchApi<{ success: boolean }>(`/settings/password-vault/${id}`, {
+    connection,
+    method: "DELETE",
+  })
+}
 
 export function getPasswordVault(connection: MobileConnection, signal?: AbortSignal) {
   return fetchApi<PasswordVaultList>("/settings/password-vault", { connection, signal })
@@ -82,5 +134,24 @@ export function updatePasswordVaultDisplay(
     connection,
     method: "POST",
     body: input,
+  })
+}
+
+export function setPasswordVaultPin(
+  connection: MobileConnection,
+  input: { pin: string; confirmPin: string; accountPassword: string },
+) {
+  return fetchApi<{ pinConfigured: boolean }>("/settings/password-vault/pin", {
+    connection,
+    method: "POST",
+    body: input,
+  })
+}
+
+export function removePasswordVaultPin(connection: MobileConnection, accountPassword: string) {
+  return fetchApi<{ pinConfigured: boolean }>("/settings/password-vault/pin", {
+    connection,
+    method: "DELETE",
+    body: { accountPassword },
   })
 }

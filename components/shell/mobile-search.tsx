@@ -117,7 +117,7 @@ export function MobileSearch() {
           }}
           onFocus={() => setOpen(true)}
           placeholder="Search files, libraries…"
-          className="min-w-0 flex-1 bg-transparent text-[13px] text-[#222222] outline-none placeholder-[#a0a0a0]"
+          className="min-w-0 flex-1 bg-transparent text-[16px] text-[#222222] outline-none placeholder-[#a0a0a0]"
           aria-expanded={open}
           aria-controls="mobile-search-results"
         />
@@ -126,8 +126,12 @@ export function MobileSearch() {
       {open ? (
         <div
           id="mobile-search-results"
-          className="absolute left-0 right-0 top-[calc(100%+6px)] z-50 max-h-[min(60vh,320px)] overflow-y-auto rounded-2xl bg-white py-2 shadow-[0_12px_40px_rgba(0,0,0,0.12)]"
-          style={{ border: "1px solid #e5e5e5" }}
+          className="absolute left-0 right-0 top-[calc(100%+6px)] z-50 overflow-y-auto rounded-2xl bg-white py-2 shadow-[0_12px_40px_rgba(0,0,0,0.12)]"
+          style={{
+            border: "1px solid #e5e5e5",
+            maxHeight:
+              "min(320px, calc(100dvh - 8rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 5rem))",
+          }}
         >
           <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-[#a0a0a0]">
             Jump to

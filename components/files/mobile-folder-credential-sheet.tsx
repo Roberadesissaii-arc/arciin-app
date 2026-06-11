@@ -48,15 +48,14 @@ export function MobileFolderCredentialSheet({
         value={value}
         onChange={(e) => setValue(e.target.value)}
         placeholder={pinConfigured ? "Vault PIN" : "Account password"}
-        className="w-full rounded-xl border border-[#e5e5e5] bg-[#f7f7f7] px-3 py-2.5 text-[14px] outline-none focus:border-[#ff4f12]"
+        className="w-full rounded-xl border border-[#e5e5e5] bg-[#f7f7f7] px-3 py-2.5 text-[14px] outline-none focus:border-[var(--arciin-accent,#ff4f12)]"
         autoComplete={pinConfigured ? "off" : "current-password"}
       />
       <button
         type="button"
         disabled={saving || !value.trim()}
         onClick={() => void submit()}
-        className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl py-3 text-[14px] font-semibold text-white disabled:opacity-50"
-        style={{ backgroundColor: "#ff4f12" }}
+        className="btn-accent-solid mt-4 flex w-full items-center justify-center gap-2 rounded-xl py-3 text-[14px] font-semibold disabled:opacity-50"
       >
         {saving ? <Loader2 className="size-4 animate-spin" /> : null}
         {submitLabel}

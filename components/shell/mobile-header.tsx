@@ -79,7 +79,7 @@ export function MobileHeader() {
             className="text-[17px] font-bold tracking-tight text-[#222222]"
             style={{ fontFamily: "var(--font-space-grotesk, sans-serif)" }}
           >
-            Arciin<span style={{ color: "#ff4f12" }}>.</span>
+            Arciin<span className="text-accent">.</span>
           </span>
         </Link>
 
@@ -87,7 +87,7 @@ export function MobileHeader() {
 
         <Link
           href="/notifications"
-          className="relative flex size-9 shrink-0 items-center justify-center rounded-xl text-[#717171] transition-colors active:bg-[#f7f7f7]"
+          className="relative flex size-11 shrink-0 items-center justify-center rounded-xl text-[#717171] transition-colors active:bg-[#f7f7f7]"
           aria-label={
             unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications"
           }
@@ -95,7 +95,7 @@ export function MobileHeader() {
           <Bell className="size-[18px]" />
           {unreadCount > 0 ? (
             <span
-              className="absolute right-1.5 top-1.5 size-2 rounded-full bg-[#ff4f12]"
+              className="bg-accent absolute right-1.5 top-1.5 size-2 rounded-full"
               style={{ boxShadow: "0 0 0 2px #ffffff" }}
             />
           ) : null}

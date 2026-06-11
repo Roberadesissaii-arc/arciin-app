@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation"
 import { BottomNav } from "@/components/shell/bottom-nav"
 import { MobileTopChrome } from "@/components/shell/mobile-top-chrome"
 import { ServerReconnectBanner } from "@/components/shell/server-reconnect-banner"
+import { isStandaloneApp } from "@/lib/standalone/config"
 import { cn } from "@/lib/utils"
 
 /**
@@ -15,7 +16,7 @@ export function MobileShellViewport({ children }: { children: React.ReactNode })
   const isChat = pathname === "/chat" || pathname.startsWith("/chat/")
 
   return (
-    <div className="mobile-app-root flex min-h-dvh flex-col bg-[#f7f7f7]">
+    <div className={cn("mobile-app-root flex min-h-dvh flex-col bg-[#f7f7f7]", isChat && "relative")}>
       <MobileTopChrome />
 
       <main
@@ -30,7 +31,7 @@ export function MobileShellViewport({ children }: { children: React.ReactNode })
             isChat ? "min-h-0 flex-1 gap-0" : "gap-4",
           )}
         >
-          {!isChat ? <ServerReconnectBanner /> : null}
+          {!isChat && !isStandaloneApp() ? <ServerReconnectBanner /> : null}
           {children}
         </div>
       </main>

@@ -72,8 +72,7 @@ export function SettingsGroupItem({
           {footerHref && footerLabel ? (
             <Link
               href={footerHref}
-              className="mt-3 flex h-10 items-center justify-center rounded-xl text-[13px] font-semibold text-[#ff4f12] active:opacity-70"
-              style={{ border: "1px solid rgba(255,79,18,0.35)", backgroundColor: "rgba(255,79,18,0.06)" }}
+              className="link-accent-soft mt-3 flex min-h-11 items-center justify-center rounded-xl text-[13px] font-semibold active:opacity-70"
             >
               {footerLabel}
             </Link>

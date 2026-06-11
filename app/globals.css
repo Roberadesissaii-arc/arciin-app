@@ -10,6 +10,10 @@
 
 :root {
   --arciin-accent: #ff4f12;
+  --arciin-hero-top-wash: rgba(255, 75, 51, 0.12);
+  --arciin-hero-glow-bright: rgba(255, 75, 51, 0.45);
+  --arciin-hero-glow-mid: rgba(255, 75, 51, 0.12);
+  --arciin-hero-glow-secondary: rgba(255, 120, 90, 0.22);
 
   --background: #ffffff;
   --secondary-bg: #f7f7f7;
@@ -45,9 +49,30 @@
   }
 
   ::selection {
-    background: rgba(255, 79, 18, 0.15);
+    background: var(--arciin-accent-wash, rgba(255, 79, 18, 0.15));
     color: #222222;
   }
+}
+
+/*
+ * Native-like mobile inputs: iOS Safari auto-zooms when font-size < 16px on focus.
+ * Class lives on <body> so portaled sheets (create folder, rename, vault, etc.) are included.
+ */
+.mobile-app-host {
+  touch-action: manipulation;
+}
+
+.mobile-app-host input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
+.mobile-app-host textarea,
+.mobile-app-host select {
+  font-size: 16px !important;
+  line-height: 1.35;
+  -webkit-text-size-adjust: 100%;
+}
+
+.mobile-app-host input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"])::placeholder,
+.mobile-app-host textarea::placeholder {
+  font-size: 16px !important;
 }
 
 /* Safe area utilities — CSS classes (not inline styles) so iOS PWA respects them */
@@ -60,9 +85,15 @@
 .h-safe-bottom {
   height: env(safe-area-inset-bottom, 0px);
 }
-/* Floating bottom nav — small gap above screen edge / home indicator */
-.mobile-bottom-nav {
-  bottom: max(0.5rem, env(safe-area-inset-bottom, 0px));
+/* Plain numeric fields — no browser stepper / spinner controls */
+.arciin-plain-number-input {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.arciin-plain-number-input::-webkit-outer-spin-button,
+.arciin-plain-number-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 
 /* Bottom nav below modal overlays (overlays use z-[200] on body) */
@@ -76,9 +107,12 @@ body.arciin-mobile-sheet-open .mobile-bottom-nav {
   pointer-events: none;
 }
 
-/* Content clearance above bottom nav (h-16 tab row + float offset) */
+/* Content clearance above bottom nav (h-16 tab row + float offset); scales with font zoom */
 .pb-nav-safe {
-  padding-bottom: calc(4rem + max(0.5rem, env(safe-area-inset-bottom, 0px)) + 0.375rem);
+  padding-bottom: calc(
+    (4rem + max(0.5rem, env(safe-area-inset-bottom, 0px)) + 0.375rem) *
+      var(--app-font-zoom, 1)
+  );
 }
 
 /* PWA: gray fills the screen; natural document scroll on non-chat pages */
@@ -121,6 +155,7 @@ body:has(.mobile-app-root) {
   max-height: 100%;
   overflow: hidden;
   background-color: #f7f7f7;
+  font-size: var(--app-font-size, 15px);
 }
 
 .chat-page-messages {
@@ -129,31 +164,48 @@ body:has(.mobile-app-root) {
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
   padding-top: calc(3.25rem + env(safe-area-inset-top, 0px));
-  padding-bottom: 0.25rem;
+  /* Clears the fixed composer + copy/listen action row below the last bubble */
+  padding-bottom: calc(var(--chat-composer-inset, 5.75rem) + 2.75rem);
 }
 
 .chat-welcome {
-  min-height: 0;
+  min-height: calc(
+    100dvh - var(--chat-composer-inset, 5.75rem) - 3.25rem - env(safe-area-inset-top, 0px) -
+      env(safe-area-inset-bottom, 0px)
+  );
 }
 
+.chat-page-error {
+  position: fixed;
+  left: 1rem;
+  right: 1rem;
+  top: calc(3.25rem + env(safe-area-inset-top, 0px));
+  z-index: 30;
+  max-height: min(8rem, 28vh);
+  overflow-y: auto;
+  border-radius: 0.75rem;
+  border: 1px solid #fecaca;
+  background-color: #fef2f2;
+  padding: 0.625rem 2.25rem 0.625rem 0.75rem;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #b91c1c;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+
+/* Fixed composer bar — keyboard lift via transform (see use-chat-keyboard) */
 .chat-page-composer {
-  position: relative;
-  z-index: 10;
-  flex-shrink: 0;
-  padding: 0.375rem 0 0;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  padding: 0.375rem 1rem 0;
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom, 0px));
   background-color: #f7f7f7;
   border-top: 1px solid rgba(0, 0, 0, 0.04);
-  transform: translateY(calc(-1 * var(--chat-kb-offset, 0px)));
-  will-change: transform;
-}
-
-.chat-page:not([data-keyboard-open]) .chat-page-composer {
-  padding-bottom: max(0.5rem, env(safe-area-inset-bottom, 0px));
-}
-
-.chat-page[data-keyboard-open] .chat-page-composer {
-  padding-bottom: 0.25rem;
 }
 
 .mobile-app-main:has(.chat-page) > .mobile-app-content {
@@ -171,7 +223,7 @@ body:has(.mobile-app-root) {
   height: 1em;
   margin-left: 2px;
   vertical-align: text-bottom;
-  background-color: #ff4f12;
+  background-color: var(--arciin-accent, #ff4f12);
   animation: chat-cursor-blink 0.9s step-end infinite;
 }
 
@@ -249,13 +301,13 @@ body:has(.mobile-app-root) {
   background: conic-gradient(
     from 0deg,
     transparent 0deg 302deg,
-    rgba(255, 79, 18, 0.12) 322deg,
-    rgba(255, 79, 18, 0.5) 338deg,
-    #ff4f12 346deg,
-    #ff6a33 349deg,
-    #ff4f12 352deg,
-    rgba(255, 79, 18, 0.5) 358deg,
-    rgba(255, 79, 18, 0.12) 368deg,
+    var(--arciin-accent-wash, rgba(255, 79, 18, 0.12)) 322deg,
+    var(--arciin-accent-glow, rgba(255, 79, 18, 0.5)) 338deg,
+    var(--arciin-accent, #ff4f12) 346deg,
+    var(--arciin-accent-hover, #ff6a33) 349deg,
+    var(--arciin-accent, #ff4f12) 352deg,
+    var(--arciin-accent-glow, rgba(255, 79, 18, 0.5)) 358deg,
+    var(--arciin-accent-wash, rgba(255, 79, 18, 0.12)) 368deg,
     transparent 382deg
   );
   animation: server-offline-border-spin 7.5s linear infinite;
@@ -276,8 +328,8 @@ body:has(.mobile-app-root) {
     filter: none;
     background: linear-gradient(
       90deg,
-      rgba(255, 79, 18, 0.4) 0%,
-      rgba(255, 106, 51, 0.15) 55%,
+      var(--arciin-accent-glow, rgba(255, 79, 18, 0.4)) 0%,
+      var(--arciin-accent-wash, rgba(255, 106, 51, 0.15)) 55%,
       transparent 100%
     );
   }
@@ -302,4 +354,455 @@ body:has(.mobile-app-root) {
     animation: none;
     opacity: 0.7;
   }
+}
+
+/* ── User preferences: layout ── */
+html.compact-view .mobile-app-host .files-page-content [data-asset-grid] {
+  gap: 0.5rem !important;
+}
+
+html.compact-view .mobile-app-host .files-page-content [data-asset-grid] > button {
+  padding: 0.375rem !important;
+}
+
+html.compact-view .mobile-app-host .files-page-content [data-folder-grid] {
+  gap: 0.5rem !important;
+}
+
+html.compact-view .mobile-app-host .files-page-content [data-folder-grid] > * {
+  padding-block: 0.5rem !important;
+}
+
+html[data-ui-radius="compact"] .mobile-app-content :is(.rounded-xl, .rounded-2xl) {
+  border-radius: 0.5rem !important;
+}
+
+html[data-ui-radius="sharp"] .mobile-app-content :is(.rounded-xl, .rounded-2xl, .rounded-3xl) {
+  border-radius: 0.35rem !important;
+}
+
+html[data-ui-radius="comfortable"] .mobile-app-content .rounded-xl {
+  border-radius: 0.75rem !important;
+}
+
+html.no-animated-cards .mobile-app-host .files-page-content [data-asset-grid] > button,
+html.no-animated-cards .mobile-app-host .files-page-content [data-folder-grid] {
+  transition: none !important;
+}
+
+html.reduce-motion .mobile-app-host *,
+html.reduce-motion .mobile-app-host *::before,
+html.reduce-motion .mobile-app-host *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}
+
+html.high-contrast .mobile-app-host {
+  --foreground: #000000;
+  --text-secondary: #1a1a1a;
+  --border: #000000;
+}
+
+html.high-contrast .mobile-app-host .bg-white {
+  border-color: #000000 !important;
+}
+
+html.keyboard-nav .mobile-app-host :is(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 3px solid var(--arciin-accent, #ff4f12) !important;
+  outline-offset: 2px;
+  box-shadow: none !important;
+}
+
+/* ── User preferences: accent utilities ── */
+.mobile-app-host [role="switch"][aria-checked="true"] {
+  background-color: var(--arciin-accent, #ff4f12) !important;
+}
+
+.mobile-bottom-nav [aria-current="page"] svg,
+.mobile-bottom-nav [aria-current="page"] span {
+  color: var(--arciin-accent, #ff4f12) !important;
+}
+
+.mobile-app-host .mobile-segment-active {
+  background-color: var(--arciin-accent-soft, #fff4f0) !important;
+  border-color: var(--arciin-accent, #ff4f12) !important;
+  color: var(--arciin-accent, #ff4f12) !important;
+}
+
+.mobile-app-host .text-accent {
+  color: var(--arciin-accent, #ff4f12);
+}
+
+.mobile-app-host .bg-accent {
+  background-color: var(--arciin-accent, #ff4f12);
+}
+
+.mobile-app-host .border-accent {
+  border-color: var(--arciin-accent, #ff4f12);
+}
+
+.mobile-app-host .bg-accent-soft {
+  background-color: var(--arciin-accent-soft, #fff4f0);
+}
+
+.mobile-app-host .text-on-accent {
+  color: #ffffff !important;
+}
+
+.mobile-app-host .chip-accent-active {
+  background-color: var(--arciin-accent, #ff4f12) !important;
+  border-color: var(--arciin-accent, #ff4f12) !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff;
+}
+
+.mobile-app-host .chip-accent-active,
+.mobile-app-host .chip-accent-active span,
+.mobile-app-host .chip-accent-active svg {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+}
+
+.mobile-app-host .btn-accent-solid {
+  background-color: var(--arciin-accent, #ff4f12) !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff;
+}
+
+.mobile-app-host .btn-accent-solid svg {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+}
+
+.mobile-app-host .link-accent-soft {
+  color: var(--arciin-accent, #ff4f12);
+  border: 1px solid var(--arciin-accent-ring, rgba(255, 79, 18, 0.32));
+  background-color: var(--arciin-accent-muted, rgba(255, 79, 18, 0.06));
+}
+
+/* Legacy Tailwind arbitrary orange → accent (not inside accent picker) */
+.mobile-app-host :not([data-accent-picker]) .text-\[\#ff4f12\] {
+  color: var(--arciin-accent, #ff4f12);
+}
+
+.mobile-app-host :not([data-accent-picker]) .text-\[\#FF4F12\] {
+  color: var(--arciin-accent, #ff4f12);
+}
+
+.mobile-app-host :not([data-accent-picker]) .bg-\[\#ff4f12\] {
+  background-color: var(--arciin-accent, #ff4f12);
+}
+
+.mobile-app-host :not([data-accent-picker]) .bg-\[\#FF4F12\] {
+  background-color: var(--arciin-accent, #ff4f12);
+}
+
+.mobile-app-host :not([data-accent-picker]) .bg-\[\#fff7f4\] {
+  background-color: var(--arciin-accent-soft, #fff4f0) !important;
+}
+
+.mobile-app-host :not([data-accent-picker]) .bg-\[\#ff4f12\]\/80 {
+  background-color: color-mix(in srgb, var(--arciin-accent, #ff4f12) 80%, transparent) !important;
+}
+
+.mobile-app-host :not([data-accent-picker]) .border-\[\#ff4f12\]\/20 {
+  border-color: var(--arciin-accent-ring, rgba(255, 79, 18, 0.2)) !important;
+}
+
+.mobile-app-host :not([data-accent-picker]) .ring-\[\#ff4f12\]\/25 {
+  --tw-ring-color: var(--arciin-accent-ring, rgba(255, 79, 18, 0.25)) !important;
+}
+
+.mobile-app-host :not([data-accent-picker]) .ring-\[\#ff4f12\]\/30 {
+  --tw-ring-color: color-mix(in srgb, var(--arciin-accent, #ff4f12) 30%, transparent) !important;
+}
+
+.mobile-app-host .u-accent-text {
+  color: var(--arciin-accent, #ff4f12) !important;
+}
+
+.mobile-app-host .u-accent-bg {
+  background-color: var(--arciin-accent, #ff4f12) !important;
+}
+
+.page-intro-hero {
+  background: linear-gradient(
+    155deg,
+    var(--arciin-accent-intro-from, #ff6a30) 0%,
+    var(--arciin-accent-intro-to, #c82d00) 100%
+  );
+}
+
+/* Profile hero — black card with accent ember glow (follows Preferences → Accent color). */
+.arciin-dark-hero__wash {
+  background: linear-gradient(
+    180deg,
+    var(--arciin-hero-top-wash) 0%,
+    rgba(9, 9, 11, 0.06) 28%,
+    rgba(9, 9, 11, 0.35) 55%,
+    transparent 100%
+  );
+}
+
+.arciin-dark-hero__glow-main {
+  background: radial-gradient(
+    ellipse at 50% 35%,
+    var(--arciin-hero-glow-bright) 0%,
+    var(--arciin-hero-glow-mid) 42%,
+    transparent 72%
+  );
+}
+
+.arciin-dark-hero__glow-secondary {
+  background: radial-gradient(
+    ellipse at center,
+    var(--arciin-hero-glow-secondary) 0%,
+    transparent 68%
+  );
+}
+
+.accent-icon-tile {
+  background: linear-gradient(
+    145deg,
+    var(--arciin-accent-wash, rgba(255, 79, 18, 0.14)) 0%,
+    var(--arciin-accent-muted, rgba(255, 79, 18, 0.04)) 100%
+  );
+  border: 1px solid var(--arciin-accent-ring, rgba(255, 79, 18, 0.2));
+}
+
+.accent-link-card {
+  border: 1px solid var(--arciin-accent, #ff4f12);
+  background: linear-gradient(
+    135deg,
+    var(--arciin-accent-soft, #fff7f4) 0%,
+    #ffffff 60%
+  );
+}
+
+.accent-soft-panel-header {
+  background: linear-gradient(
+    165deg,
+    var(--arciin-accent-soft, #fff7f4) 0%,
+    #fafafa 100%
+  );
+}
+
+.accent-border-l-4 {
+  border-left: 4px solid var(--arciin-accent, #ff4f12);
+}
+
+.accent-border-l-3 {
+  border-left: 3px solid var(--arciin-accent, #ff4f12);
+}
+
+.accent-stat-pill {
+  background-color: var(--arciin-accent-soft, #fff7f4);
+  border: 1px solid var(--arciin-accent-ring, rgba(255, 79, 18, 0.18));
+}
+
+.accent-progress-fill {
+  background: linear-gradient(
+    90deg,
+    var(--arciin-accent, #ff4f12) 0%,
+    var(--arciin-accent-hover, #ff6a33) 100%
+  );
+}
+
+.accent-empty-icon-tile {
+  background-color: var(--arciin-accent-soft, #fff4f0);
+  border: 1px solid var(--arciin-accent-icon-border, rgba(255, 79, 18, 0.15));
+}
+
+.accent-dashed-btn {
+  border: 1px dashed var(--arciin-accent-ring, rgba(255, 79, 18, 0.4));
+  background: var(--arciin-accent-soft, #fff7f4);
+  color: var(--arciin-accent, #ff4f12);
+}
+
+.accent-switch {
+  width: 44px;
+  height: 26px;
+  border-radius: 13px;
+  background-color: #e5e5e5;
+  transition: background-color 0.15s ease;
+}
+
+.accent-switch[aria-checked="true"] {
+  background-color: var(--arciin-accent, #ff4f12) !important;
+}
+
+.accent-settings-panel-link {
+  border: 1px solid var(--arciin-accent-ring, rgba(255, 79, 18, 0.35));
+  background-color: var(--arciin-accent-wash, rgba(255, 79, 18, 0.06));
+  color: var(--arciin-accent, #ff4f12);
+}
+
+.accent-session-current {
+  background-color: var(--arciin-accent-wash, rgba(255, 79, 18, 0.08));
+  border: 1px solid var(--arciin-accent-ring, rgba(255, 79, 18, 0.25));
+}
+
+.accent-badge-pill {
+  background-color: var(--arciin-accent-badge-bg, rgba(255, 79, 18, 0.1));
+  color: var(--arciin-accent, #ff4f12);
+}
+
+.accent-selected-card {
+  border: 1px solid var(--arciin-accent, #ff4f12);
+  background-color: var(--arciin-accent-wash, rgba(255, 79, 18, 0.06));
+}
+
+.accent-selected-card-muted {
+  border: 1px solid var(--arciin-accent, #ff4f12);
+  background-color: var(--arciin-accent-muted, rgba(255, 79, 18, 0.08));
+  color: var(--arciin-accent, #ff4f12);
+}
+
+.accent-highlight-box {
+  border: 1px solid var(--arciin-accent-ring, rgba(255, 79, 18, 0.22));
+  background: linear-gradient(
+    135deg,
+    var(--arciin-accent-wash, rgba(255, 79, 18, 0.14)) 0%,
+    var(--arciin-accent-muted, rgba(255, 79, 18, 0.04)) 100%
+  );
+}
+
+.accent-chip {
+  background-color: color-mix(in srgb, var(--arciin-accent, #ff4f12) 10%, transparent);
+  color: var(--arciin-accent, #ff4f12);
+}
+
+.accent-segment-pill {
+  background-color: var(--arciin-accent-soft, #fff4f0);
+  border: 1px solid var(--arciin-accent, #ff4f12);
+  color: var(--arciin-accent, #ff4f12);
+}
+
+.accent-link {
+  color: var(--arciin-accent, #ff4f12);
+}
+
+.btn-accent-gradient {
+  background: linear-gradient(
+    135deg,
+    var(--arciin-accent-intro-from, #ff6a30) 0%,
+    var(--arciin-accent-intro-to, #cc2e00) 100%
+  ) !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 18px var(--arciin-accent-ring, rgba(255, 79, 18, 0.3));
+}
+
+/* Sign-in / setup — fixed brand orange (never accent-remapped; WebKit-safe). */
+.auth-primary-button {
+  display: flex;
+  width: 100%;
+  height: 52px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 1rem;
+  border: none;
+  background: linear-gradient(135deg, #ff6a30 0%, #cc2e00 100%) !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff;
+  font-size: 15px;
+  font-weight: 600;
+  box-shadow: 0 4px 18px rgba(255, 79, 18, 0.3);
+}
+
+.auth-primary-button:disabled {
+  opacity: 0.6;
+}
+
+.accent-spinner {
+  border-color: var(--arciin-accent-ring, rgba(255, 79, 18, 0.3));
+  border-top-color: var(--arciin-accent, #ff4f12);
+}
+
+.mobile-app-host :not([data-accent-picker]) .focus\:border-\[\#ff4f12\]:focus {
+  border-color: var(--arciin-accent, #ff4f12) !important;
+}
+
+.mobile-app-host :not([data-accent-picker]) .focus\:border-\[\var\(--arciin-accent\,\#ff4f12\)\]:focus {
+  border-color: var(--arciin-accent, #ff4f12) !important;
+}
+
+.mobile-app-host :not([data-accent-picker]) .border-t-\[\#ff4f12\] {
+  border-top-color: var(--arciin-accent, #ff4f12) !important;
+}
+
+.mobile-app-host :not([data-accent-picker]) .border-\[\#ff4f12\]\/30 {
+  border-color: var(--arciin-accent-ring, rgba(255, 79, 18, 0.3)) !important;
+}
+
+.mobile-app-host :not([data-accent-picker]) .border-\[\#ff4f12\]\/35 {
+  border-color: color-mix(in srgb, var(--arciin-accent, #ff4f12) 35%, transparent) !important;
+}
+
+.mobile-app-host :not([data-accent-picker]) .from-\[\#ff6a30\] {
+  --tw-gradient-from: var(--arciin-accent-intro-from, #ff6a30) var(--tw-gradient-from-position);
+  --tw-gradient-to: rgb(255 255 255 / 0) var(--tw-gradient-to-position);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
+}
+
+.mobile-app-host :not([data-accent-picker]) .to-\[\#cc2e00\] {
+  --tw-gradient-to: var(--arciin-accent-intro-to, #cc2e00) var(--tw-gradient-to-position);
+}
+
+.mobile-app-host :not([data-accent-picker]) .bg-\[\#ff4f12\]\/10 {
+  background-color: var(--arciin-accent-badge-bg, rgba(255, 79, 18, 0.1)) !important;
+}
+
+.mobile-app-host :not([data-accent-picker]) .text-\[\#ff4f12\]\/80 {
+  color: color-mix(in srgb, var(--arciin-accent, #ff4f12) 80%, transparent) !important;
+}
+
+.empty-state-icon {
+  background-color: var(--arciin-accent-muted, rgba(255, 79, 18, 0.08));
+  border: 1px solid var(--arciin-accent-icon-border, rgba(255, 79, 18, 0.18));
+}
+
+.type-badge-accent {
+  background-color: var(--arciin-accent-soft, #fff4f0);
+  color: var(--arciin-accent, #ff4f12);
+}
+
+.unread-row-bg {
+  background-color: var(--arciin-accent-wash, rgba(255, 79, 18, 0.03));
+}
+
+.unread-row-accent {
+  background-color: var(--arciin-accent, #ff4f12);
+}
+
+.pagination-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  border: none;
+  padding: 0;
+  transition:
+    width 0.2s,
+    background-color 0.2s;
+  background-color: #e0e0e0;
+}
+
+.pagination-dot--active {
+  width: 20px;
+  background-color: var(--arciin-accent, #ff4f12);
+}
+
+/* Fills the gap between a lifted bottom sheet and the iOS keyboard */
+.mobile-sheet-kb-fill {
+  height: var(--sheet-kb-fill, 0px);
+  transition: height 120ms ease-out;
+}
+
+/* Bottom nav: pinned to viewport, isolated from page scroll lock */
+.mobile-bottom-nav-portal {
+  position: fixed;
+  left: 1rem;
+  right: 1rem;
+  bottom: max(0.5rem, env(safe-area-inset-bottom, 0px));
+  z-index: 30;
 }

@@ -1,8 +1,4 @@
-import {
-  ARCIIN_API_BASE_HEADER,
-  arciinProxyHeaders,
-  needsArciinSameOriginProxy,
-} from "@/lib/api/arciin-proxy"
+import { ARCIIN_API_BASE_HEADER, needsArciinSameOriginProxy } from "@/lib/api/arciin-proxy"
 import { lanBlockedFromHostedApp } from "@/lib/api/hosted-app"
 import { ApiError, isNetworkError, isTransientUpstreamStatus, parseApiError } from "@/lib/api/errors"
 import { dispatchReconnectNeeded } from "@/lib/hooks/use-app-foreground"
@@ -36,14 +32,22 @@ export async function fetchArciinProxiedWithBase<T>(
   }
 
   const method = options.method ?? (options.body !== undefined ? "POST" : "GET")
-  if (options.body !== undefined) {
+  const isFormData =
+    typeof FormData !== "undefined" && options.body instanceof FormData
+
+  if (options.body !== undefined && !isFormData) {
     headers["Content-Type"] = "application/json"
   }
 
   const res = await fetch(url, {
     method,
     headers,
-    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+    body:
+      options.body === undefined
+        ? undefined
+        : isFormData
+          ? (options.body as FormData)
+          : JSON.stringify(options.body),
     signal: options.signal,
     cache: "no-store",
     credentials: "same-origin",

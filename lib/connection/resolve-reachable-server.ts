@@ -15,6 +15,8 @@ import {
 import type { MobileConnection } from "@/lib/types/api"
 import type { MobileDiscoverResult } from "@/lib/types/api"
 import type { MobileServerProfile } from "@/lib/connection/storage"
+import { isStandaloneApp } from "@/lib/standalone/config"
+import { repairStandaloneConnection } from "@/lib/standalone/repair-server-urls"
 
 function discoverMatchesInstance(
   discover: MobileDiscoverResult,
@@ -182,11 +184,12 @@ export function applyServerEndpointsToConnection(
   connection: MobileConnection,
   server: MobileServerProfile,
 ): MobileConnection {
-  return {
+  const next: MobileConnection = {
     ...connection,
     apiBaseUrl: server.apiBaseUrl,
     socketUrl: server.socketUrl,
     webUrl: server.webUrl,
     instanceName: server.instanceName,
   }
+  return isStandaloneApp() ? repairStandaloneConnection(next) : next
 }

@@ -1,6 +1,7 @@
 import type { MobileAuthResult, MobileDiscoverResult } from "@/lib/types/api"
 import type { MobileServerProfile } from "@/lib/connection/storage"
 import { deriveMobileServerUrlsFromApiBase } from "@/lib/connection/normalize-url"
+import { isLikelyMobilePwaUrl } from "@/lib/connection/mobile-pwa-origin"
 
 function mergeLanUrls(
   lanUrls: string[] | undefined,
@@ -9,10 +10,12 @@ function mergeLanUrls(
 ): string[] {
   const set = new Set<string>()
   for (const u of lanUrls ?? []) {
-    if (u?.trim()) set.add(u.replace(/\/+$/, ""))
+    if (u?.trim() && !isLikelyMobilePwaUrl(u)) set.add(u.replace(/\/+$/, ""))
   }
-  if (requestOrigin?.trim()) set.add(requestOrigin.replace(/\/+$/, ""))
-  if (webUrl?.trim()) set.add(webUrl.replace(/\/+$/, ""))
+  if (requestOrigin?.trim() && !isLikelyMobilePwaUrl(requestOrigin)) {
+    set.add(requestOrigin.replace(/\/+$/, ""))
+  }
+  if (webUrl?.trim() && !isLikelyMobilePwaUrl(webUrl)) set.add(webUrl.replace(/\/+$/, ""))
   return [...set]
 }
 

@@ -6,6 +6,7 @@ import { Check, CheckCircle2, Loader2, Settings2, Star } from "lucide-react"
 import type { ProviderMeta } from "@/lib/models/provider-catalog"
 import { isProviderConnected } from "@/lib/models/model-helpers"
 import type { ModelProfile } from "@/lib/types/models"
+import { cn } from "@/lib/utils"
 
 export function MobileProviderCard({
   meta,
@@ -32,8 +33,12 @@ export function MobileProviderCard({
     <div
       className="flex w-full flex-col overflow-hidden rounded-2xl bg-white text-left"
       style={{
-        border: isActive ? "2px solid #ff4f12" : "1px solid #e5e5e5",
-        boxShadow: isActive ? "0 4px 20px rgba(255,79,18,0.12)" : undefined,
+        border: isActive
+          ? "2px solid var(--arciin-accent, #ff4f12)"
+          : "1px solid #e5e5e5",
+        boxShadow: isActive
+          ? "0 4px 20px var(--arciin-accent-ring, rgba(255, 79, 18, 0.12))"
+          : undefined,
       }}
     >
       <button
@@ -72,7 +77,7 @@ export function MobileProviderCard({
                   </span>
                 ) : null}
                 {profile?.isDefault ? (
-                  <Star className="size-3.5 fill-[#ff4f12] text-[#ff4f12]" />
+                  <Star className="text-accent size-3.5 fill-current" />
                 ) : null}
               </div>
               <div className="mt-0.5 flex items-center gap-1.5">
@@ -90,9 +95,9 @@ export function MobileProviderCard({
             </div>
           </div>
           {isBusy ? (
-            <Loader2 className="size-5 shrink-0 animate-spin text-[#ff4f12]" />
+            <Loader2 className="text-accent size-5 shrink-0 animate-spin" />
           ) : isActive ? (
-            <Check className="size-5 shrink-0 text-[#ff4f12]" />
+            <Check className="text-accent size-5 shrink-0" />
           ) : connected ? (
             <CheckCircle2 className="size-4 shrink-0 text-emerald-500" />
           ) : null}
@@ -122,8 +127,10 @@ export function MobileProviderCard({
               type="button"
               onClick={onUse}
               disabled={isBusy || !serverOnline}
-              className="flex-1 rounded-xl py-2 text-[12px] font-semibold text-white disabled:opacity-50"
-              style={{ backgroundColor: isActive ? "#ff4f12" : "#222222" }}
+              className={cn(
+                "flex-1 rounded-xl py-2 text-[12px] font-semibold text-white disabled:opacity-50",
+                isActive ? "btn-accent-solid" : "bg-[#222222]",
+              )}
             >
               {isActive ? "Active for chat" : "Use for chat"}
             </button>
@@ -143,8 +150,10 @@ export function MobileProviderCard({
             type="button"
             onClick={onConnect}
             disabled={!serverOnline}
-            className="w-full rounded-xl py-2.5 text-[12px] font-semibold text-white active:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-            style={{ backgroundColor: serverOnline ? "#ff4f12" : "#d4d4d4" }}
+            className={cn(
+              "w-full rounded-xl py-2.5 text-[12px] font-semibold text-white active:opacity-90 disabled:cursor-not-allowed disabled:opacity-50",
+              serverOnline ? "btn-accent-solid" : "bg-[#d4d4d4]",
+            )}
           >
             Connect
           </button>

@@ -5,6 +5,7 @@ import { Boxes, ChevronDown, Cloud, Loader2, X } from "lucide-react"
 
 import { MobileOverlay } from "@/components/shell/mobile-bottom-sheet"
 import { setChatSelection } from "@/lib/api/chat"
+import { writeLocalChatSelection } from "@/lib/chat/chat-selection-storage"
 import { getAvailableModels } from "@/lib/api/models"
 import { chatModelForProfile } from "@/lib/models/model-helpers"
 import { providerMetaFor } from "@/lib/models/provider-catalog"
@@ -127,7 +128,7 @@ function ChatModelPickerSheet({
   return (
     <MobileOverlay open={open} onClose={onClose}>
       <div
-        className="pointer-events-auto flex max-h-[min(92dvh,520px)] w-full flex-col rounded-t-3xl bg-white pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-12px_48px_rgba(0,0,0,0.18)]"
+        className="pointer-events-auto flex max-h-full w-full flex-col rounded-t-3xl bg-white pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-12px_48px_rgba(0,0,0,0.18)]"
         style={{ borderTop: "1px solid #e5e5e5" }}
         role="dialog"
         aria-label="Choose model"
@@ -245,6 +246,7 @@ export function ChatModelBar({
     onSelect(profile, resolved)
     setOpen(false)
     if (resolved) {
+      writeLocalChatSelection(profile.id, resolved)
       try {
         await setChatSelection(connection, { profileId: profile.id, model: resolved })
       } catch {
@@ -259,7 +261,7 @@ export function ChatModelBar({
         type="button"
         disabled={loading || profiles.length === 0}
         onClick={() => setOpen(true)}
-        className="flex size-9 shrink-0 items-center justify-center rounded-xl text-[#ff4f12] active:bg-[#f7f7f7] disabled:opacity-40"
+        className="text-accent flex size-9 shrink-0 items-center justify-center rounded-xl active:bg-[#f7f7f7] disabled:opacity-40"
         style={{ border: "1px solid #e5e5e5" }}
         aria-label={`Model: ${label}`}
         title={label}

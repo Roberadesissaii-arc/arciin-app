@@ -214,7 +214,7 @@ export function HomePage() {
             className="h-full rounded-full transition-all"
             style={{
               width: storagePct != null ? `${Math.max(storagePct, storage?.usageBytes ? 2 : 0)}%` : "0%",
-              backgroundColor: "#ff4f12",
+              backgroundColor: "var(--arciin-accent, #ff4f12)",
             }}
           />
         </div>
@@ -235,7 +235,7 @@ export function HomePage() {
             <BriefcaseBusiness className="size-4 text-[#a0a0a0]" />
             <span className="text-[13px] font-semibold text-[#222222]">Recent jobs</span>
           </div>
-          <Link href="/jobs" className="text-[12px] font-semibold text-[#ff4f12] active:opacity-70">
+          <Link href="/jobs" className="text-accent text-[12px] font-semibold active:opacity-70">
             View all
           </Link>
         </div>
@@ -264,7 +264,7 @@ export function HomePage() {
             <Activity className="size-4 text-[#a0a0a0]" />
             <span className="text-[13px] font-semibold text-[#222222]">Recent activity</span>
           </div>
-          <Link href="/activity" className="text-[12px] font-semibold text-[#ff4f12] active:opacity-70">
+          <Link href="/activity" className="text-accent text-[12px] font-semibold active:opacity-70">
             View timeline
           </Link>
         </div>

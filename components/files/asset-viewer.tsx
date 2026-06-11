@@ -6,6 +6,7 @@ import {
   ArrowRightLeft,
   Download,
   Loader2,
+  Share2,
   Trash2,
   X,
 } from "lucide-react"
@@ -14,26 +15,22 @@ import { DeleteAssetDialog } from "@/components/files/delete-asset-dialog"
 import { MobilePdfViewer } from "@/components/files/mobile-pdf-viewer"
 import { MobileMoveFolderSheet } from "@/components/files/mobile-move-folder-sheet"
 import { isPdfAsset } from "@/lib/files/pdf-thumbnail"
+import { prefetchAssetBlob } from "@/lib/api/asset-blob-cache"
 import {
-  assetDownloadFetchUrl,
-  assetDownloadRequestInit,
-  assetStreamUrl,
+  assetShareableMediaUrl,
+  beginDownloadAsset,
+  beginShareAsset,
   deleteAsset,
-  downloadAssetFile,
   fetchAssetTextContent,
   moveAsset,
 } from "@/lib/api/assets"
 import { formatApiError } from "@/lib/api/errors"
 import { isTextPreviewableAsset } from "@/lib/files/is-text-previewable"
-import {
-  INLINE_STREAM_MAX_BYTES,
-  isAudioAsset,
-  isInlineStreamableAsset,
-  isVideoAsset,
-} from "@/lib/files/streamable-asset"
+import { isAudioAsset, isInlineStreamableAsset, isVideoAsset } from "@/lib/files/streamable-asset"
 import { loadThumbnail } from "@/lib/files/thumbnail-cache"
 import type { MobileConnection } from "@/lib/types/api"
 import type { AssetSummary, LibrarySummary } from "@/lib/types/assets"
+import { lockBodyScroll } from "@/lib/ui/scroll-lock"
 import { formatBytes } from "@/lib/utils/format-bytes"
 
 type AssetViewerProps = {
@@ -45,35 +42,6 @@ type AssetViewerProps = {
   onClose: () => void
   onChanged: () => void
   onDeleted: (assetId: string) => void
-}
-
-function lockPageScroll() {
-  const html = document.documentElement
-  const body = document.body
-  const prevHtml = html.style.overflow
-  const prevBody = body.style.overflow
-  const prevPos = body.style.position
-  html.style.overflow = "hidden"
-  body.style.overflow = "hidden"
-  body.style.position = "fixed"
-  body.style.inset = "0"
-  body.style.width = "100%"
-
-  const blockTouch = (e: TouchEvent) => {
-    const target = e.target
-    if (target instanceof Element && target.closest("[data-scroll-lock-allow]")) return
-    e.preventDefault()
-  }
-  document.addEventListener("touchmove", blockTouch, { passive: false })
-
-  return () => {
-    html.style.overflow = prevHtml
-    body.style.overflow = prevBody
-    body.style.position = prevPos
-    body.style.inset = ""
-    body.style.width = ""
-    document.removeEventListener("touchmove", blockTouch)
-  }
 }
 
 export function AssetViewer({
@@ -90,7 +58,8 @@ export function AssetViewer({
   const [currentIndex, setCurrentIndex] = useState(initialIndex)
   const [moveOpen, setMoveOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
-  const [busy, setBusy] = useState<"download" | "delete" | "move" | null>(null)
+  const [busy, setBusy] = useState<"download" | "delete" | "move" | "share" | null>(null)
+  const [shareMsg, setShareMsg] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [previewSrc, setPreviewSrc] = useState<string | null>(null)
   const [textPreview, setTextPreview] = useState<{ content: string; truncated: boolean } | null>(
@@ -129,7 +98,7 @@ export function AssetViewer({
   }, [assets.length])
 
   useEffect(() => { setMounted(true) }, [])
-  useEffect(() => { if (!mounted) return; return lockPageScroll() }, [mounted])
+  useEffect(() => { if (!mounted) return; return lockBodyScroll() }, [mounted])
   useEffect(() => {
     setCurrentIndex(initialIndex)
   }, [initialIndex])
@@ -143,6 +112,7 @@ export function AssetViewer({
     setPdfPage(1)
     setPdfTotal(0)
     setPreviewLoading(isPdf ? false : loadsMediaBlob || loadsTextPreview)
+    prefetchAssetBlob(connection, asset.id, asset.sizeBytes)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [asset.id])
 
@@ -154,44 +124,9 @@ export function AssetViewer({
     }
 
     if (streamsInline) {
-      let cancelled = false
-      let objectUrl: string | null = null
-      setPreviewLoading(true)
-      setPreviewSrc(null)
-      setMediaPreviewError(null)
-
-      const useBlob =
-        asset.sizeBytes <= 0 || asset.sizeBytes <= INLINE_STREAM_MAX_BYTES
-
-      if (useBlob) {
-        const url = assetDownloadFetchUrl(connection, asset.id, true)
-        void fetch(url, assetDownloadRequestInit(connection))
-          .then((res) => {
-            if (!res.ok) throw new Error("stream")
-            return res.blob()
-          })
-          .then((blob) => {
-            if (cancelled) return
-            objectUrl = URL.createObjectURL(blob)
-            setPreviewSrc(objectUrl)
-          })
-          .catch(() => {
-            if (!cancelled) {
-              setMediaPreviewError("Couldn't play this file. Try Download, or check your connection.")
-            }
-          })
-          .finally(() => {
-            if (!cancelled) setPreviewLoading(false)
-          })
-
-        return () => {
-          cancelled = true
-          if (objectUrl) URL.revokeObjectURL(objectUrl)
-        }
-      }
-
-      setPreviewSrc(assetStreamUrl(connection, asset.id))
+      setPreviewSrc(assetShareableMediaUrl(connection, asset.id))
       setPreviewLoading(false)
+      setMediaPreviewError(null)
       return
     }
 
@@ -224,37 +159,16 @@ export function AssetViewer({
       }
     }
 
-    if (!loadsMediaBlob) {
-      void loadThumbnail(connection, asset.id).then((url) => {
-        if (url) setPreviewSrc(url)
-        setPreviewLoading(false)
-      })
+    if (loadsMediaBlob) {
+      setPreviewSrc(assetShareableMediaUrl(connection, asset.id))
+      setPreviewLoading(false)
       return
     }
 
-    let cancelled = false
-    let objectUrl: string | null = null
-    setPreviewLoading(true)
-    setPreviewSrc(null)
-
-    const url = assetDownloadFetchUrl(connection, asset.id, true)
-    void fetch(url, assetDownloadRequestInit(connection))
-      .then((res) => { if (!res.ok) throw new Error("preview"); return res.blob() })
-      .then((blob) => {
-        if (cancelled) return
-        objectUrl = URL.createObjectURL(blob)
-        setPreviewSrc(objectUrl)
-      })
-      .catch(() => {
-        if (!cancelled) {
-          void loadThumbnail(connection, asset.id).then((thumb) => {
-            if (!cancelled && thumb) setPreviewSrc(thumb)
-          })
-        }
-      })
-      .finally(() => { if (!cancelled) setPreviewLoading(false) })
-
-    return () => { cancelled = true; if (objectUrl) URL.revokeObjectURL(objectUrl) }
+    void loadThumbnail(connection, asset.id).then((url) => {
+      if (url) setPreviewSrc(url)
+      setPreviewLoading(false)
+    })
   }, [asset, isPdf, loadsMediaBlob, loadsTextPreview, streamsInline, connection])
 
   const handleSwipeEnd = useCallback(
@@ -300,12 +214,44 @@ export function AssetViewer({
     pointerStart.current = { x: touch.clientX, y: touch.clientY }
   }, [])
 
-  const handleDownload = useCallback(async () => {
+  const handleShare = useCallback(() => {
+    setBusy("share")
+    setShareMsg(null)
+    setError(null)
+
+    void beginShareAsset(connection, asset)
+      .then((result) => {
+        if (result === "cancelled") return
+        if (result === "copied") {
+          setShareMsg("Link copied")
+          setTimeout(() => setShareMsg(null), 2500)
+        }
+      })
+      .catch((err) => {
+        const msg = formatApiError(err)
+        setError(msg === "Something went wrong." ? "Could not share this file." : msg)
+      })
+      .finally(() => {
+        setBusy(null)
+      })
+  }, [asset, connection])
+
+  const handleDownload = useCallback(() => {
     setBusy("download")
     setError(null)
-    try { await downloadAssetFile(connection, asset) }
-    catch (err) { setError(formatApiError(err)) }
-    finally { setBusy(null) }
+    void beginDownloadAsset(connection, asset)
+      .then((result) => {
+        if (result === "opened_tab") {
+          setShareMsg("Opened in a new tab — use Share there to save to Files")
+          setTimeout(() => setShareMsg(null), 4000)
+        }
+      })
+      .catch((err) => {
+        setError(formatApiError(err))
+      })
+      .finally(() => {
+        setBusy(null)
+      })
   }, [asset, connection])
 
   const handleDeleteConfirm = useCallback(async () => {
@@ -350,7 +296,6 @@ export function AssetViewer({
       role="dialog"
       aria-modal="true"
       aria-label="File preview"
-      data-scroll-lock-allow
     >
       {/* header */}
       <div
@@ -426,13 +371,21 @@ export function AssetViewer({
             <p className="px-4 text-center text-[13px] text-[#a1a1aa]">{mediaPreviewError}</p>
           ) : isVideo && previewSrc ? (
             <video
+              key={previewSrc}
               src={previewSrc}
               controls
               playsInline
+              preload="metadata"
               className="max-h-full max-w-full object-contain"
-              onError={() =>
-                setMediaPreviewError("Couldn't play this video. Try Download, or check your connection.")
-              }
+              onError={() => {
+                const ext = asset.originalFilename.toLowerCase().split(".").pop() ?? ""
+                const iosUnsupported = new Set(["mkv", "avi", "wmv", "flv"])
+                setMediaPreviewError(
+                  iosUnsupported.has(ext)
+                    ? "This video format can't play in the browser on iPhone. Use Download to open it in another app."
+                    : "Couldn't play this video. Try Download, or check your connection.",
+                )
+              }}
             />
           ) : isAudio && previewSrc ? (
             <audio
@@ -447,7 +400,18 @@ export function AssetViewer({
             />
           ) : previewSrc ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={previewSrc} alt={title} className="h-full w-full object-contain" draggable={false} />
+            <img
+              src={previewSrc}
+              alt={title}
+              className="h-full w-full object-contain"
+              draggable={false}
+              onError={() => {
+                void loadThumbnail(connection, asset.id).then((thumb) => {
+                  if (thumb) setPreviewSrc(thumb)
+                  else setMediaPreviewError("Couldn't load this image. Try Download.")
+                })
+              }}
+            />
           ) : (
             <p className="text-[13px] text-[#71717a]">Preview unavailable</p>
           )}
@@ -498,6 +462,9 @@ export function AssetViewer({
       {error ? (
         <p className="shrink-0 px-4 pb-1 text-center text-[11px] text-red-400">{error}</p>
       ) : null}
+      {shareMsg ? (
+        <p className="shrink-0 px-4 pb-1 text-center text-[11px] text-[#86efac]">{shareMsg}</p>
+      ) : null}
 
       {currentLibrary ? (
         <MobileMoveFolderSheet
@@ -514,7 +481,7 @@ export function AssetViewer({
 
       {/* action bar */}
       <div
-        className="grid shrink-0 grid-cols-3 gap-2 border-t border-[#27272a] bg-[#18181b] px-4 py-2.5"
+        className="grid shrink-0 grid-cols-4 gap-2 border-t border-[#27272a] bg-[#18181b] px-4 py-2.5"
         style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
       >
         <button
@@ -529,11 +496,20 @@ export function AssetViewer({
         <button
           type="button"
           disabled={Boolean(busy) || moveOpen}
+          onClick={() => void handleShare()}
+          className="flex h-11 items-center justify-center gap-1.5 rounded-xl bg-[#27272a] text-[12px] font-semibold text-white active:bg-[#3f3f46] disabled:opacity-50"
+        >
+          {busy === "share" ? <Loader2 className="size-4 animate-spin" /> : <Share2 className="size-4" />}
+          Share
+        </button>
+        <button
+          type="button"
+          disabled={Boolean(busy) || moveOpen}
           onClick={() => void handleDownload()}
           className="flex h-11 items-center justify-center gap-1.5 rounded-xl bg-[#27272a] text-[12px] font-semibold text-white active:bg-[#3f3f46] disabled:opacity-50"
         >
           {busy === "download" ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-          Download
+          Save
         </button>
         <button
           type="button"

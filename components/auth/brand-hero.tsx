@@ -2,18 +2,20 @@
 
 import { ChevronLeft } from "lucide-react"
 
+import { AuthMobileHeroHeader } from "@/components/auth/auth-mobile-branding"
+
 export const BRAND_HERO_HEIGHT_PX = 212
 
 export const SIGN_IN_BRAND_PAGES = [
   {
-    brandSub: "Your server, your control.",
+    brandSub: "Your files, your phone.",
     brandDesc:
-      "Manage files, stream media, and keep tabs on your self-hosted Arciin instance from your phone—libraries, uploads, and activity stay in sync with the server you own.",
+      "Arciin on mobile — upload photos and files, browse libraries, chat with your instance, and manage everything from one app.",
   },
   {
-    brandSub: "Set up a new device.",
+    brandSub: "First-run setup.",
     brandDesc:
-      "Link this phone to your Arciin server with your network address, a connection code from Settings → Mobile connection, and the same email and password you use on the web app.",
+      "Create your account, pick storage on the server, and start using Arciin. No pairing codes or desktop connection required.",
   },
 ] as const
 
@@ -23,17 +25,6 @@ const heroShellStyle = {
   minHeight: BRAND_HERO_HEIGHT_PX,
 } as const
 
-function ArciinMark() {
-  return (
-    <span
-      className="shrink-0 text-[38px] font-black leading-none tracking-tight text-white"
-      style={{ fontFamily: "var(--font-space-grotesk, sans-serif)" }}
-    >
-      Arciin<span style={{ color: "rgba(255,255,255,0.36)" }}>.</span>
-    </span>
-  )
-}
-
 export function BrandHeroCarousel({
   activePage,
   onSelectPage,
@@ -41,13 +32,15 @@ export function BrandHeroCarousel({
   activePage: 0 | 1
   onSelectPage: (page: 0 | 1) => void
 }) {
+  void onSelectPage
+
   return (
     <div
       className="mx-4 mt-3 shrink-0 overflow-hidden rounded-3xl"
       style={heroShellStyle}
     >
       <div className="flex h-full flex-col px-6 pt-7">
-        <ArciinMark />
+        <AuthMobileHeroHeader />
 
         <div className="mt-3 flex min-h-0 flex-1 flex-col gap-1.5">
           <p
@@ -64,22 +57,15 @@ export function BrandHeroCarousel({
           </p>
         </div>
 
-        <div className="flex shrink-0 items-center gap-[7px] pb-5 pt-3">
-          {SIGN_IN_BRAND_PAGES.map((_, i) => (
-            <button
-              key={i}
-              type="button"
-              onClick={() => onSelectPage(i as 0 | 1)}
-              style={{
-                width: activePage === i ? 22 : 7,
-                height: 7,
-                borderRadius: 99,
-                transition: "width 0.25s, background-color 0.25s",
-                backgroundColor: activePage === i ? "#ffffff" : "rgba(255,255,255,0.32)",
-              }}
-              aria-label={i === 0 ? "Sign in" : "Set up device"}
-            />
-          ))}
+        <div className="flex shrink-0 items-center gap-[7px] pb-5 pt-3" aria-hidden>
+          <div
+            style={{
+              width: 22,
+              height: 7,
+              borderRadius: 99,
+              backgroundColor: "#ffffff",
+            }}
+          />
         </div>
       </div>
     </div>
@@ -90,25 +76,31 @@ export function BrandHeroStatic({
   title,
   description,
   onBack,
+  backLabel = "Back to sign in",
+  showBack = true,
 }: {
   title: string
   description: string
-  onBack: () => void
+  onBack?: () => void
+  backLabel?: string
+  showBack?: boolean
 }) {
   return (
     <div className="mx-4 mt-3 shrink-0 overflow-hidden rounded-3xl" style={heroShellStyle}>
       <div className="flex h-full flex-col px-6 pt-7">
-        <ArciinMark />
+        <AuthMobileHeroHeader />
 
         <div className="mt-3 flex min-h-0 flex-1 flex-col gap-1.5">
-          <button
-            type="button"
-            onClick={onBack}
-            className="flex w-fit shrink-0 items-center gap-1 text-[12px] font-medium text-white/70 active:text-white"
-          >
-            <ChevronLeft className="size-3.5" />
-            Back to sign in
-          </button>
+          {showBack && onBack ? (
+            <button
+              type="button"
+              onClick={onBack}
+              className="flex w-fit shrink-0 items-center gap-1 text-[12px] font-medium text-white/70 active:text-white"
+            >
+              <ChevronLeft className="size-3.5" />
+              {backLabel}
+            </button>
+          ) : null}
           <p
             className="shrink-0 text-[13px] font-semibold leading-snug"
             style={{ color: "rgba(255,255,255,0.78)" }}

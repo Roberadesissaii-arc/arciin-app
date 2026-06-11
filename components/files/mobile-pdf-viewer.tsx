@@ -153,7 +153,6 @@ function PdfToolbar({
     <div
       className="flex shrink-0 items-center justify-between gap-2 border-t border-white/10 px-3 py-1.5"
       style={{
-        paddingBottom: "max(0.35rem, env(safe-area-inset-bottom))",
         background: "linear-gradient(180deg, rgba(24,24,27,0.92) 0%, rgba(9,9,11,0.98) 100%)",
       }}
     >
@@ -369,10 +368,10 @@ export function MobilePdfViewer({
     const dist = Math.hypot(dx, dy)
     const ratio = dist / pinchRef.current.dist
     if (ratio > 1.08) {
-      setZoomIndex((i) => Math.min(ZOOM_STEPS.length - 1, pinchRef.current!.index + 1))
+      setZoomIndex(() => Math.min(ZOOM_STEPS.length - 1, pinchRef.current!.index + 1))
       pinchRef.current = { dist, index: Math.min(ZOOM_STEPS.length - 1, pinchRef.current!.index + 1) }
     } else if (ratio < 0.92) {
-      setZoomIndex((i) => Math.max(0, pinchRef.current!.index - 1))
+      setZoomIndex(() => Math.max(0, pinchRef.current!.index - 1))
       pinchRef.current = { dist, index: Math.max(0, pinchRef.current!.index - 1) }
     }
   }, [])

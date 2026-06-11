@@ -12,7 +12,7 @@ import {
 } from "react"
 
 import { getAuthMe } from "@/lib/api/auth"
-import { fetchApi } from "@/lib/api/client"
+import { clearCachedUserAvatar } from "@/lib/utils/user-avatar-cache"
 import { ApiError, isNetworkError } from "@/lib/api/errors"
 import {
   ARCIIN_RECONNECT_EVENT,
@@ -54,6 +54,12 @@ import {
 } from "@/lib/connection/storage"
 import type { MobileConnection } from "@/lib/types/api"
 import type { MobileAuthResult } from "@/lib/types/api"
+import { isStandaloneApp } from "@/lib/standalone/config"
+import { bootstrapStandaloneServerProfile } from "@/lib/standalone/bootstrap-server"
+import {
+  repairStandaloneConnection,
+  repairStandaloneServerProfile,
+} from "@/lib/standalone/repair-server-urls"
 
 function isAuthFailure(err: unknown): boolean {
   return err instanceof ApiError && (err.status === 401 || err.status === 403)
@@ -70,8 +76,25 @@ function connectionsEqual(a: MobileConnection | null, b: MobileConnection | null
     a.instanceName === b.instanceName &&
     a.user?.id === b.user?.id &&
     a.user?.name === b.user?.name &&
-    a.user?.email === b.user?.email
+    a.user?.email === b.user?.email &&
+    a.user?.avatarUrl === b.user?.avatarUrl &&
+    a.user?.updatedAt === b.user?.updatedAt
   )
+}
+
+function connectionWithAuthMeUser(
+  stored: MobileConnection,
+  me: Awaited<ReturnType<typeof getAuthMe>>,
+): MobileConnection {
+  const prevUser = stored.user
+  if (
+    prevUser.id === me.user.id &&
+    (prevUser.avatarUrl !== me.user.avatarUrl ||
+      prevUser.updatedAt !== me.user.updatedAt)
+  ) {
+    clearCachedUserAvatar(me.user.id)
+  }
+  return { ...stored, user: me.user }
 }
 
 type ConnectionContextValue = {
@@ -129,8 +152,13 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const runServerSync = useCallback(async (signal?: AbortSignal): Promise<boolean> => {
-    const stored = loadConnection()
-    if (!stored || isConnectionExpired(stored) || isLoopbackApiBase(stored.apiBaseUrl)) {
+    const storedRaw = loadConnection()
+    if (!storedRaw || isConnectionExpired(storedRaw)) {
+      return false
+    }
+    const stored = isStandaloneApp() ? repairStandaloneConnection(storedRaw) : storedRaw
+    if (stored !== storedRaw) saveConnection(stored)
+    if (isLoopbackApiBase(stored.apiBaseUrl) && !isStandaloneApp()) {
       return false
     }
     const result = await syncServerUrls(stored, loadServerProfile(), signal)
@@ -147,8 +175,13 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
     const merged = isLoopbackApiBase(base)
       ? auth
       : authWithClientApiBase(auth, base)
-    const next = connectionFromAuth(merged)
-    saveServerProfile(serverProfileFromAuth(merged))
+    const profile = serverProfileFromAuth(merged)
+    const next = isStandaloneApp()
+      ? repairStandaloneConnection(connectionFromAuth(merged))
+      : connectionFromAuth(merged)
+    saveServerProfile(
+      isStandaloneApp() ? (repairStandaloneServerProfile(profile) ?? profile) : profile,
+    )
     saveConnection(next)
     setConnection(next)
     setServerReachable(true)
@@ -164,7 +197,7 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
       return false
     }
 
-    if (isLoopbackApiBase(stored.apiBaseUrl)) {
+    if (isLoopbackApiBase(stored.apiBaseUrl) && !isStandaloneApp()) {
       clearSession()
       setConnection(null)
       return false
@@ -172,9 +205,9 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
 
     try {
       const me = await getAuthMe(stored)
-      const next = { ...stored, user: me.user }
+      const next = connectionWithAuthMeUser(stored, me)
       saveConnection(next)
-      setConnection((prev) => connectionsEqual(prev, next) ? prev : next)
+      setConnection((prev) => (connectionsEqual(prev, next) ? prev : next))
       setServerReachable(true)
       return true
     } catch (err) {
@@ -194,14 +227,14 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
           saveServerProfile(resolved.server)
           const next = applyServerEndpointsToConnection(stored, resolved.server)
           saveConnection(next)
-          setConnection((prev) => connectionsEqual(prev, next) ? prev : next)
+          setConnection((prev) => (connectionsEqual(prev, next) ? prev : next))
           setServerReachable(true)
           dispatchAppForeground()
           try {
             const me = await getAuthMe(next)
-            const verified = { ...next, user: me.user }
+            const verified = connectionWithAuthMeUser(next, me)
             saveConnection(verified)
-            setConnection((prev) => connectionsEqual(prev, verified) ? prev : verified)
+            setConnection((prev) => (connectionsEqual(prev, verified) ? prev : verified))
           } catch {
             /* session still valid on new base; user refresh can retry */
           }
@@ -235,9 +268,20 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false
-    const stored = loadConnection()
 
-    if (!stored || isConnectionExpired(stored)) {
+    void (async () => {
+      if (isStandaloneApp()) {
+        try {
+          await bootstrapStandaloneServerProfile()
+        } catch {
+          /* setup/sign-in surfaces errors */
+        }
+      }
+    })()
+
+    const storedRaw = loadConnection()
+
+    if (!storedRaw || isConnectionExpired(storedRaw)) {
       clearSession()
       if (!cancelled) {
         setConnection(null)
@@ -248,7 +292,17 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    if (isLoopbackApiBase(stored.apiBaseUrl)) {
+    const profile = isStandaloneApp() ? repairStandaloneServerProfile(loadServerProfile()) : loadServerProfile()
+    if (profile && isStandaloneApp()) {
+      saveServerProfile(profile)
+    }
+
+    const stored = isStandaloneApp() ? repairStandaloneConnection(storedRaw) : storedRaw
+    if (stored !== storedRaw) {
+      saveConnection(stored)
+    }
+
+    if (isLoopbackApiBase(stored.apiBaseUrl) && !isStandaloneApp()) {
       clearSession()
       if (!cancelled) {
         setConnection(null)
@@ -269,9 +323,9 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
       try {
         const me = await getAuthMe(stored)
         if (!cancelled) {
-          const next = { ...stored, user: me.user }
+          const next = connectionWithAuthMeUser(stored, me)
           saveConnection(next)
-          setConnection((prev) => connectionsEqual(prev, next) ? prev : next)
+          setConnection((prev) => (connectionsEqual(prev, next) ? prev : next))
           setServerReachable(true)
         }
       } catch (err) {
@@ -295,9 +349,9 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
               try {
                 const me = await getAuthMe(next)
                 if (!cancelled) {
-                  const verified = { ...next, user: me.user }
+                  const verified = connectionWithAuthMeUser(next, me)
                   saveConnection(verified)
-                  setConnection((prev) => connectionsEqual(prev, verified) ? prev : verified)
+                  setConnection((prev) => (connectionsEqual(prev, verified) ? prev : verified))
                 }
               } catch {
                 /* connected on new URL; profile refresh can retry */
@@ -367,15 +421,20 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
     const account = setActiveAccount(accountId)
     if (!account) return false
 
-    const stored = connectionFromAccount(account)
-    if (!stored || isConnectionExpired(stored)) {
+    const storedRaw = connectionFromAccount(account)
+    if (!storedRaw || isConnectionExpired(storedRaw)) {
       clearSession()
       setConnection(null)
       setAccountsTick((n) => n + 1)
       return false
     }
 
-    if (isLoopbackApiBase(stored.apiBaseUrl)) {
+    const stored = isStandaloneApp() ? repairStandaloneConnection(storedRaw) : storedRaw
+    if (stored !== storedRaw) {
+      saveConnection(stored)
+    }
+
+    if (isLoopbackApiBase(stored.apiBaseUrl) && !isStandaloneApp()) {
       clearSession()
       setConnection(null)
       setAccountsTick((n) => n + 1)
@@ -385,7 +444,7 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
     setConnection(stored)
     try {
       const me = await getAuthMe(stored)
-      const next = { ...stored, user: me.user }
+      const next = connectionWithAuthMeUser(stored, me)
       saveConnection(next)
       setConnection(next)
       setServerReachable(true)
@@ -416,7 +475,7 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
           dispatchAppForeground()
           try {
             const me = await getAuthMe(next)
-            const verified = { ...next, user: me.user }
+            const verified = connectionWithAuthMeUser(next, me)
             saveConnection(verified)
             setConnection(verified)
           } catch {
@@ -436,24 +495,36 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  /** Single in-flight probe — intervals, foreground and reconnect events all share it,
+   *  so a stale slow probe can never overwrite the result of a newer successful one. */
+  const reconnectInFlightRef = useRef<Promise<boolean> | null>(null)
+
   const tryAutoReconnect = useCallback(async (): Promise<boolean> => {
-    const controller = new AbortController()
-    const timer = window.setTimeout(() => controller.abort(), 12_000)
-    try {
-      if (await refresh()) {
-        dispatchAppForeground()
-        await runServerSync(controller.signal)
-        return true
+    if (reconnectInFlightRef.current) return reconnectInFlightRef.current
+
+    const probe = (async () => {
+      const controller = new AbortController()
+      const timer = window.setTimeout(() => controller.abort(), 12_000)
+      try {
+        if (await refresh()) {
+          dispatchAppForeground()
+          await runServerSync(controller.signal)
+          return true
+        }
+        const synced = await runServerSync(controller.signal)
+        if (synced) {
+          dispatchAppForeground()
+          await refresh()
+        }
+        return synced
+      } finally {
+        window.clearTimeout(timer)
+        reconnectInFlightRef.current = null
       }
-      const synced = await runServerSync(controller.signal)
-      if (synced) {
-        dispatchAppForeground()
-        await refresh()
-      }
-      return synced
-    } finally {
-      window.clearTimeout(timer)
-    }
+    })()
+
+    reconnectInFlightRef.current = probe
+    return probe
   }, [refresh, runServerSync])
 
   const probeServerOnForeground = useCallback(async () => {

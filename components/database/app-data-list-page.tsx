@@ -15,6 +15,7 @@ import {
 } from "lucide-react"
 
 import { useConnection } from "@/components/providers/connection-provider"
+import { MobileBottomSheet } from "@/components/shell/mobile-bottom-sheet"
 import { createAppDatabase, deleteAppDatabase, listAppDatabases } from "@/lib/api/app-databases"
 import { formatApiError } from "@/lib/api/errors"
 import type { AppDatabaseSummary } from "@/lib/types/database"
@@ -28,9 +29,11 @@ function randomName() {
 }
 
 function CreateSheet({
+  open,
   onClose,
   onCreated,
 }: {
+  open: boolean
   onClose: () => void
   onCreated: () => void
 }) {
@@ -59,52 +62,39 @@ function CreateSheet({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} aria-hidden />
-      <div
-        className="relative z-10 w-full max-w-lg rounded-t-3xl bg-white px-5 pb-8 pt-5"
-        style={{ paddingBottom: "max(2rem, env(safe-area-inset-bottom))" }}
-      >
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-[17px] font-bold text-[#222222]">New database</h3>
-          <button type="button" onClick={onClose} aria-label="Close">
-            <X className="size-5 text-[#717171]" />
-          </button>
-        </div>
-        {error ? (
-          <p className="mb-3 text-[12px] text-[#b91c1c]">{error}</p>
-        ) : null}
+    <MobileBottomSheet open={open} onClose={onClose} title="New database" ariaLabel="New database">
+      <div className="flex flex-col gap-4">
+        {error ? <p className="text-[12px] text-[#b91c1c]">{error}</p> : null}
         <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#a0a0a0]">
           Name
         </label>
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
-          className="mt-1.5 w-full rounded-xl border border-[#e5e5e5] bg-[#f7f7f7] px-3 py-2.5 text-[14px] text-[#222222] outline-none focus:border-[#ff4f12]"
+          className="w-full rounded-xl border border-[#e5e5e5] bg-[#f7f7f7] px-3 py-2.5 text-[14px] text-[#222222] outline-none focus:border-[var(--arciin-accent,#ff4f12)]"
         />
-        <label className="mt-4 block text-[11px] font-semibold uppercase tracking-wider text-[#a0a0a0]">
+        <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#a0a0a0]">
           Description (optional)
         </label>
         <input
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          className="mt-1.5 w-full rounded-xl border border-[#e5e5e5] bg-[#f7f7f7] px-3 py-2.5 text-[14px] text-[#222222] outline-none focus:border-[#ff4f12]"
+          className="w-full rounded-xl border border-[#e5e5e5] bg-[#f7f7f7] px-3 py-2.5 text-[14px] text-[#222222] outline-none focus:border-[var(--arciin-accent,#ff4f12)]"
         />
         <button
           type="button"
           disabled={saving || !name.trim()}
           onClick={() => void submit()}
-          className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl py-3 text-[14px] font-semibold text-white disabled:opacity-50"
-          style={{ backgroundColor: "#ff4f12" }}
+          className="btn-accent-solid flex w-full items-center justify-center gap-2 rounded-xl py-3 text-[14px] font-semibold disabled:opacity-50"
         >
           {saving ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
           Create database
         </button>
-        <p className="mt-2 text-center text-[11px] text-[#a0a0a0]">
+        <p className="text-center text-[11px] text-[#a0a0a0]">
           A Default table is created automatically.
         </p>
       </div>
-    </div>
+    </MobileBottomSheet>
   )
 }
 
@@ -127,7 +117,7 @@ function DatabaseRow({
           className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[#f7f7f7]"
           style={{ border: "1px solid #e8e8e8" }}
         >
-          <Layers2 className="size-4 text-[#ff4f12]" />
+          <Layers2 className="text-accent size-4" />
         </div>
         <div className="min-w-0 flex-1">
           <p className="truncate text-[13px] font-semibold text-[#222222]">{db.name}</p>
@@ -224,11 +214,11 @@ export function AppDataListPage() {
     <div className="flex flex-col gap-4">
 
       {/* ── sticky intro card ───────────────────────────────────── */}
-      <div className="sticky top-0 z-10 -mx-4 -mt-4 px-4 pt-4 pb-2" style={{ backgroundColor: "#f7f7f7" }}>
-        <div
-          className="overflow-hidden rounded-3xl"
-          style={{ background: "linear-gradient(155deg, #ff6a30 0%, #c82d00 100%)" }}
-        >
+      <div
+        className="sticky top-0 z-10 -mx-4 -mt-4 px-4 pb-2"
+        style={{ backgroundColor: "#f7f7f7", paddingTop: "max(1rem, env(safe-area-inset-top, 0px))" }}
+      >
+        <div className="page-intro-hero overflow-hidden rounded-3xl">
           <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-5">
             <div className="min-w-0 flex-1">
               <p
@@ -303,8 +293,7 @@ export function AppDataListPage() {
         <button
           type="button"
           onClick={() => setCreateOpen(true)}
-          className="flex w-full items-center justify-center gap-2 rounded-2xl py-3 text-[14px] font-semibold text-white active:opacity-90"
-          style={{ backgroundColor: "#ff4f12" }}
+          className="btn-accent-solid flex w-full items-center justify-center gap-2 rounded-2xl py-3 text-[14px] font-semibold active:opacity-90"
         >
           <Plus className="size-4" />
           New database
@@ -333,7 +322,11 @@ export function AppDataListPage() {
       </div>
 
       {createOpen ? (
-        <CreateSheet onClose={() => setCreateOpen(false)} onCreated={() => void load()} />
+        <CreateSheet
+          open={createOpen}
+          onClose={() => setCreateOpen(false)}
+          onCreated={() => void load()}
+        />
       ) : null}
     </div>
   )

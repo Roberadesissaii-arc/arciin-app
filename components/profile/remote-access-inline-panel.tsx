@@ -11,14 +11,24 @@ import {
   Wifi,
 } from "lucide-react"
 
+import { AdminSettingsGate } from "@/components/settings/admin-settings-gate"
 import { MutedPanelError } from "@/components/shell/muted-panel-error"
+import { PanelStatusBanner } from "@/components/settings/panel-status-banner"
 import { OfflineCachedNotice } from "@/components/settings/offline-cached-notice"
 import { formatApiError } from "@/lib/api/errors"
 import { HOSTED_APP_REMOTE_INTRO, isPwaHostedApp } from "@/lib/api/hosted-app"
-import { getRemoteAccessSettings, updateRemoteAccessSettings } from "@/lib/api/settings"
+import {
+  getCloudflareTunnelStatus,
+  getRemoteAccessSettings,
+  startCloudflareTunnel,
+  stopCloudflareTunnel,
+  updateRemoteAccessSettings,
+  type CloudflareTunnelStatus,
+} from "@/lib/api/settings"
 import { useConnection } from "@/components/providers/connection-provider"
 import { loadServerProfile } from "@/lib/connection/storage"
 import { dispatchAppForeground } from "@/lib/hooks/use-app-foreground"
+import { usePanelStatusMessage } from "@/lib/hooks/use-panel-status-message"
 import { useStablePanelLoad } from "@/lib/hooks/use-stable-panel-load"
 import type { RemoteAccessSettings } from "@/lib/types/models"
 
@@ -59,8 +69,10 @@ export function RemoteAccessInlinePanel({ enabled }: { enabled: boolean }) {
   const [resolving, setResolving] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
-  const [message, setMessage] = useState<string | null>(null)
+  const { message, showStatus, clearStatus } = usePanelStatusMessage(enabled)
   const [manualAddress, setManualAddress] = useState("")
+  const [tunnel, setTunnel] = useState<CloudflareTunnelStatus | null>(null)
+  const [tunnelBusy, setTunnelBusy] = useState(false)
 
   useEffect(() => {
     if (!data) return
@@ -93,7 +105,7 @@ export function RemoteAccessInlinePanel({ enabled }: { enabled: boolean }) {
       if (!cancelled) {
         setResolving(false)
         if (ok) {
-          setMessage("Connected — address updated if the server tunnel changed.")
+          showStatus("Connected — address updated if the server tunnel changed.")
           setSaveError(null)
           await reload()
         }
@@ -105,6 +117,56 @@ export function RemoteAccessInlinePanel({ enabled }: { enabled: boolean }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- run when opening Remote access
   }, [enabled, connection?.sessionToken])
 
+  useEffect(() => {
+    if (!enabled || !connection) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const status = await getCloudflareTunnelStatus(connection)
+        if (!cancelled) setTunnel(status)
+      } catch {
+        if (!cancelled) setTunnel(null)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [enabled, connection, data?.publicUrl])
+
+  async function handleTunnelStart() {
+    if (!connection) return
+    setTunnelBusy(true)
+    setSaveError(null)
+    try {
+      const status = await startCloudflareTunnel(connection)
+      setTunnel(status)
+      if (status.url) {
+        setDomain(status.url)
+        showStatus("Tunnel started — public URL updated.")
+        await reload()
+      }
+    } catch (err) {
+      setSaveError(formatApiError(err))
+    } finally {
+      setTunnelBusy(false)
+    }
+  }
+
+  async function handleTunnelStop() {
+    if (!connection) return
+    setTunnelBusy(true)
+    setSaveError(null)
+    try {
+      const status = await stopCloudflareTunnel(connection)
+      setTunnel(status)
+      showStatus("Tunnel stopped.")
+    } catch (err) {
+      setSaveError(formatApiError(err))
+    } finally {
+      setTunnelBusy(false)
+    }
+  }
+
   const activePublicUrl = (data?.publicUrl || domain || "").trim()
   const activeLocalUrl = (localUrl || data?.localUrl || "").trim()
   const usingPublic = connectionMode === "public" && Boolean(activePublicUrl)
@@ -114,14 +176,14 @@ export function RemoteAccessInlinePanel({ enabled }: { enabled: boolean }) {
     if (!connection) return
     setSaving(true)
     setSaveError(null)
-    setMessage(null)
+    clearStatus()
     try {
       const updated = await updateRemoteAccessSettings(connection, patch)
       setDomain(updated.publicUrl ?? "")
       setInitialDomain(updated.publicUrl ?? "")
       setLocalUrl(updated.primaryLanUrl ?? updated.localUrl ?? updated.requestOrigin ?? null)
       setLanUrls(updated.lanUrls ?? [])
-      setMessage("Saved on server.")
+      showStatus("Saved on server.")
       await reload()
     } catch (err) {
       setSaveError(formatApiError(err))
@@ -133,11 +195,11 @@ export function RemoteAccessInlinePanel({ enabled }: { enabled: boolean }) {
   async function handleReconnectWithAddress(address: string) {
     setReconnecting(true)
     setSaveError(null)
-    setMessage(null)
+    clearStatus()
     try {
       const result = await reconnectServer(address)
       if (result.status === "connected") {
-        setMessage("Connected.")
+        showStatus("Connected.")
         dispatchAppForeground()
         await refresh()
         await reload()
@@ -160,7 +222,7 @@ export function RemoteAccessInlinePanel({ enabled }: { enabled: boolean }) {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-start gap-2.5 rounded-xl border border-[#e5e5e5] bg-[#fafafa] px-3.5 py-3">
-        <Globe className="mt-0.5 size-4 shrink-0 text-[#ff4f12]" />
+        <Globe className="text-accent mt-0.5 size-4 shrink-0" />
         <div className="min-w-0 flex-1">
           <p className="text-[13px] font-semibold text-[#222222]">Remote access</p>
           <p className="mt-0.5 text-[11px] leading-relaxed text-[#717171]">
@@ -197,7 +259,7 @@ export function RemoteAccessInlinePanel({ enabled }: { enabled: boolean }) {
           <button
             type="button"
             disabled={reconnecting || !manualAddress.trim()}
-            className="flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-[#ff4f12] text-[12px] font-semibold text-white disabled:opacity-50"
+            className="btn-accent-solid flex h-10 w-full items-center justify-center gap-2 rounded-lg text-[12px] font-semibold disabled:opacity-50"
             onClick={() => void handleReconnectWithAddress(manualAddress.trim())}
           >
             <ArrowLeftRight className="size-3.5" />
@@ -206,7 +268,7 @@ export function RemoteAccessInlinePanel({ enabled }: { enabled: boolean }) {
           <button
             type="button"
             className="flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-[#fcd34d] bg-white text-[12px] font-semibold text-[#92400e]"
-            onClick={() => void tryAutoReconnect().then((ok) => ok && setMessage("Reconnected."))}
+            onClick={() => void tryAutoReconnect().then((ok) => ok && showStatus("Reconnected."))}
           >
             <RefreshCw className="size-3.5" />
             Try auto-reconnect
@@ -214,84 +276,127 @@ export function RemoteAccessInlinePanel({ enabled }: { enabled: boolean }) {
         </div>
       ) : null}
 
-      {loading && connection ? (
-        <div className="flex justify-center py-8">
-          <Loader2 className="size-6 animate-spin text-[#c0c0c0]" />
-        </div>
-      ) : null}
-
-      {error && !loading && !data ? (
-        <MutedPanelError error={error} onRetry={() => void reload()} />
-      ) : null}
-
-      {showingCachedOffline && (data || !loading) ? (
-        <OfflineCachedNotice revalidating={isRevalidating} />
-      ) : null}
-
-      {!loading && data ? (
+      <AdminSettingsGate feature="Remote access settings">
         <>
-          {!isPwaHostedApp() ? (
-            <ModeCard
-              active={!usingPublic}
-              icon={Wifi}
-              title="On your network"
-              subtitle="Same Wi‑Fi as the server"
-              urls={lanList}
-              actionLabel="Use LAN"
-              actionDisabled={reconnecting || lanList.length === 0}
-              onAction={() => {
-                writeStoredMode("local")
-                setConnectionMode("local")
-                const target = lanList[0]
-                if (target) void handleReconnectWithAddress(target)
-              }}
-            />
+          {loading && connection ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="size-6 animate-spin text-[#c0c0c0]" />
+            </div>
           ) : null}
 
-          <ModeCard
-            active={usingPublic}
-            icon={Smartphone}
-            title="From anywhere"
-            subtitle="Public HTTPS"
-            urls={activePublicUrl ? [activePublicUrl] : []}
-            actionLabel="Use public URL"
-            actionDisabled={reconnecting || !activePublicUrl}
-            onAction={() => {
-              writeStoredMode("public")
-              setConnectionMode("public")
-              void handleReconnectWithAddress(activePublicUrl)
-            }}
-            footer={
-              <div className="space-y-2 border-t border-[#f0f0f0] pt-3">
-                <input
-                  type="url"
-                  value={domain}
-                  onChange={(e) => setDomain(e.target.value)}
-                  placeholder="https://….trycloudflare.com"
-                  className="w-full rounded-lg bg-[#f7f7f7] px-3 py-2.5 font-mono text-[12px] text-[#222222] outline-none"
-                  style={{ border: "1px solid #e5e5e5" }}
+          {error && !loading && !data ? (
+            <MutedPanelError error={error} onRetry={() => void reload()} />
+          ) : null}
+
+          {showingCachedOffline && (data || !loading) ? (
+            <OfflineCachedNotice revalidating={isRevalidating} />
+          ) : null}
+
+          {!loading && data ? (
+            <>
+              {!isPwaHostedApp() ? (
+                <ModeCard
+                  active={!usingPublic}
+                  icon={Wifi}
+                  title="On your network"
+                  subtitle="Same Wi‑Fi as the server"
+                  urls={lanList}
+                  actionLabel="Use LAN"
+                  actionDisabled={reconnecting || lanList.length === 0}
+                  onAction={() => {
+                    writeStoredMode("local")
+                    setConnectionMode("local")
+                    const target = lanList[0]
+                    if (target) void handleReconnectWithAddress(target)
+                  }}
                 />
-                <button
-                  type="button"
-                  disabled={saving || !connection || domain.trim() === initialDomain.trim()}
-                  onClick={() => void savePatch({ publicUrl: domain.trim() || null })}
-                  className="h-9 w-full rounded-lg border border-[#e5e5e5] text-[12px] font-semibold text-[#222222] disabled:opacity-50"
+              ) : null}
+
+              <ModeCard
+                active={usingPublic}
+                icon={Smartphone}
+                title="From anywhere"
+                subtitle="Public HTTPS"
+                urls={activePublicUrl ? [activePublicUrl] : []}
+                actionLabel="Use public URL"
+                actionDisabled={reconnecting || !activePublicUrl}
+                onAction={() => {
+                  writeStoredMode("public")
+                  setConnectionMode("public")
+                  void handleReconnectWithAddress(activePublicUrl)
+                }}
+                footer={
+                  <div className="space-y-2 border-t border-[#f0f0f0] pt-3">
+                    <input
+                      type="url"
+                      value={domain}
+                      onChange={(e) => setDomain(e.target.value)}
+                      placeholder="https://….trycloudflare.com"
+                      className="w-full rounded-lg bg-[#f7f7f7] px-3 py-2.5 font-mono text-[12px] text-[#222222] outline-none"
+                      style={{ border: "1px solid #e5e5e5" }}
+                    />
+                    <button
+                      type="button"
+                      disabled={saving || !connection || domain.trim() === initialDomain.trim()}
+                      onClick={() => void savePatch({ publicUrl: domain.trim() || null })}
+                      className="h-9 w-full rounded-lg border border-[#e5e5e5] text-[12px] font-semibold text-[#222222] disabled:opacity-50"
+                    >
+                      {saving ? "Saving…" : "Save on server"}
+                    </button>
+                    <p className="text-center text-[10px] text-[#a0a0a0]">
+                      Or set URL on desktop → Settings → Domain
+                    </p>
+                  </div>
+                }
+              />
+              {!isPwaHostedApp() ? (
+                <section
+                  className="overflow-hidden rounded-2xl bg-white"
+                  style={{ border: "1px solid #e5e5e5" }}
                 >
-                  {saving ? "Saving…" : "Save on server"}
-                </button>
-                <p className="text-center text-[10px] text-[#a0a0a0]">
-                  Or set URL on desktop → Settings → Domain
-                </p>
-              </div>
-            }
-          />
+                  <div className="border-b border-[#f0f0f0] px-3.5 py-2.5">
+                    <p className="text-[13px] font-semibold text-[#222222]">Cloudflare tunnel</p>
+                    <p className="text-[10px] text-[#a0a0a0]">
+                      Quick public HTTPS — same as desktop Settings → Domain
+                    </p>
+                  </div>
+                  <div className="space-y-2.5 px-3.5 py-3">
+                    <p className="text-[12px] text-[#717171]">
+                      {tunnel?.running
+                        ? `Running${tunnel.url ? ` · ${tunnel.url}` : ""}`
+                        : "Stopped — start to get a public URL for this phone."}
+                    </p>
+                    {tunnel?.error ? (
+                      <p className="text-[11px] text-[#b91c1c]">{tunnel.error}</p>
+                    ) : null}
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        disabled={tunnelBusy || tunnel?.running}
+                        onClick={() => void handleTunnelStart()}
+                        className="btn-accent-solid flex h-10 flex-1 items-center justify-center rounded-xl text-[12px] font-semibold disabled:opacity-50"
+                      >
+                        Start tunnel
+                      </button>
+                      <button
+                        type="button"
+                        disabled={tunnelBusy || !tunnel?.running}
+                        onClick={() => void handleTunnelStop()}
+                        className="flex h-10 flex-1 items-center justify-center rounded-xl border border-[#e5e5e5] text-[12px] font-semibold text-[#222222] disabled:opacity-50"
+                      >
+                        Stop
+                      </button>
+                    </div>
+                  </div>
+                </section>
+              ) : null}
+            </>
+          ) : null}
         </>
-      ) : null}
+      </AdminSettingsGate>
 
       {saveError ? <MutedPanelError error={saveError} /> : null}
-      {message ? (
-        <p className="rounded-xl border border-[#bbf7d0] bg-[#f0fdf4] px-3 py-2 text-[12px] text-[#15803d]">{message}</p>
-      ) : null}
+      <PanelStatusBanner message={message} />
     </div>
   )
 }
@@ -320,7 +425,7 @@ function ModeCard({
   return (
     <section
       className="overflow-hidden rounded-2xl bg-white"
-      style={{ border: `1px solid ${active ? "rgba(255,79,18,0.4)" : "#e5e5e5"}` }}
+      style={{ border: `1px solid ${active ? "var(--arciin-accent-ring)" : "#e5e5e5"}` }}
     >
       <div className="flex items-center gap-2 border-b border-[#f0f0f0] px-3.5 py-2.5">
         <Icon className="size-4 text-[#717171]" />
@@ -329,7 +434,7 @@ function ModeCard({
           <p className="text-[10px] text-[#a0a0a0]">{subtitle}</p>
         </div>
         {active ? (
-          <span className="rounded-full bg-[#fff7f4] px-2 py-0.5 text-[10px] font-semibold text-[#ff4f12]">
+          <span className="accent-badge-pill rounded-full px-2 py-0.5 text-[10px] font-semibold">
             Active
           </span>
         ) : null}

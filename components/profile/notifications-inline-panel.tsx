@@ -9,6 +9,8 @@ import { SettingsIntroCard } from "@/components/settings/settings-intro-card"
 import { MutedPanelError } from "@/components/shell/muted-panel-error"
 import { formatApiError } from "@/lib/api/errors"
 import { getUserPreferences, updateUserPreferences } from "@/lib/api/user-preferences"
+import { setActiveUserPreferences } from "@/lib/preferences/preferences-store"
+import { playUploadCompleteSound } from "@/lib/preferences/upload-sound"
 import { useStablePanelLoad } from "@/lib/hooks/use-stable-panel-load"
 import type { UserPreferences } from "@/lib/types/models"
 
@@ -37,13 +39,7 @@ function Toggle({
         aria-checked={checked}
         disabled={disabled}
         onClick={() => onChange(!checked)}
-        className="relative shrink-0 disabled:opacity-50"
-        style={{
-          width: 44,
-          height: 26,
-          borderRadius: 13,
-          backgroundColor: checked ? "#ff4f12" : "#e5e5e5",
-        }}
+        className="accent-switch relative shrink-0 disabled:opacity-50"
       >
         <span
           className="absolute top-[3px] size-5 rounded-full bg-white shadow-sm transition-transform"
@@ -100,12 +96,18 @@ export function NotificationsInlinePanel({ enabled }: { enabled: boolean }) {
     setSaving(true)
     setPatchError(null)
     const prev = prefs
-    setData({ ...prefs, notifications: { ...prefs.notifications, ...patch } })
+    const optimistic = { ...prefs, notifications: { ...prefs.notifications, ...patch } }
+    setData(optimistic)
+    setActiveUserPreferences(optimistic)
     try {
       const data = await updateUserPreferences(conn, { notifications: patch })
       setData(data)
+      setActiveUserPreferences(data)
     } catch (err) {
-      if (prev) setData(prev)
+      if (prev) {
+        setData(prev)
+        setActiveUserPreferences(prev)
+      }
       setPatchError(formatApiError(err))
     } finally {
       setSaving(false)
@@ -136,6 +138,14 @@ export function NotificationsInlinePanel({ enabled }: { enabled: boolean }) {
             disabled={saving}
             onChange={(v) => void patchNotifications({ uploadSound: v })}
           />
+          <button
+            type="button"
+            disabled={saving || !prefs.notifications.uploadSound}
+            onClick={() => playUploadCompleteSound()}
+            className="mb-2 w-full rounded-lg border border-[#e5e5e5] bg-white py-2 text-[12px] font-semibold text-[#717171] disabled:opacity-50"
+          >
+            Test sound
+          </button>
         </div>
       </div>
 
@@ -179,11 +189,8 @@ export function NotificationsInlinePanel({ enabled }: { enabled: boolean }) {
         className="flex items-center gap-3 rounded-xl bg-white px-3 py-3 active:bg-[#f7f7f7]"
         style={{ border: "1px solid #e5e5e5" }}
       >
-        <div
-          className="flex size-9 items-center justify-center rounded-xl bg-[#fff4f0]"
-          style={{ border: "1px solid rgba(255,79,18,0.2)" }}
-        >
-          <Bell className="size-4 text-[#ff4f12]" />
+        <div className="empty-state-icon flex size-9 items-center justify-center rounded-xl">
+          <Bell className="text-accent size-4" />
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-[13px] font-semibold text-[#222222]">Open notifications feed</p>

@@ -63,7 +63,26 @@ export function useStablePanelLoad<T>(
   const storageKey =
     options?.cacheKey && sessionKey ? `${sessionKey}:${options.cacheKey}` : null
 
-  const [data, setData] = useState<T | null>(() => readCache<T>(storageKey)?.data ?? null)
+  const [data, setDataState] = useState<T | null>(() => readCache<T>(storageKey)?.data ?? null)
+  const localMutationRef = useRef(0)
+
+  const setData = useCallback(
+    (
+      value: T | null | ((prev: T | null) => T | null),
+      opts?: { fromFetch?: boolean },
+    ) => {
+      if (!opts?.fromFetch) localMutationRef.current += 1
+      setDataState((prev) => {
+        const next =
+          typeof value === "function"
+            ? (value as (current: T | null) => T | null)(prev)
+            : value
+        if (next != null) writeCache(storageKey, next)
+        return next
+      })
+    },
+    [storageKey],
+  )
   const [loading, setLoading] = useState(false)
   const [isRevalidating, setIsRevalidating] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -97,7 +116,7 @@ export function useStablePanelLoad<T>(
     const fresh = cached != null && Date.now() - cached.fetchedAt <= staleBudget
 
     if (fresh) {
-      if (data !== cached.data) setData(cached.data)
+      setDataState((prev) => (prev !== cached.data ? cached.data : prev))
       setShowingCachedOffline(serverReachable === false)
       if (serverReachable !== false) return
     }
@@ -108,18 +127,20 @@ export function useStablePanelLoad<T>(
 
     if (background) {
       setIsRevalidating(true)
-      if (data !== cached.data) setData(cached.data)
+      setDataState((prev) => (prev !== cached.data ? cached.data : prev))
     } else {
       setLoading(true)
     }
     if (!cached?.data) setError(null)
 
+    const mutationAtStart = localMutationRef.current
+
     void (async () => {
       try {
         const result = await loader(conn, ac.signal)
         if (cancelled) return
-        setData(result)
-        writeCache(storageKey, result)
+        if (mutationAtStart !== localMutationRef.current) return
+        setData(result, { fromFetch: true })
         setShowingCachedOffline(false)
         setError(null)
       } catch (err) {
@@ -150,7 +171,7 @@ export function useStablePanelLoad<T>(
 
   useEffect(() => {
     if (!sessionKey) {
-      setData(null)
+      setDataState(null)
     }
   }, [sessionKey])
 

@@ -1,36 +1,45 @@
 "use client"
 
-import Link from "next/link"
 import { useEffect, useRef, useState } from "react"
 import {
   Bell,
-  ChevronRight,
+  Clock3,
   Database,
+  Eraser,
   FingerprintPattern,
   Globe,
   HardDrive,
   Key,
+  Usb,
   KeyRound,
   Loader2,
   PackagePlus,
   Server,
   Settings,
   Shield,
+  Sparkles,
   User,
   Users,
 } from "lucide-react"
 
 import { SignOutButton } from "@/components/auth/sign-out-button"
+import { isStandaloneApp } from "@/lib/standalone/config"
+import { AccessControlInlinePanel } from "@/components/profile/access-control-inline-panel"
+import { AiSettingsInlinePanel } from "@/components/profile/ai-settings-inline-panel"
 import { ApiKeysInlinePanel } from "@/components/profile/api-keys-inline-panel"
+import { ApiProtectionInlinePanel } from "@/components/profile/api-protection-inline-panel"
 import { ChangePasswordPanel } from "@/components/profile/change-password-panel"
 import { ChangeServerInlinePanel } from "@/components/profile/change-server-inline-panel"
+import { ClearDataInlinePanel } from "@/components/profile/clear-data-inline-panel"
 import { DatabaseInlinePanel } from "@/components/profile/database-inline-panel"
 import { IntegrationsInlinePanel } from "@/components/profile/integrations-inline-panel"
 import { NotificationsInlinePanel } from "@/components/profile/notifications-inline-panel"
 import { PreferencesInlinePanel } from "@/components/profile/preferences-inline-panel"
 import { RemoteAccessInlinePanel } from "@/components/profile/remote-access-inline-panel"
 import { SessionsInlinePanel } from "@/components/profile/sessions-inline-panel"
+import { SessionSecurityInlinePanel } from "@/components/profile/session-security-inline-panel"
 import { ProfileInlinePanel } from "@/components/profile/profile-inline-panel"
+import { AttachDiskInlinePanel } from "@/components/profile/attach-disk-inline-panel"
 import { StorageInlinePanel } from "@/components/profile/storage-inline-panel"
 import { VaultInlinePanel } from "@/components/profile/vault-inline-panel"
 import {
@@ -60,70 +69,6 @@ function SectionLabel({ label }: { label: string }) {
   )
 }
 
-function MenuRow({
-  icon: Icon,
-  label,
-  sub,
-  destructive,
-  href,
-  soon,
-}: {
-  icon: React.ElementType
-  label: string
-  sub?: string
-  destructive?: boolean
-  href?: string
-  soon?: boolean
-}) {
-  const inner = (
-    <>
-      <div
-        className="flex size-8 shrink-0 items-center justify-center rounded-xl"
-        style={{
-          backgroundColor: destructive ? "rgba(220,38,38,0.06)" : "#f7f7f7",
-          border: "1px solid #e5e5e5",
-        }}
-      >
-        <Icon className="size-[15px]" style={{ color: destructive ? "#dc2626" : "#717171" }} />
-      </div>
-      <div className="min-w-0 flex-1 text-left">
-        <p className="text-[14px] font-medium" style={{ color: destructive ? "#dc2626" : "#222222" }}>
-          {label}
-        </p>
-        {sub && <p className="text-[11px] text-[#a0a0a0]">{sub}</p>}
-      </div>
-      {soon ? (
-        <span
-          className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold text-[#a0a0a0]"
-          style={{ border: "1px solid #e5e5e5" }}
-        >
-          Soon
-        </span>
-      ) : (
-        <ChevronRight className="size-4 shrink-0 text-[#c0c0c0]" />
-      )}
-    </>
-  )
-
-  if (href && !soon) {
-    return (
-      <Link href={href} className="flex w-full items-center gap-3.5 px-4 py-3.5 transition-colors active:bg-[#f7f7f7]">
-        {inner}
-      </Link>
-    )
-  }
-
-  return (
-    <button type="button" className="flex w-full items-center gap-3.5 px-4 py-3.5 transition-colors active:bg-[#f7f7f7]">
-      {inner}
-    </button>
-  )
-}
-
-function Divider() {
-  return <div className="mx-4 h-px bg-[#f0f0f0]" />
-}
-
 function MenuCard({ children }: { children: React.ReactNode }) {
   return (
     <div className="overflow-hidden rounded-2xl bg-white" style={{ border: "1px solid #e5e5e5" }}>
@@ -148,7 +93,10 @@ export function ProfilePage() {
 
   const sessionKey = connection?.sessionToken ?? null
   const toggleSection = (key: string) =>
-    setExpanded((prev) => ({ ...prev, [key]: !prev[key] }))
+    setExpanded((prev) => {
+      if (prev[key]) return { ...prev, [key]: false }
+      return { [key]: true }
+    })
   const sectionOpen = (key: string) => Boolean(expanded[key])
 
   useEffect(() => {
@@ -229,7 +177,10 @@ export function ProfilePage() {
   const avatarCacheKey = `${user?.id ?? ""}-${user?.avatarUrl ?? ""}-${user?.updatedAt ?? ""}`
 
   return (
-    <div className="flex flex-col gap-5">
+    <div
+      className="-mx-4 -mt-4 flex flex-col gap-5 px-4 pb-2"
+      style={{ paddingTop: "max(0.25rem, env(safe-area-inset-top, 0px))" }}
+    >
       <ArciinDarkGradientPanel className="p-6">
         <div className="flex flex-col items-center gap-4">
           {connection && serverConnected ? (
@@ -321,16 +272,20 @@ export function ProfilePage() {
       <div>
         <SectionLabel label="Account" />
         <SettingsGroup>
-          <SettingsGroupItem
-            icon={Server}
-            label="Change server"
-            sub="Switch, check status, or remove saved servers"
-            open={sectionOpen("change-server")}
-            onToggle={() => toggleSection("change-server")}
-          >
-            <ChangeServerInlinePanel enabled={sectionOpen("change-server")} />
-          </SettingsGroupItem>
-          <SettingsGroupDivider />
+          {!isStandaloneApp() ? (
+            <>
+              <SettingsGroupItem
+                icon={Server}
+                label="Change server"
+                sub="Switch, check status, or remove saved servers"
+                open={sectionOpen("change-server")}
+                onToggle={() => toggleSection("change-server")}
+              >
+                <ChangeServerInlinePanel enabled={sectionOpen("change-server")} />
+              </SettingsGroupItem>
+              <SettingsGroupDivider />
+            </>
+          ) : null}
           <SettingsGroupItem
             icon={Bell}
             label="Notifications"
@@ -355,7 +310,7 @@ export function ProfilePage() {
           <SettingsGroupItem
             icon={HardDrive}
             label="Storage"
-            sub="Root path & usage"
+            sub="Usage & root path"
             open={sectionOpen("storage")}
             onToggle={() => toggleSection("storage")}
           >
@@ -363,9 +318,19 @@ export function ProfilePage() {
           </SettingsGroupItem>
           <SettingsGroupDivider />
           <SettingsGroupItem
+            icon={Usb}
+            label="Attach disk"
+            sub="SSD, USB & transfer"
+            open={sectionOpen("attach-disk")}
+            onToggle={() => toggleSection("attach-disk")}
+          >
+            <AttachDiskInlinePanel enabled={sectionOpen("attach-disk")} />
+          </SettingsGroupItem>
+          <SettingsGroupDivider />
+          <SettingsGroupItem
             icon={Globe}
             label="Remote access"
-            sub="Domain & tunnel"
+            sub="Domain, LAN & tunnel"
             open={sectionOpen("remote")}
             onToggle={() => toggleSection("remote")}
           >
@@ -394,7 +359,7 @@ export function ProfilePage() {
             open={sectionOpen("password")}
             onToggle={() => toggleSection("password")}
           >
-            <ChangePasswordPanel />
+            <ChangePasswordPanel enabled={sectionOpen("password")} />
           </SettingsGroupItem>
           <SettingsGroupDivider />
           <SettingsGroupItem
@@ -405,6 +370,46 @@ export function ProfilePage() {
             onToggle={() => toggleSection("sessions")}
           >
             <SessionsInlinePanel enabled={sectionOpen("sessions")} />
+          </SettingsGroupItem>
+          <SettingsGroupDivider />
+          <SettingsGroupItem
+            icon={Clock3}
+            label="Idle auto-logout"
+            sub="Sign out after inactivity"
+            open={sectionOpen("session-security")}
+            onToggle={() => toggleSection("session-security")}
+          >
+            <SessionSecurityInlinePanel enabled={sectionOpen("session-security")} />
+          </SettingsGroupItem>
+          <SettingsGroupDivider />
+          <SettingsGroupItem
+            icon={Shield}
+            label="API protection"
+            sub="Rate limits & IP rules"
+            open={sectionOpen("api-protection")}
+            onToggle={() => toggleSection("api-protection")}
+          >
+            <ApiProtectionInlinePanel enabled={sectionOpen("api-protection")} />
+          </SettingsGroupItem>
+          <SettingsGroupDivider />
+          <SettingsGroupItem
+            icon={Eraser}
+            label="Data reset"
+            sub="Clear media, chat & app data"
+            open={sectionOpen("data-reset")}
+            onToggle={() => toggleSection("data-reset")}
+          >
+            <ClearDataInlinePanel enabled={sectionOpen("data-reset")} />
+          </SettingsGroupItem>
+          <SettingsGroupDivider />
+          <SettingsGroupItem
+            icon={Sparkles}
+            label="AI settings"
+            sub="Planning & security"
+            open={sectionOpen("ai-settings")}
+            onToggle={() => toggleSection("ai-settings")}
+          >
+            <AiSettingsInlinePanel enabled={sectionOpen("ai-settings")} />
           </SettingsGroupItem>
           <SettingsGroupDivider />
           <SettingsGroupItem
@@ -420,11 +425,12 @@ export function ProfilePage() {
           <SettingsGroupItem
             icon={Users}
             label="Access control"
-            sub="User roles & invites"
-            open={false}
-            onToggle={() => {}}
-            soon
-          />
+            sub="Signup, session lifetime & lockout"
+            open={sectionOpen("access-control")}
+            onToggle={() => toggleSection("access-control")}
+          >
+            <AccessControlInlinePanel enabled={sectionOpen("access-control")} />
+          </SettingsGroupItem>
           <SettingsGroupDivider />
           <SettingsGroupItem
             icon={Key}

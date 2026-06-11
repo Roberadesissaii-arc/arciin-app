@@ -126,8 +126,10 @@ export function countUnreadPublicUrlNotices(lastSeenIso: string | null): number 
 }
 
 export function markPublicUrlNoticesRead() {
-  const items = loadNotices().map((n) => ({ ...n, read: true }))
-  persistNotices(items)
+  const items = loadNotices()
+  const hadUnread = items.some((n) => !n.read)
+  if (!hadUnread) return
+  persistNotices(items.map((n) => ({ ...n, read: true })))
   dispatchPublicUrlChangedEvent()
 }
 

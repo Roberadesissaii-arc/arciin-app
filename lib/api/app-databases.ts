@@ -57,6 +57,20 @@ export function listAppDatabaseFolders(
   })
 }
 
+export function createAppDatabaseFolder(
+  connection: MobileConnection,
+  databaseId: string,
+  body: { name: string; parentFolderId?: string },
+  signal?: AbortSignal,
+) {
+  return fetchApi<AppDatabaseFolderSummary>(`/app-databases/${databaseId}/folders`, {
+    connection,
+    method: "POST",
+    body,
+    signal,
+  })
+}
+
 export function listFolderRecords(
   connection: MobileConnection,
   folderId: string,

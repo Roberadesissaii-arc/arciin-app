@@ -19,7 +19,7 @@ export function ArciinMark({
       className={cn("font-bold tracking-tight text-[#222222]", sizeClass[size], className)}
       style={{ fontFamily: "var(--font-space-grotesk, sans-serif)" }}
     >
-      Arciin<span style={{ color: "#ff4f12" }}>.</span>
+      Arciin<span className="text-accent">.</span>
     </span>
   )
 }

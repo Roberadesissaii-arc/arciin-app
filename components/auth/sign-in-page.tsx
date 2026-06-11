@@ -1,337 +1,55 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
-import { Check, ChevronLeft, Eye, EyeOff, Globe, Key, Lock, Mail, Server } from "lucide-react"
+import { useRouter } from "next/navigation"
+import Link from "next/link"
+import { Check, Eye, EyeOff, Lock, Mail } from "lucide-react"
 
-import {
-  HOSTED_APP_LAN_HINT,
-  HOSTED_APP_SETUP_NOTE,
-  isPwaHostedApp,
-} from "@/lib/api/hosted-app"
 import { ConnectionSuccessScreen } from "@/components/auth/connection-success-screen"
-import { formatApiError } from "@/lib/api/errors"
-import { discoverServer, pairMobileDevice, loginMobileDevice } from "@/lib/api/mobile"
+import { AuthMobileCardHeader } from "@/components/auth/auth-mobile-shell"
+import { AuthMobileField, AuthMobileFormMessage } from "@/components/auth/auth-mobile-field"
 import {
-  deriveMobileServerUrlsFromApiBase,
-  displayServerLabel,
-  isLoopbackApiBase,
-  isPublicServerAddress,
-} from "@/lib/connection/normalize-url"
+  hasFieldErrors,
+  mapSignInApiError,
+  validateSignIn,
+  type AuthFieldErrors,
+} from "@/lib/auth/form-validation"
+import { loginMobileDevice } from "@/lib/api/mobile"
 import { authWithClientApiBase } from "@/lib/connection/merge-auth"
-import {
-  hasStoredServer,
-  loadServerProfile,
-  saveServerProfile,
-} from "@/lib/connection/storage"
-import { BrandHeroCarousel } from "@/components/auth/brand-hero"
-import { LoginDomainChip } from "@/components/connection/saved-server-chip"
+import { displayServerLabel } from "@/lib/connection/normalize-url"
+import { loadServerProfile } from "@/lib/connection/storage"
 import { useConnection } from "@/components/providers/connection-provider"
+import { getStandaloneApiBaseUrl } from "@/lib/standalone/api-origin"
+import { isFirstRunSetupContext } from "@/lib/standalone/first-run"
+import {
+  getCachedStandaloneInstanceGate,
+  loadStandaloneInstanceGate,
+} from "@/lib/standalone/instance-gate"
 
-function Field({
-  label,
-  icon: Icon,
-  type = "text",
-  placeholder,
-  value,
-  onChange,
-  right,
-  mono,
-  inputMode,
-  maxLength,
-  autoComplete,
-}: {
-  label: string
-  icon: React.ElementType
-  type?: string
-  placeholder: string
-  value: string
-  onChange: (v: string) => void
-  right?: React.ReactNode
-  mono?: boolean
-  inputMode?: "text" | "email" | "numeric" | "decimal"
-  maxLength?: number
-  autoComplete?: string
-}) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <label className="text-[11px] font-semibold uppercase tracking-widest text-[#a0a0a0]">
-        {label}
-      </label>
-      <div
-        className="flex items-center gap-3 rounded-2xl px-4 py-3.5"
-        style={{ backgroundColor: "#f7f7f7", border: "1.5px solid #e8e8e8" }}
-      >
-        <Icon className="size-[16px] shrink-0 text-[#c0c0c0]" />
-        <input
-          type={type}
-          inputMode={inputMode}
-          maxLength={maxLength}
-          placeholder={placeholder}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          autoComplete={autoComplete}
-          className="min-w-0 flex-1 bg-transparent text-[14px] text-[#222222] outline-none placeholder-[#c0c0c0]"
-          style={
-            mono ? { fontFamily: "monospace", letterSpacing: "0.12em" } : undefined
-          }
-        />
-        {right}
-      </div>
-    </div>
-  )
-}
-
-function PasswordToggle({
-  visible,
-  onToggle,
-}: {
-  visible: boolean
-  onToggle: () => void
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      className="shrink-0 rounded-lg p-1 text-[#c0c0c0] transition-colors active:text-[#717171]"
-      aria-label={visible ? "Hide password" : "Show password"}
-    >
-      {visible ? <EyeOff className="size-[16px]" /> : <Eye className="size-[16px]" />}
-    </button>
-  )
-}
-
-function OrangeButton({
-  loading,
-  label,
-  loadingLabel,
-  type = "submit",
-  onClick,
-  disabled,
-}: {
-  loading: boolean
-  label: string
-  loadingLabel: string
-  type?: "submit" | "button"
-  onClick?: () => void
-  disabled?: boolean
-}) {
-  return (
-    <button
-      type={type}
-      disabled={loading || disabled}
-      onClick={onClick}
-      className="flex h-[52px] w-full shrink-0 items-center justify-center rounded-2xl font-semibold text-white transition-opacity active:opacity-75 disabled:opacity-60"
-      style={{
-        background: "linear-gradient(135deg, #ff6a30 0%, #cc2e00 100%)",
-        boxShadow: "0 4px 18px rgba(255,79,18,0.30)",
-        fontSize: "15px",
-      }}
-    >
-      {loading ? (
-        <span className="flex items-center gap-2">
-          <span className="size-[17px] animate-spin rounded-full border-2 border-white/30 border-t-white" />
-          {loadingLabel}
-        </span>
-      ) : (
-        label
-      )}
-    </button>
-  )
-}
-
-function GhostButton({ label, onClick }: { label: string; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex h-[46px] w-full shrink-0 items-center justify-center rounded-2xl text-[14px] font-medium text-[#717171] transition-colors active:bg-[#f0f0f0]"
-      style={{ border: "1.5px solid #e8e8e8" }}
-    >
-      {label}
-    </button>
-  )
-}
-
-function ErrorBanner({ message }: { message: string }) {
-  return (
-    <p
-      className="rounded-xl px-4 py-2.5 text-[12px] leading-relaxed text-[#b91c1c]"
-      style={{ backgroundColor: "#fef2f2", border: "1px solid #fecaca" }}
-      role="alert"
-    >
-      {message}
-    </p>
-  )
-}
-
-
-function SignInOptionsRow({
-  rememberMe,
-  onRememberMeChange,
-  onForgotPassword,
-}: {
-  rememberMe: boolean
-  onRememberMeChange: (value: boolean) => void
-  onForgotPassword: () => void
-}) {
-  return (
-    <div className="-mt-1 flex items-center justify-between gap-3">
-      <label className="flex cursor-pointer items-center gap-2.5">
-        <button
-          type="button"
-          role="checkbox"
-          aria-checked={rememberMe}
-          aria-label="Remember me"
-          onClick={() => onRememberMeChange(!rememberMe)}
-          className="flex size-[18px] shrink-0 items-center justify-center rounded-[5px] border transition-colors"
-          style={{
-            borderColor: rememberMe ? "#ff4f12" : "#d4d4d4",
-            backgroundColor: rememberMe ? "#ff4f12" : "#ffffff",
-          }}
-        >
-          {rememberMe ? <Check className="size-3 stroke-[2.5] text-white" /> : null}
-        </button>
-        <span className="text-[12.5px] font-medium text-[#717171]">Remember me</span>
-      </label>
-      <button
-        type="button"
-        onClick={onForgotPassword}
-        className="shrink-0 text-[12.5px] font-medium text-[#ff4f12] underline-offset-2 active:opacity-70"
-      >
-        Forgot password?
-      </button>
-    </div>
-  )
-}
-
-type ServerAddressMode = "local" | "remote"
-
-function ServerAddressModeToggle({
-  mode,
-  onChange,
-  disableLocal,
-}: {
-  mode: ServerAddressMode
-  onChange: (mode: ServerAddressMode) => void
-  disableLocal?: boolean
-}) {
-  return (
-    <div
-      className="flex rounded-2xl p-1"
-      style={{ backgroundColor: "#f7f7f7", border: "1.5px solid #e8e8e8" }}
-      role="tablist"
-      aria-label="How you reach your server"
-    >
-      {(
-        [
-          { id: "local" as const, label: "On my network" },
-          { id: "remote" as const, label: "From anywhere" },
-        ] as const
-      ).map(({ id, label }) => {
-        const active = mode === id
-        const disabled = id === "local" && disableLocal
-        return (
-          <button
-            key={id}
-            type="button"
-            role="tab"
-            aria-selected={active}
-            disabled={disabled}
-            onClick={() => !disabled && onChange(id)}
-            className="relative flex-1 rounded-xl py-2.5 text-[12.5px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-45"
-            style={{
-              backgroundColor: active ? "#ffffff" : "transparent",
-              color: active ? "#111111" : "#a0a0a0",
-              boxShadow: active ? "0 1px 4px rgba(0,0,0,0.06)" : undefined,
-            }}
-            aria-label={disabled ? `${label} (not available)` : label}
-          >
-            {label}
-          </button>
-        )
-      })}
-    </div>
-  )
-}
-
-function SetupStepIndicator({ step }: { step: 1 | 2 }) {
-  return (
-    <div className="flex items-center gap-2">
-      <span className="text-[11px] font-semibold uppercase tracking-widest text-[#a0a0a0]">
-        Section {step} of 2
-      </span>
-      <div className="flex flex-1 gap-1.5">
-        <div
-          className="h-1 flex-1 rounded-full transition-colors"
-          style={{ backgroundColor: step >= 1 ? "#ff4f12" : "#e8e8e8" }}
-        />
-        <div
-          className="h-1 flex-1 rounded-full transition-colors"
-          style={{ backgroundColor: step >= 2 ? "#ff4f12" : "#e8e8e8" }}
-        />
-      </div>
-    </div>
-  )
-}
-
-function AuthCard({
-  title,
-  subtitle,
-  children,
-  footer,
-}: {
-  title: string
-  subtitle: string
-  children: React.ReactNode
-  footer: React.ReactNode
-}) {
-  return (
-    <div className="mx-4 mt-3 mb-6 shrink-0">
-      <div
-        className="rounded-3xl bg-white px-6 pt-6 pb-6"
-        style={{ border: "1px solid #efefef" }}
-      >
-        <div>
-          <p
-            className="text-[20px] font-bold tracking-tight text-[#111111]"
-            style={{ fontFamily: "var(--font-space-grotesk, sans-serif)" }}
-          >
-            {title}
-          </p>
-          <p className="mt-0.5 text-[12.5px] text-[#a0a0a0]">{subtitle}</p>
-        </div>
-
-        <div className="mt-5 flex flex-col gap-5">
-          <div className="flex flex-col gap-3.5">{children}</div>
-          <div>{footer}</div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-
-function CardDivider() {
-  return (
-    <div className="my-1 flex items-center gap-3">
-      <div className="h-px flex-1 bg-[#f0f0f0]" />
-      <span className="text-[11px] text-[#c0c0c0]">or</span>
-      <div className="h-px flex-1 bg-[#f0f0f0]" />
-    </div>
-  )
+function detectDeviceName() {
+  if (typeof navigator === "undefined") return "Mobile"
+  const ua = navigator.userAgent
+  if (/iPhone|iPad|iPod/i.test(ua)) return "iPhone"
+  if (/Android/i.test(ua)) return "Android"
+  return "Mobile"
 }
 
 export function SignInPage() {
   const router = useRouter()
   const { ready, connection, applyAuth } = useConnection()
 
-  const [activePage, setActivePage] = useState(0)
-  const [setupStep, setSetupStep] = useState<1 | 2>(1)
+  const initialGate = getCachedStandaloneInstanceGate()
+  const [booting, setBooting] = useState(!initialGate)
+  const [instanceReady, setInstanceReady] = useState(initialGate?.instanceReady ?? false)
+  const [instanceName, setInstanceName] = useState<string | null>(
+    initialGate?.status?.instanceName ?? null,
+  )
   const [showSuccess, setShowSuccess] = useState(false)
   const [connectedUrl, setConnectedUrl] = useState("")
   const [connectedInstance, setConnectedInstance] = useState("Arciin")
-  const [error, setError] = useState<string | null>(null)
+  const [bootError, setBootError] = useState<string | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<AuthFieldErrors>({})
+  const [formError, setFormError] = useState<string | null>(null)
 
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -339,205 +57,97 @@ export function SignInPage() {
   const [rememberMe, setRememberMe] = useState(false)
   const [signingIn, setSigningIn] = useState(false)
 
-  const [serverUrl, setServerUrl] = useState("")
-  const [serverAddressMode, setServerAddressMode] = useState<ServerAddressMode>(() =>
-    isPwaHostedApp() ? "remote" : "local",
-  )
-  const hostedApp = isPwaHostedApp()
-  const [pairingCode, setPairingCode] = useState("")
-  const [setupEmail, setSetupEmail] = useState("")
-  const [setupPassword, setSetupPassword] = useState("")
-  const [showSetupPw, setShowSetupPw] = useState(false)
-  const [setupBusy, setSetupBusy] = useState<"check" | "continue" | null>(null)
-  const [connecting, setConnecting] = useState(false)
-  const [verifiedApiBase, setVerifiedApiBase] = useState<string | null>(null)
-  const [verifiedInstanceName, setVerifiedInstanceName] = useState<string | null>(null)
-  const serverProfile = loadServerProfile()
-  const searchParams = useSearchParams()
-  const isAddingServer = searchParams.get("new") === "1"
-
-  function goToPage(page: 0 | 1) {
-    setActivePage(page)
-    setError(null)
-    if (page === 1) {
-      setSetupStep(1)
-      setServerUrl("")
-      setServerAddressMode(isPwaHostedApp() ? "remote" : "local")
-      setVerifiedApiBase(null)
-      setVerifiedInstanceName(null)
-    }
-  }
-
   useEffect(() => {
     if (!ready) return
-    if (connection && !isAddingServer) {
+    if (connection) {
       router.replace("/home")
       return
     }
-    if (isAddingServer) {
-      goToPage(1)
-    }
-  }, [ready, connection, router, isAddingServer])
 
-  async function handleSignIn(e: React.FormEvent) {
-    e.preventDefault()
-    setError(null)
-
-    const server = loadServerProfile()
-    if (!server?.apiBaseUrl) {
-      setError("Connect to your server first, then sign in with your email and password.")
-      goToPage(1)
+    const cached = getCachedStandaloneInstanceGate()
+    if (cached) {
+      if (!cached.instanceReady || isFirstRunSetupContext(cached)) {
+        router.replace("/setup")
+        return
+      }
+      if (cached.error) {
+        setBootError(cached.error)
+        setBooting(false)
+        return
+      }
+      setInstanceReady(true)
+      setInstanceName(cached.status?.instanceName ?? "Arciin")
+      setBooting(false)
       return
     }
 
+    let cancelled = false
+    void (async () => {
+      const gate = await loadStandaloneInstanceGate()
+      if (cancelled) return
+
+      if (!gate.instanceReady || isFirstRunSetupContext(gate)) {
+        router.replace("/setup")
+        return
+      }
+
+      if (gate.error) {
+        setBootError(gate.error)
+        setBooting(false)
+        return
+      }
+
+      setInstanceReady(true)
+      setInstanceName(gate.status?.instanceName ?? "Arciin")
+      setBooting(false)
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [ready, connection, router])
+
+  function clearFieldError(key: keyof AuthFieldErrors) {
+    setFieldErrors((prev) => (prev[key] ? { ...prev, [key]: undefined } : prev))
+    setFormError(null)
+  }
+
+  async function handleSignIn(e: React.FormEvent) {
+    e.preventDefault()
+    setFieldErrors({})
+    setFormError(null)
+
+    const validation = validateSignIn(email, password)
+    if (hasFieldErrors(validation)) {
+      setFieldErrors(validation)
+      return
+    }
+
+    const apiBase = loadServerProfile()?.apiBaseUrl ?? getStandaloneApiBaseUrl()
     setSigningIn(true)
     try {
       const auth = await loginMobileDevice(
-        { apiBaseUrl: server.apiBaseUrl },
+        { apiBaseUrl: apiBase },
         { email, password, deviceName: detectDeviceName() },
       )
-      applyAuth(auth, server.apiBaseUrl)
-      const labelBase = authWithClientApiBase(auth, server.apiBaseUrl).server.apiBaseUrl
-      setConnectedInstance(auth.server.instanceName ?? "Arciin")
+      applyAuth(auth, apiBase)
+      const labelBase = authWithClientApiBase(auth, apiBase).server.apiBaseUrl
+      setConnectedInstance(auth.server.instanceName ?? instanceName ?? "Arciin")
       setConnectedUrl(displayServerLabel(labelBase, auth.server.instanceName))
       setShowSuccess(true)
     } catch (err) {
-      setError(formatApiError(err, serverProfile?.apiBaseUrl ?? serverProfile?.webUrl))
+      const mapped = mapSignInApiError(err, apiBase)
+      setFieldErrors(mapped.fields)
+      if (mapped.form) setFormError(mapped.form)
     } finally {
       setSigningIn(false)
     }
   }
 
-  async function handleVerifyServer() {
-    setError(null)
-    if (hostedApp && serverAddressMode === "local") {
-      setError(HOSTED_APP_LAN_HINT)
-      return
-    }
-    setSetupBusy("check")
-    setVerifiedApiBase(null)
-    setVerifiedInstanceName(null)
-    try {
-      const { discover, apiBaseUrl } = await discoverServer(serverUrl)
-      setVerifiedApiBase(apiBaseUrl)
-      setVerifiedInstanceName(discover.instanceName)
-      const clientUrls = deriveMobileServerUrlsFromApiBase(apiBaseUrl)
-      saveServerProfile({
-        ...clientUrls,
-        instanceName: discover.instanceName,
-      })
-    } catch (err) {
-      setError(formatApiError(err, serverUrl))
-    } finally {
-      setSetupBusy(null)
-    }
-  }
-
-  function saveVerifiedServerProfile(apiBase: string, instanceName: string) {
-    const clientUrls = deriveMobileServerUrlsFromApiBase(apiBase)
-    saveServerProfile({
-      ...clientUrls,
-      instanceName,
-    })
-  }
-
-  async function handleContinueSetup() {
-    setError(null)
-    if (!serverUrl.trim()) {
-      setError("Enter your server address.")
-      return
-    }
-    if (hostedApp && serverAddressMode === "local") {
-      setError(HOSTED_APP_LAN_HINT)
-      return
-    }
-    setSetupBusy("continue")
-    try {
-      if (!verifiedApiBase) {
-        const { discover, apiBaseUrl } = await discoverServer(serverUrl)
-        setVerifiedApiBase(apiBaseUrl)
-        setVerifiedInstanceName(discover.instanceName)
-        saveVerifiedServerProfile(apiBaseUrl, discover.instanceName)
-      } else {
-        saveVerifiedServerProfile(verifiedApiBase, verifiedInstanceName ?? "Arciin")
-      }
-      setSetupStep(2)
-    } catch (err) {
-      setError(formatApiError(err, serverUrl))
-    } finally {
-      setSetupBusy(null)
-    }
-  }
-
-  async function handleConnect(e: React.FormEvent) {
-    e.preventDefault()
-    setError(null)
-
-    if (!pairingCode.replace(/\D/g, "").match(/^\d{6}$/)) {
-      setError("Enter the 6-digit connection code from your server.")
-      return
-    }
-
-    setConnecting(true)
-    try {
-      let apiBase = verifiedApiBase
-      let instanceName = verifiedInstanceName
-      if (!apiBase || isLoopbackApiBase(apiBase)) {
-        const discovered = await discoverServer(serverUrl)
-        apiBase = discovered.apiBaseUrl
-        instanceName = discovered.discover.instanceName
-        setVerifiedApiBase(apiBase)
-        setVerifiedInstanceName(instanceName)
-      }
-
-      const auth = await pairMobileDevice(apiBase, {
-        code: pairingCode,
-        email: setupEmail,
-        password: setupPassword,
-        deviceName: detectDeviceName(),
-      })
-
-      applyAuth(auth, apiBase)
-      const label = displayServerLabel(
-        authWithClientApiBase(auth, apiBase).server.apiBaseUrl,
-        auth.server.instanceName ?? instanceName ?? "Arciin",
-      )
-      setConnectedInstance(auth.server.instanceName ?? instanceName ?? "Arciin")
-      setConnectedUrl(label)
-      setShowSuccess(true)
-    } catch (err) {
-      setError(formatApiError(err, serverUrl.trim() || verifiedApiBase))
-    } finally {
-      setConnecting(false)
-    }
-  }
-
-  function handleServerUrlChange(value: string) {
-    setServerUrl(value)
-    setVerifiedApiBase(null)
-    setVerifiedInstanceName(null)
-    const trimmed = value.trim()
-    if (/^https:\/\//i.test(trimmed) || (trimmed && isPublicServerAddress(trimmed))) {
-      setServerAddressMode("remote")
-    } else if (
-      !hostedApp &&
-      /^192\.168\.|^10\.|^172\.(1[6-9]|2\d|3[01])\./.test(trimmed)
-    ) {
-      setServerAddressMode("local")
-    }
-  }
-
-  if (!ready) {
-    return (
-      <div className="flex min-h-[100dvh] items-center justify-center bg-[#f7f7f7]">
-        <span className="size-8 animate-spin rounded-full border-2 border-[#ff4f12]/30 border-t-[#ff4f12]" />
-      </div>
-    )
-  }
-
   if (showSuccess) {
     return (
       <ConnectionSuccessScreen
+        embedded
         instanceName={connectedInstance}
         serverUrl={connectedUrl}
         onComplete={() => router.replace("/home")}
@@ -545,239 +155,117 @@ export function SignInPage() {
     )
   }
 
+  if (!ready || booting) {
+    return (
+      <div className="flex flex-1 items-center justify-center py-16">
+        <span className="size-8 animate-spin rounded-full border-2 border-[#ff4f12]/30 border-t-[#ff4f12]" />
+      </div>
+    )
+  }
+
+  const name = instanceName ?? "your Arciin"
+
   return (
-    <div
-      className="flex min-h-[100dvh] flex-col pt-safe pb-safe"
-      style={{ backgroundColor: "#f7f7f7" }}
-    >
-      <BrandHeroCarousel activePage={activePage as 0 | 1} onSelectPage={goToPage} />
+    <>
+      <AuthMobileCardHeader
+        title={instanceReady ? "Sign in" : "Welcome back"}
+        subtitle={
+          instanceReady
+            ? `Sign in to ${name} with the email and password from setup.`
+            : "Sign in to your Arciin account on this device"
+        }
+      />
 
-      {activePage === 0 ? (
-        <AuthCard
-          title="Welcome back"
-          subtitle={
-            serverProfile?.apiBaseUrl
-              ? "Sign in to your Arciin server"
-              : "Sign in after you connect this device to your server"
-          }
-          footer={
-            <>
-              <CardDivider />
-              <GhostButton label="Create a new server" onClick={() => goToPage(1)} />
-            </>
-          }
-        >
-          <form onSubmit={handleSignIn} className="flex flex-col gap-3.5">
-            {serverProfile?.apiBaseUrl ? (
-              <LoginDomainChip
-                apiBaseUrl={serverProfile.apiBaseUrl}
-                webUrl={serverProfile.webUrl}
-              />
-            ) : null}
-            {serverProfile && isLoopbackApiBase(serverProfile.apiBaseUrl) ? (
-              <p
-                className="rounded-xl px-3 py-2 text-[12px] leading-relaxed text-[#b45309]"
-                style={{ backgroundColor: "#fffbeb", border: "1px solid #fde68a" }}
-                role="alert"
-              >
-                This device saved <strong>localhost</strong>, which does not work on your
-                phone. Tap <strong>Create a new server</strong> and enter your server’s LAN IP.
-              </p>
-            ) : null}
-            {error ? <ErrorBanner message={error} /> : null}
-            <Field
-              label="Email"
-              icon={Mail}
-              type="email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={setEmail}
-              autoComplete="email"
-            />
-            <Field
-              label="Password"
-              icon={Lock}
-              type={showPw ? "text" : "password"}
-              placeholder="••••••••"
-              value={password}
-              onChange={setPassword}
-              autoComplete="current-password"
-              right={
-                <PasswordToggle visible={showPw} onToggle={() => setShowPw((p) => !p)} />
-              }
-            />
-            <SignInOptionsRow
-              rememberMe={rememberMe}
-              onRememberMeChange={setRememberMe}
-              onForgotPassword={() => router.push("/sign-in/forgot-password")}
-            />
-            <p className="text-[11.5px] leading-relaxed text-[#a0a0a0]">
-              {hasStoredServer()
-                ? "Already set up this phone? Sign in with your email and password."
-                : "First time? Tap Create a new server and use the 6-digit code from your Arciin desktop."}
-            </p>
-            <OrangeButton loading={signingIn} label="Sign in" loadingLabel="Signing in…" />
-          </form>
-        </AuthCard>
-      ) : (
-        <AuthCard
-          title={setupStep === 1 ? "Create a new server" : "Pair this device"}
-          subtitle={
-            setupStep === 1
-              ? serverAddressMode === "remote"
-                ? "Public HTTPS address for your server"
-                : "Same Wi‑Fi as your server"
-              : verifiedInstanceName
-                ? `Link to ${verifiedInstanceName}`
-                : "Connection code and your account"
-          }
-          footer={
-            <>
-              <CardDivider />
-              <GhostButton
-                label={connection ? "Back to profile" : "Back to sign in"}
-                onClick={() => (connection ? router.push("/profile") : goToPage(0))}
-              />
-            </>
-          }
-        >
-          {connection && isAddingServer ? (
-            <p
-              className="mb-3 rounded-xl px-3 py-2 text-[12px] leading-relaxed text-[#717171]"
-              style={{ backgroundColor: "#f7f7f7", border: "1px solid #e5e5e5" }}
+      {bootError ? (
+        <AuthMobileFormMessage message={bootError} tone="error" />
+      ) : null}
+
+      <form onSubmit={handleSignIn} className="mt-5 flex flex-1 flex-col gap-3.5">
+        <AuthMobileField
+          id="sign-in-email"
+          label="Email"
+          icon={Mail}
+          type="email"
+          placeholder="you@example.com"
+          value={email}
+          onChange={(value) => {
+            setEmail(value)
+            clearFieldError("email")
+          }}
+          autoComplete="email"
+          error={fieldErrors.email}
+        />
+        <AuthMobileField
+          id="sign-in-password"
+          label="Password"
+          icon={Lock}
+          type={showPw ? "text" : "password"}
+          placeholder="Your password"
+          value={password}
+          onChange={(value) => {
+            setPassword(value)
+            clearFieldError("password")
+          }}
+          autoComplete="current-password"
+          error={fieldErrors.password}
+          right={
+            <button
+              type="button"
+              onClick={() => setShowPw((v) => !v)}
+              className="text-[#c0c0c0]"
+              aria-label={showPw ? "Hide password" : "Show password"}
             >
-              You stay signed in to your current server until you finish pairing this one.
-            </p>
-          ) : null}
-          <SetupStepIndicator step={setupStep} />
+              {showPw ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+            </button>
+          }
+        />
+        <div className="-mt-1 flex items-center justify-between gap-3">
+          <label htmlFor="sign-in-remember" className="flex cursor-pointer items-center gap-2.5">
+            <button
+              id="sign-in-remember"
+              type="button"
+              role="checkbox"
+              aria-checked={rememberMe}
+              onClick={() => setRememberMe((v) => !v)}
+              className="flex size-[18px] shrink-0 items-center justify-center rounded-[5px] border"
+              style={{
+                borderColor: rememberMe ? "#ff4f12" : "#d4d4d4",
+                backgroundColor: rememberMe ? "#ff4f12" : "#ffffff",
+              }}
+            >
+              {rememberMe ? <Check className="size-3 stroke-[2.5] text-white" /> : null}
+            </button>
+            <span className="text-[12.5px] font-medium text-[#717171]">Remember me</span>
+          </label>
+          <Link
+            href="/sign-in/forgot-password"
+            prefetch
+            className="text-[12.5px] font-medium text-[#ff4f12] active:opacity-70"
+          >
+            Forgot password?
+          </Link>
+        </div>
 
-          {setupStep === 1 ? (
-            <div className="flex flex-col gap-3.5">
-              {error ? <ErrorBanner message={error} /> : null}
-              <ServerAddressModeToggle
-                mode={serverAddressMode}
-                disableLocal={hostedApp}
-                onChange={(mode) => {
-                  setServerAddressMode(mode)
-                  setError(null)
-                }}
-              />
-              {hostedApp ? (
-                <p className="text-[11.5px] leading-relaxed text-[#a0a0a0]">
-                  {HOSTED_APP_SETUP_NOTE}
-                </p>
-              ) : null}
-              <Field
-                label={serverAddressMode === "remote" ? "Domain" : "Server IP address"}
-                icon={Globe}
-                placeholder={
-                  serverAddressMode === "remote"
-                    ? "https://your-domain.com"
-                    : "192.168.1.100"
-                }
-                value={serverUrl}
-                onChange={handleServerUrlChange}
-                autoComplete="url"
-              />
-              {!hostedApp ? (
-                <p className="-mt-1 text-[11.5px] leading-relaxed text-[#a0a0a0]">
-                  {serverAddressMode === "remote"
-                    ? "Works away from home. Copy the address from Settings → Domain on desktop Arciin."
-                    : "Phone and server must be on the same Wi‑Fi."}
-                </p>
-              ) : null}
-              <OrangeButton
-                type="button"
-                loading={setupBusy === "check"}
-                label="Check server"
-                loadingLabel="Checking…"
-                onClick={handleVerifyServer}
-                disabled={setupBusy !== null}
-              />
-              {verifiedInstanceName ? (
-                <p
-                  className="rounded-xl px-4 py-2.5 text-[12px] font-medium text-[#15803d]"
-                  style={{ backgroundColor: "#f0fdf4", border: "1px solid #bbf7d0" }}
-                >
-                  Found: {verifiedInstanceName}
-                </p>
-              ) : null}
-              <OrangeButton
-                type="button"
-                loading={setupBusy === "continue"}
-                label="Continue"
-                loadingLabel="Continuing…"
-                onClick={handleContinueSetup}
-                disabled={!serverUrl.trim() || setupBusy !== null}
-              />
-            </div>
-          ) : (
-            <form onSubmit={handleConnect} className="flex flex-col gap-3.5">
-              <button
-                type="button"
-                onClick={() => {
-                  setSetupStep(1)
-                  setError(null)
-                }}
-                className="flex w-fit items-center gap-1 text-[13px] font-medium text-[#717171] active:text-[#111111]"
-              >
-                <ChevronLeft className="size-4" />
-                Back to server
-              </button>
-              {error ? <ErrorBanner message={error} /> : null}
-              <Field
-                label="Connection code"
-                icon={Key}
-                placeholder="6-digit code"
-                value={pairingCode}
-                onChange={(v) => setPairingCode(v.replace(/\D/g, "").slice(0, 6))}
-                mono
-                inputMode="numeric"
-                maxLength={6}
-                autoComplete="one-time-code"
-              />
-              <Field
-                label="Email"
-                icon={Mail}
-                type="email"
-                placeholder="your Arciin email"
-                value={setupEmail}
-                onChange={setSetupEmail}
-                autoComplete="email"
-              />
-              <Field
-                label="Password"
-                icon={Lock}
-                type={showSetupPw ? "text" : "password"}
-                placeholder="••••••••"
-                value={setupPassword}
-                onChange={setSetupPassword}
-                autoComplete="current-password"
-                right={
-                  <PasswordToggle
-                    visible={showSetupPw}
-                    onToggle={() => setShowSetupPw((p) => !p)}
-                  />
-                }
-              />
-              <OrangeButton
-                loading={connecting}
-                label="Connect device"
-                loadingLabel="Connecting…"
-              />
-            </form>
-          )}
-        </AuthCard>
-      )}
-    </div>
+        <AuthMobileFormMessage message={formError} />
+
+        <button
+          type="submit"
+          disabled={signingIn}
+          className="auth-primary-button"
+        >
+          {signingIn ? "Signing in…" : "Sign in"}
+        </button>
+
+        <p className="mt-auto pt-2 text-center">
+          <Link
+            href="/install"
+            prefetch
+            className="text-[12.5px] font-medium text-[#717171] underline-offset-2 active:text-[#444444] hover:underline"
+          >
+            Install Arciin Mobile on this device
+          </Link>
+        </p>
+      </form>
+    </>
   )
-}
-
-function detectDeviceName(): string {
-  if (typeof navigator === "undefined") return "Mobile"
-  const ua = navigator.userAgent
-  if (/iPhone/i.test(ua)) return "iPhone"
-  if (/iPad/i.test(ua)) return "iPad"
-  if (/Android/i.test(ua)) return "Android"
-  return "Mobile"
 }

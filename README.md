@@ -1,265 +1,318 @@
 # Arciin Mobile
 
-A production-ready companion PWA for **[Arciin](https://github.com/Roberadesissaii-arc/arciin)** — your self-hosted private file, library, and media server. Install it on your phone, **pair once** with your desktop server, and manage libraries, uploads, AI chat, and settings from anywhere you can reach your instance.
+**Your server, your control.** Arciin Mobile is a standalone Progressive Web App (PWA) for phones and tablets. Install it on your home screen, sign in to your self-hosted [Arciin](https://github.com/Roberadesissaii-arc/arciin) server, and manage files, AI chat, jobs, passwords, and settings — without an app store and without a cloud Arciin account.
 
-**Your server, your control.** This app does not use a cloud Arciin account. It talks only to the Arciin API you run (home server, NAS, or VPS).
+This repo is the **mobile PWA host** (port **3002** by default). Your data, accounts, and files live on the **Arciin API** (port **4000**), installed from the sibling `arciin` repository.
 
 ---
 
 ## Table of contents
 
 - [What you get](#what-you-get)
-- [Pair with your Arciin server](#pair-with-your-arciin-server)
-- [Architecture](#architecture)
+- [How it fits together](#how-it-fits-together)
 - [Requirements](#requirements)
-- [Quick start (development)](#quick-start-development)
-- [Scripts](#scripts)
-- [Deploy on Vercel](#deploy-on-vercel)
+- [Install (recommended)](#install-recommended)
+- [Install on your phone](#install-on-your-phone)
+- [First sign-in](#first-sign-in)
+- [Development](#development)
+- [Environment variables](#environment-variables)
+- [Operations (PM2)](#operations-pm2)
 - [Authentication](#authentication)
 - [Remote access](#remote-access)
 - [Project structure](#project-structure)
-- [API surface](#api-surface)
-- [Security](#security)
+- [Scripts](#scripts)
 - [Troubleshooting](#troubleshooting)
+- [Optional: deploy on Vercel](#optional-deploy-on-vercel)
 - [Related repositories](#related-repositories)
 
 ---
 
 ## What you get
 
-### Navigation & shell
+### Navigation
 
-| Screen | Description |
-|--------|-------------|
-| **Home** | Instance overview — jobs, uploads, storage, passwords count, recent activity |
-| **Files** | Browse libraries, folders, assets; grid view; upload from the phone |
-| **Chat** | Streaming AI chat against your server’s configured models (Ollama / cloud profiles) |
-| **Models** | View and switch active chat profiles; connect providers |
-| **Profile** | Account, server management, and deep settings |
+| Tab | What it does |
+|-----|----------------|
+| **Home** | Jobs, uploads, storage, password count, recent activity |
+| **Files** | Libraries, folders, uploads, asset viewer (images, video, PDF, text) |
+| **Chat** | Streaming AI chat using your server's model profiles |
+| **Models** | View and switch chat profiles |
+| **Profile** | Account, security, storage, integrations, password vault, API keys, and more |
 
-Bottom navigation: **Home · Files · Chat · Models · Profile**
+### Standalone features (no desktop required)
 
-### Files & media
+| Feature | Notes |
+|---------|--------|
+| **Sign in / setup** | Create account or sign in directly on the phone |
+| **File uploads** | Upload from device camera or gallery |
+| **Password vault** | Add passwords or import CSV/JSON on mobile |
+| **Profile settings** | Preferences, notifications, remote access, vault PIN, AI security |
+| **Offline UX** | Single reconnect banner when the server is unreachable |
 
-| Feature | Description |
-|---------|-------------|
-| **Libraries** | Videos, Images, Music, Documents, Inbox — same structure as desktop |
-| **Folders** | Create, rename, move assets |
-| **Uploads** | Pick files from the device; progress and errors surfaced clearly |
-| **Asset viewer** | Open images, video, PDF, and text/code previews |
-| **PDF viewer** | Scroll PDFs on device with mobile-optimized chrome |
-| **Search** | Quick search from the home header |
-
-### AI
-
-| Feature | Description |
-|---------|-------------|
-| **AI Chat** | Full-screen chat with model picker, streaming, speech-to-text input |
-| **Offline chat UX** | When the server is down: connect CTA, no duplicate error banners on every screen |
-| **Welcome suggestions** | Quick prompts when online (including “List my documents”) |
-| **Models page** | Enable profiles created on the desktop server |
-
-Chat uses the same Arciin API and model profiles as the desktop **Chat** page — not a separate cloud backend.
-
-### Operations & activity
-
-| Feature | Description |
-|---------|-------------|
-| **Jobs** | Background job list and status |
-| **Activity** | Event feed aligned with desktop activity |
-| **Notifications** | Activity inbox (bell on Home) — uploads, assets, security-related events |
-| **Events** | Live-style monitor for Socket.IO events when the server is reachable |
-
-Notifications on mobile are the **activity feed**, not desktop-style toast popups. Toast preferences live on the server; the mobile app surfaces events in the notifications list.
-
-### Profile & settings
-
-| Area | Description |
-|------|-------------|
-| **Profile card** | Avatar, name, role, file/library counts (hidden when server offline) |
-| **Change server** | Switch saved servers, probe reachability, remove accounts |
-| **Remote access** | Update public URL or LAN address when tunnels change |
-| **Storage** | View usage and storage settings |
-| **Security** | Sessions and sign-out |
-| **API keys** | List and manage developer keys |
-| **Integrations** | Plex/Jellyfin-style cards (status from server) |
-| **Password vault** | Encrypted entries (when enabled on server) |
-| **Database** | Browse tables and app-data (admin) |
-| **Preferences** | User preferences from the server |
-| **Activity notifications** | Link to the notifications feed (not separate toast toggles) |
-
-### Connection UX
-
-| Feature | Description |
-|---------|-------------|
-| **Pairing** | 6-digit code from desktop **Settings → Mobile connection** |
-| **Sign in** | Email/password after pairing; 90-day sessions (server default) |
-| **Reconnect banner** | Single top banner when offline — per-page “could not reach server” errors suppressed |
-| **Multi-server** | Save multiple Arciin servers on one phone |
-| **Foreground refresh** | Re-sync when returning to the app |
+Notifications on mobile are the **activity inbox** (bell on Home), not desktop-style toast popups.
 
 ---
 
-## Pair with your Arciin server
-
-You need a **running Arciin desktop/server** install before this app is useful.
+## How it fits together
 
 ```text
-┌─────────────────────┐     pairing code      ┌──────────────────────┐
-│  Arciin (desktop)   │ ────────────────────► │  Arciin Mobile PWA   │
-│  Settings → Mobile  │     + email/password  │  (this repository) │
-└─────────────────────┘                       └──────────────────────┘
+┌─────────────────────────┐         REST + WebSocket         ┌──────────────────────────┐
+│  Arciin Mobile (this)   │  ──────────────────────────────► │  Arciin server (arciin)  │
+│  PWA on :3002           │   Bearer session, files, chat    │  API on :4000            │
+└─────────────────────────┘                                  │  PostgreSQL, Redis, etc. │
+         ▲                                                     └──────────────────────────┘
+         │ same Wi‑Fi or HTTPS
+    📱 Phone / tablet
 ```
 
-| Step | Desktop (arciin) | Mobile (this app) |
-|------|------------------|-------------------|
-| 1 | Install & claim instance | — |
-| 2 | **Settings → Mobile connection → Generate code** | — |
-| 3 | — | **Connect to a server** → enter LAN or HTTPS URL |
-| 4 | — | Enter **6-digit code** + email + password |
-| 5 | Revoke devices from same screen if needed | **Sign in** next time (no code) |
+| Component | Repo | Default port | Role |
+|-----------|------|--------------|------|
+| **Mobile PWA** | `arciin-app` (this) | **3002** | Phone UI, PWA manifest, API proxy |
+| **Arciin server** | `../arciin` | **4000** (API) | Files, auth, workers, database |
 
-If you change from LAN to a public URL (tunnel/domain), update **Profile → Remote access** on the phone — no new pairing code if your session is still valid.
-
----
-
-## Architecture
-
-```
-┌─────────────────────┐         HTTPS / LAN          ┌──────────────────────┐
-│  Arciin Mobile PWA  │  ──────────────────────────► │  Your Arciin server  │
-│  (Vercel / static)  │   Bearer session + REST API  │  (arciin repository) │
-└─────────────────────┘                              └──────────────────────┘
-```
-
-| Piece | Where it runs | Example |
-|-------|----------------|---------|
-| **This app** | Vercel, Netlify, or `pnpm start` | `https://your-pwa.example.com` |
-| **Arciin server** | Your machine / Docker | `https://arciin.example.com` or `http://192.168.1.10:3004` |
-
-Deploying the PWA on Vercel does **not** host your files — only the mobile UI. All data stays on your Arciin server.
+The mobile app does **not** install PostgreSQL or Redis. Those are part of the Arciin server install.
 
 ---
 
 ## Requirements
 
-- **Node.js** 20+ and **pnpm** 9+
-- A running **Arciin** server (claimed, with at least one user and model profiles for chat)
-- For first-time pairing: admin access on the server to generate a **6-digit connection code**
+### For production install (`./install.sh`)
+
+| Requirement | Version |
+|-------------|---------|
+| **OS** | Debian, Ubuntu, or WSL with `apt` |
+| **Node.js** | 24+ (installer installs via NodeSource if needed) |
+| **pnpm** | 10.32.1 (via Corepack) |
+| **sudo** | Required for apt packages and optional UFW |
+| **Arciin server** | Running and reachable at `http://<host>:4000/api` |
+
+### For development only
+
+- Node.js 20+ and pnpm 9+ work for `pnpm dev`, but production install pins Node 24 and pnpm 10.32.1.
 
 ---
 
-## Quick start (development)
+## Install (recommended)
+
+Clone this repo next to your Arciin server (sibling folders work best):
+
+```text
+projects/
+├── arciin/          ← server (API, database, workers)
+└── arciin-app/      ← mobile PWA (this repo)
+```
+
+### Option A — Mobile app only
+
+Use this when the Arciin server is already running (same machine or another host on your network).
+
+```bash
+cd arciin-app
+chmod +x install.sh
+./install.sh
+```
+
+The installer will:
+
+1. Install system packages (curl, git, build tools)
+2. Install Node.js 24 and pnpm 10.32.1
+3. Create `.env.local` with your LAN IP and API URL
+4. Run `pnpm install` and `pnpm build`
+5. Start the app under **PM2** as `arciin-mobile`
+6. Open **UFW** port 3002 (unless skipped)
+
+When prompted for **Arciin API URL**, enter your server's API base, for example:
+
+```text
+http://192.168.1.10:4000/api
+```
+
+If the API is running on the same machine, the installer auto-detects it.
+
+### Option B — Mobile + Arciin server (fresh machine)
+
+Install the server first, then mobile:
+
+```bash
+cd ../arciin && ./install.sh
+cd ../arciin-app && ./install.sh
+```
+
+During mobile install, choose **Mobile + Arciin server** when asked — the script reminds you to run the server installer if `../arciin` is missing.
+
+### Install flags
+
+```bash
+./install.sh              # Full production install (PM2)
+./install.sh --dev        # Install deps, skip build/PM2, start dev server
+./install.sh --skip-pm2   # Build only — no PM2 launch
+./install.sh --help       # Full usage
+```
+
+### Install environment variables
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `ARCIIN_MOBILE_PORT` | `3002` | PWA listen port |
+| `ARCIIN_SERVER_DIR` | `../arciin` | Path to server repo (for tips) |
+| `ARCIIN_MOBILE_SKIP_SYSTEM_PACKAGES=1` | — | Skip apt packages |
+| `ARCIIN_MOBILE_SKIP_FIREWALL=1` | — | Skip UFW |
+| `ARCIIN_MOBILE_SKIP_PM2=1` | — | Same as `--skip-pm2` |
+
+### After install
+
+```text
+Mobile PWA (LAN):   http://<your-lan-ip>:3002
+Mobile PWA (local): http://localhost:3002
+Install helper:     http://<your-lan-ip>:3002/install
+Sign in:            http://<your-lan-ip>:3002/sign-in
+Arciin API:         http://<your-lan-ip>:4000/api
+```
+
+If the API is not reachable after install, start the server:
+
+```bash
+cd ../arciin && ./install.sh   # or: pm2 status
+```
+
+Then update `.env.local` and restart mobile:
+
+```bash
+# Edit NEXT_PUBLIC_ARCIIN_API_URL in .env.local
+pnpm build && pm2 restart arciin-mobile
+```
+
+---
+
+## Install on your phone
+
+1. Connect phone and server to the **same Wi‑Fi** (or use a public HTTPS URL — see [Remote access](#remote-access)).
+2. Open **`http://<server-lan-ip>:3002`** in Safari (iOS) or Chrome (Android).
+3. Go to **`/install`** or tap **Install Arciin Mobile** when offered.
+4. **Add to Home Screen**:
+   - **iOS**: Share → Add to Home Screen
+   - **Android**: Chrome menu → Install app (or use the native install prompt)
+5. Open the home-screen icon — it runs in standalone mode (no browser chrome).
+
+The PWA still needs your Arciin API running. Installing the icon does not install the server.
+
+---
+
+## First sign-in
+
+### New instance (first run on this server)
+
+1. Open the PWA → you may be sent to **`/setup`** if the instance is unclaimed.
+2. Create your admin account and storage path (same flow as desktop first-run).
+3. Sign in with email and password.
+
+### Existing instance
+
+1. Open **`/sign-in`**.
+2. Enter email and password.
+3. Session lasts **90 days** by default (server configuration).
+
+No pairing code is required in standalone mode (`NEXT_PUBLIC_ARCIIN_STANDALONE=1`, the default).
+
+---
+
+## Development
 
 ```bash
 git clone https://github.com/Roberadesissaii-arc/arciin-app.git
 cd arciin-app
 pnpm install
-cp .env.local.example .env.local
+cp .env.example .env.local
 ```
 
-Edit `.env.local` — set `ARCIIN_MOBILE_DEV_ORIGINS` to your computer’s LAN IP (comma-separated if several):
+Edit `.env.local`:
 
 ```env
-ARCIIN_MOBILE_DEV_ORIGINS=192.168.1.100
+# Your computer's LAN IP (so your phone can load dev fonts/HMR)
+ARCIIN_MOBILE_DEV_ORIGINS=192.168.1.10
+
+# Arciin API (start ../arciin first)
+NEXT_PUBLIC_ARCIIN_API_URL=http://192.168.1.10:4000/api
 ```
 
-Start the dev server bound to all interfaces (so your phone can open it):
+Start the Arciin server (in `../arciin`), then:
 
 ```bash
-pnpm dev:mobile
+pnpm dev --port 3002
 ```
 
-On your phone (same Wi‑Fi), open `http://<your-lan-ip>:3000`.
+On your phone (same Wi‑Fi): **`http://<lan-ip>:3002`**
 
-### Connect to Arciin
-
-1. On the **server**: Arciin web → **Settings → Mobile connection** → **Generate connection code**
-2. On the **phone**: open this PWA → **Connect to a server** → enter:
-   - **On my network**: `http://192.168.x.x:3004` (or your web port)
-   - **From anywhere**: `https://your-public-url`
-3. Enter the **6-digit code**, your Arciin **email** and **password**
-4. Next launches use **Sign in** only (no code)
-
----
-
-## Browser & PWA icons
-
-The tab bar and “Add to Home Screen” use the Arciin mark (black tile + orange arch):
-
-| File | Use |
-|------|-----|
-| `favicon.svg` | Modern browsers (tab icon) |
-| `favicon.ico` / `favicon-32.png` | Legacy tab shortcut |
-| `apple-touch-icon.png` | iOS home screen |
-| `icon-192.png` / `icon-512.png` | PWA manifest |
-
-Regenerate from the desktop repo (requires Sharp):
-
-```bash
-cd ../arciin && pnpm icons:generate
-```
-
-## Scripts
-
-| Command | Description |
-|---------|-------------|
-| `pnpm dev` | Local dev (localhost) |
-| `pnpm dev:mobile` | Dev on `0.0.0.0` for phone testing |
-| `pnpm build` | Production build |
-| `pnpm start` | Run production server |
-| `pnpm lint` | ESLint (`app`, `components`, `lib`) |
-| `pnpm typecheck` | TypeScript check |
-
-Before release:
+Before committing or releasing:
 
 ```bash
 pnpm typecheck
+pnpm lint
 pnpm build
 ```
 
 ---
 
-## Deploy on Vercel
+## Environment variables
 
-1. Import this repository in [Vercel](https://vercel.com)
-2. Framework preset: **Next.js**
-3. Build command: `pnpm build` — Install command: `pnpm install`
-4. No server URL is baked in at build time; each user enters their Arciin server on first launch
+Set in `.env.local` (created by `./install.sh` or copied from `.env.example`).
 
-Optional environment variables:
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `NEXT_PUBLIC_ARCIIN_API_URL` | **Yes** | Arciin API base, e.g. `http://192.168.1.10:4000/api` |
+| `NEXT_PUBLIC_ARCIIN_STANDALONE` | No | `1` (default) — standalone app; `0` — legacy multi-server companion UI |
+| `ARCIIN_MOBILE_PORT` | No | Production port (default `3002`) |
+| `ARCIIN_MOBILE_BIND_HOST` | No | Bind address (default `0.0.0.0`) |
+| `ARCIIN_MOBILE_DEV_ORIGINS` | Dev only | Comma-separated LAN IPs for Next.js `allowedDevOrigins` |
 
-| Variable | Purpose |
-|----------|---------|
-| `ARCIIN_MOBILE_DEV_ORIGINS` | Local dev only — LAN IPs allowed for Next.js dev assets |
+**Important:** `NEXT_PUBLIC_*` values are baked in at **build time**. After changing them:
 
-Users configure **which Arciin server** to use inside the app (sign-in / Profile → Remote access).
+```bash
+pnpm build && pm2 restart arciin-mobile
+```
+
+Never commit `.env.local` — it may contain LAN addresses.
+
+---
+
+## Operations (PM2)
+
+| Command | Description |
+|---------|-------------|
+| `pm2 status` | List processes |
+| `pm2 logs arciin-mobile` | Tail mobile logs |
+| `pm2 restart arciin-mobile` | Restart after rebuild |
+| `bash start.sh` | Start via PM2 |
+| `bash stop.sh` | Stop and remove PM2 process |
+
+Logs are written to `logs/arciin-mobile-*.log`.
+
+Production serves the built app via `scripts/run-mobile-prod.sh` → `next start -H 0.0.0.0 -p 3002`.
 
 ---
 
 ## Authentication
 
-| Scenario | What you do |
-|----------|-------------|
-| **First time on this phone** | Server URL + **pairing code** + email/password |
-| **Same phone, later** | **Sign in** (email/password only) |
-| **Sign out** | Session cleared; server address kept → sign in again, no code |
-| **New phone** | Pair once with a new code from the server |
-| **LAN → public URL** | Profile → **Remote access** or **Change server** → paste URL → reconnect |
-| **Revoke device on server** | Desktop → Mobile connection → remove session |
+| Scenario | What to do |
+|----------|------------|
+| **First time on this phone** | Sign in (or complete `/setup` on a new instance) |
+| **Same phone, later** | Open app → sign in if session expired |
+| **Sign out** | Profile → Security → session cleared; sign in again |
+| **LAN → public URL** | Profile → Remote access → update URL |
+| **Revoke device** | Arciin server → Settings → Sessions |
 
-The app stores an opaque **Bearer session token** (not your password). Sessions last **90 days** by default (server configuration).
+The app stores a **Bearer session token** in browser storage — not your password.
 
 ---
 
 ## Remote access
 
-- **On your network**: use the server’s LAN URL while on the same Wi‑Fi.
-- **From anywhere**: use the server’s public HTTPS URL from **desktop** Arciin → **Settings → Domain** (tunnel or reverse proxy).
+- **On your network:** use `http://<lan-ip>:3002` for the PWA and `http://<lan-ip>:4000/api` for the API.
+- **From anywhere:** expose the Arciin server with HTTPS (Cloudflare tunnel, reverse proxy, etc.) on the **server** side, then set `NEXT_PUBLIC_ARCIIN_API_URL` to the public API URL and rebuild.
 
-The mobile app does **not** start tunnels. Generate public URLs on the **Arciin server**, then paste them in the mobile app if needed.
+Profile → **Remote access** can update the URL the phone uses without re-installing the PWA.
 
-When the server is unreachable, a **single banner** at the top explains the situation and links to **Profile** to update the address. Profile hides cached name/email until the server is back online.
+When offline, a **single banner** at the top explains the situation. Per-page errors are suppressed to avoid duplicate red messages.
 
 ---
 
@@ -267,59 +320,79 @@ When the server is unreachable, a **single banner** at the top explains the situ
 
 ```text
 arciin-app/
-├── app/                 # Next.js App Router (routes, API proxy)
+├── app/                    # Next.js App Router routes
 ├── components/
-│   ├── auth/            # Sign-in, pairing
-│   ├── chat/            # AI chat, model bar, markdown
-│   ├── files/           # Libraries, viewer, PDF
-│   ├── home/            # Overview
-│   ├── notifications/   # Activity inbox
-│   ├── profile/         # Settings panels
-│   └── shell/           # Nav, offline banner, headers
+│   ├── auth/               # Sign-in, setup, install PWA
+│   ├── chat/               # AI chat
+│   ├── files/              # Libraries, viewer, PDF
+│   ├── home/               # Dashboard
+│   ├── profile/            # Settings panels
+│   └── shell/              # Nav, offline banner, headers
 ├── lib/
-│   ├── api/             # Typed REST client (Bearer auth)
-│   ├── connection/      # Server profile, sessions, reconnect, offline UX
-│   └── hooks/           # Foreground refresh, cached panels
-└── public/              # PWA manifest and icons
+│   ├── api/                # Typed REST client
+│   ├── connection/         # Sessions, reconnect, offline UX
+│   └── standalone/         # Standalone API origin + bootstrap
+├── public/                 # PWA manifest and icons
+├── scripts/
+│   ├── lib/mobile-install-lib.sh
+│   └── run-mobile-prod.sh
+├── install.sh              # Production installer
+├── start.sh / stop.sh      # PM2 helpers
+└── ecosystem.config.cjs    # PM2 config
 ```
 
 ---
 
-## API surface
+## Scripts
 
-The app expects a standard Arciin API, including:
-
-- `GET /api/mobile/discover`
-- `POST /api/mobile/pair`
-- `POST /api/mobile/login`
-- `GET /api/auth/me`
-- Libraries, assets, folders, uploads, jobs, activity, chat stream, settings, etc.
-
-See the main **[Arciin](https://github.com/Roberadesissaii-arc/arciin)** repo and `docs/MOBILE_CLIENT.md` (if present) for the full contract. Server and mobile should be updated together for new API features.
-
----
-
-## Security
-
-- Never commit `.env.local` or secrets.
-- Sessions are sent as `Authorization: Bearer <token>` to the user’s server only.
-- Use HTTPS for public access; treat quick tunnel URLs as temporary.
-- Revoke lost devices from the server’s **Mobile connection** screen.
+| Command | Description |
+|---------|-------------|
+| `./install.sh` | Full production install |
+| `./install.sh --dev` | Dev mode after install steps |
+| `pnpm dev` | Dev server on `0.0.0.0` (default Next port unless `--port` set) |
+| `pnpm dev --port 3002` | Dev on production port |
+| `pnpm build` | Production build |
+| `pnpm start` | Run production server (after build) |
+| `pnpm lint` | ESLint |
+| `pnpm typecheck` | TypeScript check |
 
 ---
 
 ## Troubleshooting
 
-| Problem | Try |
+| Problem | Fix |
 |---------|-----|
-| **Could not reach server** | Confirm Arciin is running; check URL, Wi‑Fi, or tunnel; update **Profile → Remote access** |
-| **Red error on every page** | Should only see the top offline banner — pull latest mobile build |
-| **Profile still shows my name offline** | Pull latest — name/email hidden until server reconnects |
-| **Sign-in fails after sign-out** | Use correct server URL (LAN vs public); avoid `localhost` on the phone |
-| **Pairing code invalid** | Generate a new code on the server (short TTL, single use) |
-| **Chat says connect server** | Expected when offline; reconnect via banner |
-| **Fonts / 403 in dev on phone** | Set `ARCIIN_MOBILE_DEV_ORIGINS` and use `pnpm dev:mobile` |
-| **CORS errors** | Server must allow your PWA origin |
+| **Could not reach server** | Confirm Arciin API is up: `curl http://<host>:4000/api/health`. Check Wi‑Fi, firewall, and `NEXT_PUBLIC_ARCIIN_API_URL`. |
+| **Phone cannot open :3002** | Open UFW: `sudo ufw allow 3002/tcp`. Confirm `pm2 status` shows `arciin-mobile` online. |
+| **API URL wrong after install** | Edit `.env.local` → `pnpm build && pm2 restart arciin-mobile`. |
+| **Fonts / 403 in dev on phone** | Set `ARCIIN_MOBILE_DEV_ORIGINS` to your phone-reachable LAN IP; use `pnpm dev --port 3002`. |
+| **Blank page after deploy** | Run `pnpm build` before `next start`. Check `logs/arciin-mobile-err.log`. |
+| **`localhost` on phone fails** | Use the server's **LAN IP**, not `localhost`. |
+| **Install script needs sudo** | Normal — apt and UFW require it. Do not run the script as root. |
+| **Port 3002 in use** | Installer picks next free port in 3002–3099 and writes it to `.env.local`. |
+| **Password vault empty** | Tap **+** on Passwords to add or import — no desktop required. |
+
+### Health checks
+
+```bash
+# API
+curl -s http://127.0.0.1:4000/api/health | jq .
+
+# Mobile (after install)
+curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:3002/
+```
+
+---
+
+## Optional: deploy on Vercel
+
+You can host the PWA on Vercel for users who do not self-host the mobile shell. **Files and accounts still live on the user's Arciin server.**
+
+1. Import this repo in [Vercel](https://vercel.com)
+2. Framework: **Next.js** — Build: `pnpm build` — Install: `pnpm install`
+3. Set `NEXT_PUBLIC_ARCIIN_API_URL` to the user's API (or leave unset and rely on standalone bootstrap from browser origin — only works if API is same-origin)
+
+Self-hosted `install.sh` is the recommended path for homelab and LAN use.
 
 ---
 
@@ -327,10 +400,10 @@ See the main **[Arciin](https://github.com/Roberadesissaii-arc/arciin)** repo an
 
 | Repo | Role |
 |------|------|
-| **[Arciin](https://github.com/Roberadesissaii-arc/arciin)** | Self-hosted server — web UI, API, workers, mobile pairing codes |
-| **arciin-app** (this repo) | Companion PWA for iOS/Android/home-screen install |
+| **[Arciin](https://github.com/Roberadesissaii-arc/arciin)** | Self-hosted server — API, web UI, workers, database |
+| **arciin-app** (this repo) | Standalone mobile PWA |
 
-**Production pairing:** deploy or update **both** repos when releasing a major version so chat, PDF, and mobile APIs stay aligned.
+Update **both** repos together when releasing major versions so mobile APIs, chat, and PDF features stay aligned.
 
 ---
 

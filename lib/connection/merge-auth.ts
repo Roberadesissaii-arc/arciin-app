@@ -1,4 +1,6 @@
 import { deriveMobileServerUrlsFromApiBase, isLoopbackApiBase } from "@/lib/connection/normalize-url"
+import { getStandaloneApiBaseUrl } from "@/lib/standalone/api-origin"
+import { isStandaloneApp } from "@/lib/standalone/config"
 import type { MobileAuthResult } from "@/lib/types/api"
 
 /**
@@ -22,9 +24,12 @@ export function authWithClientApiBase(
 
 export function pickClientApiBase(
   requestApiBase: string,
-  auth: MobileAuthResult,
+  _auth: MobileAuthResult,
   savedApiBase?: string | null,
 ): string {
+  if (typeof window !== "undefined" && isStandaloneApp()) {
+    return getStandaloneApiBaseUrl()
+  }
   if (!isLoopbackApiBase(requestApiBase)) return requestApiBase
   if (savedApiBase && !isLoopbackApiBase(savedApiBase)) return savedApiBase
   return requestApiBase

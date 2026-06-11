@@ -17,6 +17,15 @@ export type UploadSessionSummary = {
   createdAt: string
 }
 
+export type UploadSettings = {
+  maxUploadSizeMb: number
+  maxUploadSizeBytes: number
+  uploadRateLimitPerMinute: number
+  envMaxUploadSizeMb: number
+  webProxyMaxUploadSizeMb: number
+  webProxyRestartRequired: boolean
+}
+
 export type StorageSettings = {
   instanceName?: string
   storageRoot?: string
@@ -42,6 +51,28 @@ export type StorageVolumeOption = {
   recommended: boolean
   largeExternal: boolean
   isCurrent?: boolean
+  sameDiskAsCurrent?: boolean
+}
+
+export type UnmountedBlockDevice = {
+  id: string
+  device: string
+  name: string
+  sizeLabel: string
+  sizeBytes: number | null
+  filesystem: string | null
+  isLuks: boolean
+  needsFormat?: boolean
+  type: "disk" | "part"
+  suggestedMountPoint: string
+  suggestedArciinPath: string
+}
+
+export type MountBlockDeviceResult = {
+  device: string
+  mountPoint: string
+  arciinPath: string
+  mapperName?: string
 }
 
 export type StorageVolumesResponse = {
@@ -49,6 +80,28 @@ export type StorageVolumesResponse = {
   currentStorageRoot: string
   installNotes?: string[]
   isDockerRuntime?: boolean
+  unmountedDevices?: UnmountedBlockDevice[]
+  migrationTargets?: StorageVolumeOption[]
+}
+
+export type StorageMigrateStatus = {
+  active: boolean
+  job: {
+    id: string
+    status: string
+    progress: number
+    error: string | null
+    result: unknown
+    createdAt: string
+    completedAt: string | null
+  } | null
+}
+
+export type StorageMigrateStartResult = {
+  jobId: string
+  fromRoot: string
+  toRoot: string
+  displayRoot: string
 }
 
 export type RemoteAccessSettings = {
@@ -64,6 +117,91 @@ export type RemoteAccessSettings = {
   reverseProxyEnabled: boolean
   cloudflareTunnelEnabled: boolean
   cloudflareTunnelAutoStart?: boolean
+}
+
+export type SecuritySettings = {
+  publicSignupEnabled: boolean
+  sessionTimeoutMinutes: number
+  loginAlertsEnabled: boolean
+  maxFailedLogins: number
+  idleLogoutEnabled: boolean
+  idleLogoutMinutes: number
+  ipAllowlist: string[]
+  ipBlocklist: string[]
+  enforceIpAllowlist: boolean
+  apiGlobalRequestsPerMinute: number
+  apiKeyRequestsPerMinute: number
+  requireApiKeyExpiry: boolean
+  maxApiKeyExpiryDays: number
+}
+
+export type AccessControlStatus = {
+  instanceInitialized: boolean
+  setupLocked: boolean
+  userCount: number
+  activeSessions: number
+  ownerCount: number
+  publicSignupEnabled: boolean
+  sessionTimeoutMinutes: number
+  loginAlertsEnabled: boolean
+  maxFailedLogins: number
+  passwordHashing: string
+  sessionStorage: string
+  cookieFlags: string
+}
+
+export type ApiProtectionStatus = {
+  activeApiKeys: number
+  requestsThisMinute: number | null
+  globalLimitPerMinute: number
+  globalLimitEnabled: boolean
+  perKeyLimitPerMinute: number
+  perKeyLimitEnabled: boolean
+  allowlistCount: number
+  blocklistCount: number
+  enforceIpAllowlist: boolean
+  requireApiKeyExpiry: boolean
+  maxApiKeyExpiryDays: number
+}
+
+export type ClearInstanceDataInput = {
+  password: string
+  clearChat: boolean
+  clearMedia: boolean
+  clearAppData?: boolean
+}
+
+export type AiEmojiUsage = "none" | "low" | "medium" | "high"
+
+export type AiSettings = {
+  agent: boolean
+  autonomy: boolean
+  planning: boolean
+  showThinking: boolean
+  emojiUsage: AiEmojiUsage
+}
+
+export type PasswordVaultAiShare = {
+  names: boolean
+  usernames: boolean
+  urls: boolean
+  notes: boolean
+}
+
+export type AiSecuritySettings = {
+  blockInjection: boolean
+  redactSecrets: boolean
+  redactPII: boolean
+  readOnlyTools: boolean
+  libraryToolAccess: "full" | "sandbox" | "vision_only"
+  requireToolApproval: boolean
+  hideLibraryNames: boolean
+  hideAssetCounts: boolean
+  hideStorageSize: boolean
+  hideUploadDates: boolean
+  passwordVaultAiAccess: "blocked" | "count_only" | "metadata"
+  passwordVaultAiShare: PasswordVaultAiShare
+  passwordQueriesLocalAiOnly: boolean
 }
 
 export type AuthSession = {

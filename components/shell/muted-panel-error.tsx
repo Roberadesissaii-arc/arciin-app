@@ -26,7 +26,7 @@ export function MutedPanelError({ error, onRetry, className }: MutedPanelErrorPr
         <button
           type="button"
           onClick={() => void onRetry()}
-          className="mt-2 font-semibold text-[#ff4f12]"
+          className="text-accent mt-2 font-semibold"
         >
           Try again
         </button>

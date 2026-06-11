@@ -11,11 +11,11 @@ export function MobileEventsPage() {
     <div className="flex flex-col gap-4">
 
       {/* ── sticky intro card ───────────────────────────────────── */}
-      <div className="sticky top-0 z-10 -mx-4 -mt-4 px-4 pt-4 pb-2" style={{ backgroundColor: "#f7f7f7" }}>
-        <div
-          className="overflow-hidden rounded-3xl"
-          style={{ background: "linear-gradient(155deg, #ff6a30 0%, #c82d00 100%)" }}
-        >
+      <div
+        className="sticky top-0 z-10 -mx-4 -mt-4 px-4 pb-2"
+        style={{ backgroundColor: "#f7f7f7", paddingTop: "max(1rem, env(safe-area-inset-top, 0px))" }}
+      >
+        <div className="page-intro-hero overflow-hidden rounded-3xl">
           <div className="px-5 pt-5 pb-5">
             <p
               className="text-[22px] font-black leading-none tracking-tight text-white"

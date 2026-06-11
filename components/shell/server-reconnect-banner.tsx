@@ -44,14 +44,8 @@ export function ServerReconnectBanner() {
       </div>
       <div className="server-offline-banner__panel">
         <div className="flex items-start gap-3.5 px-4 py-3.5">
-          <div
-            className="flex size-11 shrink-0 items-center justify-center rounded-2xl"
-            style={{
-              background: "linear-gradient(145deg, #fff7ed 0%, #f7f7f7 100%)",
-              border: "1px solid #fde8d8",
-            }}
-          >
-            <Server className="size-5 text-[#ff4f12]" strokeWidth={1.75} aria-hidden />
+          <div className="accent-icon-tile flex size-11 shrink-0 items-center justify-center rounded-2xl">
+            <Server className="text-accent size-5" strokeWidth={1.75} aria-hidden />
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-[14px] font-semibold tracking-tight text-[#222222]">
@@ -67,7 +61,7 @@ export function ServerReconnectBanner() {
             <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
               <Link
                 href="/profile"
-                className="text-[12px] font-semibold text-[#ff4f12] underline-offset-2 hover:underline"
+                className="text-accent text-[12px] font-semibold underline-offset-2 hover:underline"
               >
                 Update server address
               </Link>

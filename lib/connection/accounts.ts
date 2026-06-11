@@ -1,4 +1,4 @@
-import type { MobileAuthResult, MobileConnection } from "@/lib/types/api"
+import type { MobileConnection } from "@/lib/types/api"
 import { normalizeApiBase } from "@/lib/connection/normalize-url"
 import type { MobileServerProfile } from "@/lib/connection/storage"
 
@@ -183,7 +183,6 @@ export function upsertAccountFromConnection(connection: MobileConnection): void 
 
 export function updateActiveServerProfile(server: MobileServerProfile): void {
   const state = readAccountsState()
-  const activeId = state.activeAccountId ?? accountIdForApiBase(server.apiBaseUrl)
   const id = accountIdForApiBase(server.apiBaseUrl)
   const now = new Date().toISOString()
 

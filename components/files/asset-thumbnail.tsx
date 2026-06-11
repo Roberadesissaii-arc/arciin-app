@@ -213,7 +213,7 @@ export function AssetThumbnail({
   connection,
   className = "",
   eager = false,
-  documentThumbnailsEnabled = false,
+  documentThumbnailsEnabled = true,
 }: ThumbnailProps & {
   /** When true, fetch even if not in viewport (viewer). */
   documentThumbnailsEnabled?: boolean

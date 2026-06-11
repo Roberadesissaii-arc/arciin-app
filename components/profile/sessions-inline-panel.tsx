@@ -27,25 +27,19 @@ function SessionRow({
   return (
     <div className="flex items-center gap-3 py-2.5">
       <div
-        className="flex size-9 shrink-0 items-center justify-center rounded-xl"
-        style={{
-          backgroundColor: session.isCurrent ? "rgba(255,79,18,0.08)" : "#fff",
-          border: `1px solid ${session.isCurrent ? "rgba(255,79,18,0.25)" : "#e5e5e5"}`,
-        }}
+        className={`flex size-9 shrink-0 items-center justify-center rounded-xl ${
+          session.isCurrent ? "accent-session-current" : "border border-[#e5e5e5] bg-white"
+        }`}
       >
         <DeviceIcon
-          className="size-[15px]"
-          style={{ color: session.isCurrent ? "#ff4f12" : "#717171" }}
+          className={`size-[15px] ${session.isCurrent ? "text-accent" : "text-[#717171]"}`}
         />
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <p className="text-[13px] font-medium text-[#222222]">{label}</p>
           {session.isCurrent ? (
-            <span
-              className="rounded-full px-2 py-0.5 text-[10px] font-semibold"
-              style={{ backgroundColor: "rgba(255,79,18,0.1)", color: "#ff4f12" }}
-            >
+            <span className="accent-badge-pill rounded-full px-2 py-0.5 text-[10px] font-semibold">
               This device
             </span>
           ) : null}

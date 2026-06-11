@@ -2,18 +2,10 @@
 
 import Link from "next/link"
 import { useCallback, useEffect, useRef, useState } from "react"
-import {
-  Activity,
-  BriefcaseBusiness,
-  ChevronLeft,
-  ChevronRight,
-  Loader2,
-  RefreshCw,
-  Search,
-  X,
-} from "lucide-react"
+import { Activity, BriefcaseBusiness, Loader2, RefreshCw, Search, X } from "lucide-react"
 
 import { JobRow } from "@/components/jobs/job-row"
+import { MobilePagination } from "@/components/ui/mobile-pagination"
 import { formatApiError } from "@/lib/api/errors"
 import { fetchJobs, type JobSummary } from "@/lib/api/jobs"
 import { PageFetchErrorAlert } from "@/components/shell/page-fetch-error-alert"
@@ -85,11 +77,11 @@ export function MobileJobsPage() {
     <div className="flex flex-col gap-4">
 
       {/* ── sticky intro card + search row ──────────────────────── */}
-      <div className="sticky top-0 z-10 -mx-4 -mt-4 px-4 pt-4 pb-2" style={{ backgroundColor: "#f7f7f7" }}>
-        <div
-          className="overflow-hidden rounded-3xl"
-          style={{ background: "linear-gradient(155deg, #ff6a30 0%, #c82d00 100%)" }}
-        >
+      <div
+        className="sticky top-0 z-10 -mx-4 -mt-4 px-4 pb-2"
+        style={{ backgroundColor: "#f7f7f7", paddingTop: "max(1rem, env(safe-area-inset-top, 0px))" }}
+      >
+        <div className="page-intro-hero overflow-hidden rounded-3xl">
           <div className="px-5 pt-5 pb-5">
             <p
               className="text-[22px] font-black leading-none tracking-tight text-white"
@@ -165,11 +157,8 @@ export function MobileJobsPage() {
           className="flex flex-col items-center gap-3 rounded-2xl bg-white py-14"
           style={{ border: "1px solid #e5e5e5" }}
         >
-          <div
-            className="flex size-14 items-center justify-center rounded-2xl"
-            style={{ backgroundColor: "#fff4f0", border: "1px solid rgba(255,79,18,0.15)" }}
-          >
-            <BriefcaseBusiness className="size-6 text-[#ff4f12]" />
+          <div className="empty-state-icon flex size-14 items-center justify-center rounded-2xl">
+            <BriefcaseBusiness className="text-accent size-6" />
           </div>
           <div className="text-center">
             <p className="text-[14px] font-semibold text-[#222222]">No jobs yet</p>
@@ -192,52 +181,7 @@ export function MobileJobsPage() {
             ))}
           </div>
 
-          {totalPages > 1 ? (
-            <div
-              className="flex items-center justify-between gap-3 rounded-2xl bg-white px-4 py-3"
-              style={{ border: "1px solid #e5e5e5" }}
-            >
-              <button
-                type="button"
-                disabled={page === 0}
-                onClick={() => setPage((p) => p - 1)}
-                className="flex size-9 items-center justify-center rounded-xl bg-[#f7f7f7] text-[#717171] transition-opacity disabled:opacity-30 active:bg-[#efefef]"
-                style={{ border: "1px solid #e5e5e5" }}
-                aria-label="Previous page"
-              >
-                <ChevronLeft className="size-4" />
-              </button>
-
-              <div className="flex items-center gap-1.5">
-                {Array.from({ length: totalPages }).map((_, i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    onClick={() => setPage(i)}
-                    style={{
-                      width: page === i ? 20 : 8,
-                      height: 8,
-                      borderRadius: 99,
-                      transition: "width 0.2s, background-color 0.2s",
-                      backgroundColor: page === i ? "#ff4f12" : "#e0e0e0",
-                    }}
-                    aria-label={`Page ${i + 1}`}
-                  />
-                ))}
-              </div>
-
-              <button
-                type="button"
-                disabled={page === totalPages - 1}
-                onClick={() => setPage((p) => p + 1)}
-                className="flex size-9 items-center justify-center rounded-xl bg-[#f7f7f7] text-[#717171] transition-opacity disabled:opacity-30 active:bg-[#efefef]"
-                style={{ border: "1px solid #e5e5e5" }}
-                aria-label="Next page"
-              >
-                <ChevronRight className="size-4" />
-              </button>
-            </div>
-          ) : null}
+          <MobilePagination page={page} totalPages={totalPages} onPageChange={setPage} />
         </>
       )}
 

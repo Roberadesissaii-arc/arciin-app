@@ -54,14 +54,8 @@ export function VaultAccountPasswordSheet({
       ariaLabel="Account password"
     >
       <div className="flex flex-col gap-4">
-        <div
-          className="mx-auto flex size-14 items-center justify-center rounded-2xl"
-          style={{
-            background: "linear-gradient(135deg, rgba(255,79,18,0.14) 0%, rgba(255,79,18,0.04) 100%)",
-            border: "1px solid rgba(255,79,18,0.22)",
-          }}
-        >
-          <Lock className="size-6 text-[#ff4f12]" />
+        <div className="accent-icon-tile mx-auto flex size-14 items-center justify-center rounded-2xl">
+          <Lock className="text-accent size-6" />
         </div>
 
         {error ? (
@@ -105,8 +99,7 @@ export function VaultAccountPasswordSheet({
           type="button"
           disabled={busy || !password.trim()}
           onClick={() => void handleSubmit()}
-          className="flex h-12 w-full items-center justify-center gap-2 rounded-xl text-[14px] font-semibold text-white disabled:opacity-50"
-          style={{ backgroundColor: "#ff4f12" }}
+          className="btn-accent-solid flex h-12 w-full items-center justify-center gap-2 rounded-xl text-[14px] font-semibold disabled:opacity-50"
         >
           {busy ? <Loader2 className="size-4 animate-spin" /> : null}
           Confirm

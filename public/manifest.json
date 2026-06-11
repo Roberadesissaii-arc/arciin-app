@@ -2,11 +2,11 @@
   "name": "Arciin",
   "short_name": "Arciin",
   "description": "Your server, your control.",
-  "start_url": "/home",
+  "start_url": "/",
   "display": "standalone",
   "background_color": "#f7f7f7",
   "theme_color": "#f7f7f7",
-  "orientation": "portrait-primary",
+  "orientation": "any",
   "scope": "/",
   "icons": [
     {
@@ -25,7 +25,7 @@
       "src": "/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any"
+      "purpose": "any maskable"
     }
   ]
 }

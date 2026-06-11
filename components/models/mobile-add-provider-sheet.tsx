@@ -8,6 +8,8 @@ import { MobileOverlay } from "@/components/shell/mobile-bottom-sheet"
 import { formatApiError } from "@/lib/api/errors"
 import { createModelProfile } from "@/lib/api/models"
 import type { ModelProfile } from "@/lib/types/models"
+import { mobileInputClass } from "@/lib/ui/mobile-input"
+import { cn } from "@/lib/utils"
 
 const CUSTOM_PROVIDER_TYPES = [
   { id: "openai", label: "OpenAI-compatible", placeholder: "https://api.openai.com/v1" },
@@ -38,8 +40,7 @@ function Field({
   )
 }
 
-const inputClass =
-  "w-full rounded-xl bg-[#f7f7f7] px-4 py-3 text-[13px] text-[#222222] outline-none placeholder:text-[#a0a0a0] focus:bg-white"
+const inputClass = `${mobileInputClass} px-4 py-3 focus:bg-white`
 const inputStyle = { border: "1px solid #e5e5e5" } as const
 
 export function MobileAddProviderSheet({
@@ -114,7 +115,7 @@ export function MobileAddProviderSheet({
   return (
     <MobileOverlay open={open} onClose={onClose}>
       <div
-        className="pointer-events-auto flex max-h-[min(92dvh,800px)] w-full flex-col rounded-t-3xl bg-white pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-12px_48px_rgba(0,0,0,0.18)]"
+        className="pointer-events-auto flex max-h-full w-full flex-col rounded-t-3xl bg-white pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-12px_48px_rgba(0,0,0,0.18)]"
         style={{ borderTop: "1px solid #e5e5e5" }}
       >
         <div className="flex shrink-0 items-start justify-between gap-3 border-b border-[#f0f0f0] px-5 py-4">
@@ -231,8 +232,10 @@ export function MobileAddProviderSheet({
             type="button"
             disabled={saving || !serverOnline}
             onClick={() => void handleCustomConnect()}
-            className="flex w-full items-center justify-center gap-2 rounded-2xl py-3.5 text-[14px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-            style={{ backgroundColor: serverOnline ? "#ff4f12" : "#d4d4d4" }}
+            className={cn(
+              "flex w-full items-center justify-center gap-2 rounded-2xl py-3.5 text-[14px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50",
+              serverOnline ? "btn-accent-solid" : "bg-[#d4d4d4]",
+            )}
           >
             {saving ? <Loader2 className="size-4 animate-spin" /> : null}
             Connect custom API

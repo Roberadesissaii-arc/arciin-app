@@ -20,7 +20,7 @@ export function LoginDomainChip({
       className="flex min-w-0 items-center gap-2 rounded-xl px-3 py-2"
       style={{ backgroundColor: "#f7f7f7", border: "1px solid #efefef" }}
     >
-      <Server className="size-3.5 shrink-0 text-[#ff4f12]" aria-hidden />
+      <Server className="text-accent size-3.5 shrink-0" aria-hidden />
       <p
         className="min-w-0 flex-1 truncate text-[12px] text-[#717171]"
         title={display.host}

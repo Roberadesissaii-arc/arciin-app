@@ -14,6 +14,7 @@ import {
 import type { ProviderMeta } from "@/lib/models/provider-catalog"
 import { MobileOverlay } from "@/components/shell/mobile-bottom-sheet"
 import type { CreateModelProfileInput, ModelProfile, OllamaCloudModelProbe } from "@/lib/types/models"
+import { cn } from "@/lib/utils"
 
 export function MobileConnectSheet({
   meta,
@@ -171,7 +172,7 @@ export function MobileConnectSheet({
   return (
     <MobileOverlay open={open} onClose={onClose}>
       <div
-        className="pointer-events-auto flex max-h-[min(92dvh,800px)] w-full flex-col rounded-t-3xl bg-white pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-12px_48px_rgba(0,0,0,0.18)]"
+        className="pointer-events-auto flex max-h-full w-full flex-col rounded-t-3xl bg-white pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-12px_48px_rgba(0,0,0,0.18)]"
         style={{ borderTop: "1px solid #e5e5e5" }}
       >
         <div className="flex shrink-0 items-start justify-between gap-3 border-b border-[#f0f0f0] px-5 py-4">
@@ -184,7 +185,7 @@ export function MobileConnectSheet({
               href={meta.docsUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="mt-1 inline-block text-[12px] font-semibold text-[#ff4f12]"
+              className="text-accent mt-1 inline-block text-[12px] font-semibold"
             >
               Get API key →
             </a>
@@ -211,7 +212,7 @@ export function MobileConnectSheet({
                     setScannedModels([])
                   }}
                   placeholder="http://localhost:11434"
-                  className="w-full rounded-xl bg-[#f7f7f7] px-4 py-3 font-mono text-[13px] outline-none"
+                  className="w-full rounded-xl bg-[#f7f7f7] px-4 py-3 font-mono text-[16px] outline-none"
                   style={{ border: "1px solid #e5e5e5" }}
                 />
               </Field>
@@ -222,7 +223,7 @@ export function MobileConnectSheet({
                     value={model}
                     onChange={(e) => setModel(e.target.value)}
                     placeholder="llama3.2"
-                    className="min-w-0 flex-1 rounded-xl bg-[#f7f7f7] px-4 py-3 font-mono text-[13px] outline-none"
+                    className="min-w-0 flex-1 rounded-xl bg-[#f7f7f7] px-4 py-3 font-mono text-[16px] outline-none"
                     style={{ border: "1px solid #e5e5e5" }}
                   />
                   {isEdit ? (
@@ -246,11 +247,10 @@ export function MobileConnectSheet({
                         key={m}
                         type="button"
                         onClick={() => setModel(m)}
-                        className="flex w-full items-center gap-2 border-b border-[#f0f0f0] px-3 py-2.5 font-mono text-[12px] last:border-0"
-                        style={{
-                          backgroundColor: model === m ? "rgba(255,79,18,0.06)" : undefined,
-                          color: model === m ? "#ff4f12" : "#222222",
-                        }}
+                        className={cn(
+                          "flex w-full items-center gap-2 border-b border-[#f0f0f0] px-3 py-2.5 font-mono text-[12px] last:border-0",
+                          model === m ? "bg-accent-soft text-accent" : "text-[#222222]",
+                        )}
                       >
                         {m}
                         {model === m ? <Check className="ml-auto size-3.5" /> : null}
@@ -275,7 +275,7 @@ export function MobileConnectSheet({
                       ? (profile.apiKeyMasked ?? "••••••••")
                       : "ollama_…"
                   }
-                  className="w-full rounded-xl bg-[#f7f7f7] px-4 py-3 font-mono text-[13px] outline-none"
+                  className="w-full rounded-xl bg-[#f7f7f7] px-4 py-3 font-mono text-[16px] outline-none"
                   style={{ border: "1px solid #e5e5e5" }}
                 />
               </Field>
@@ -309,7 +309,7 @@ export function MobileConnectSheet({
                           <span className="text-[9px] uppercase text-amber-600">Paid</span>
                         ) : null}
                         {model === probe.name && canSelect ? (
-                          <Check className="size-3.5 text-[#ff4f12]" />
+                          <Check className="text-accent size-3.5" />
                         ) : null}
                       </button>
                     )
@@ -333,7 +333,7 @@ export function MobileConnectSheet({
                         ? (profile.apiKeyMasked ?? "••••••••")
                         : "sk-…"
                     }
-                    className="w-full rounded-xl bg-[#f7f7f7] px-4 py-3 font-mono text-[13px] outline-none"
+                    className="w-full rounded-xl bg-[#f7f7f7] px-4 py-3 font-mono text-[16px] outline-none"
                     style={{ border: "1px solid #e5e5e5" }}
                   />
                 </Field>
@@ -345,7 +345,7 @@ export function MobileConnectSheet({
                     value={baseUrl}
                     onChange={(e) => setBaseUrl(e.target.value)}
                     placeholder={meta.baseUrlPlaceholder ?? "https://api.example.com/v1"}
-                    className="w-full rounded-xl bg-[#f7f7f7] px-4 py-3 font-mono text-[13px] outline-none"
+                    className="w-full rounded-xl bg-[#f7f7f7] px-4 py-3 font-mono text-[16px] outline-none"
                     style={{ border: "1px solid #e5e5e5" }}
                   />
                 </Field>
@@ -356,7 +356,7 @@ export function MobileConnectSheet({
                   value={model}
                   onChange={(e) => setModel(e.target.value)}
                   placeholder={meta.suggestedModels[0] ?? "model-id"}
-                  className="w-full rounded-xl bg-[#f7f7f7] px-4 py-3 font-mono text-[13px] outline-none"
+                  className="w-full rounded-xl bg-[#f7f7f7] px-4 py-3 font-mono text-[16px] outline-none"
                   style={{ border: "1px solid #e5e5e5" }}
                 />
               </Field>
@@ -375,8 +375,10 @@ export function MobileConnectSheet({
             type="button"
             disabled={saving || !serverOnline}
             onClick={() => void handleSave()}
-            className="flex w-full items-center justify-center gap-2 rounded-2xl py-3.5 text-[14px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-            style={{ backgroundColor: serverOnline ? "#ff4f12" : "#d4d4d4" }}
+            className={cn(
+              "flex w-full items-center justify-center gap-2 rounded-2xl py-3.5 text-[14px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50",
+              serverOnline ? "btn-accent-solid" : "bg-[#d4d4d4]",
+            )}
           >
             {saving ? <Loader2 className="size-4 animate-spin" /> : null}
             {isEdit ? "Save changes" : "Connect"}

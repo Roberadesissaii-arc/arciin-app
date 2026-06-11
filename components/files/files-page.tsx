@@ -8,6 +8,7 @@ import { AssetThumbnail } from "@/components/files/asset-thumbnail"
 import { FolderTile } from "@/components/files/folder-tile"
 import { AssetViewer } from "@/components/files/asset-viewer"
 import { MobileCreateFolderSheet } from "@/components/files/mobile-create-folder-sheet"
+import { MobileDuplicateUploadSheet } from "@/components/files/mobile-duplicate-upload-sheet"
 import { PageFetchErrorAlert } from "@/components/shell/page-fetch-error-alert"
 import { useConnection } from "@/components/providers/connection-provider"
 import { getAssets } from "@/lib/api/assets"
@@ -25,8 +26,25 @@ import {
 import { getPasswordVault } from "@/lib/api/password-vault"
 import { MobileFolderCredentialSheet } from "@/components/files/mobile-folder-credential-sheet"
 import { listLibraries } from "@/lib/api/libraries"
+import { getUploadSettings } from "@/lib/api/settings"
+import {
+  fileExceedsUploadLimit,
+  formatUploadUserMessage,
+  uploadTooLargeMessage,
+  type UploadUserMessage,
+} from "@/lib/api/upload-errors"
+import { UploadIssueBanner } from "@/components/files/upload-issue-banner"
+import { UploadSuccessBanner } from "@/components/files/upload-success-banner"
 import { uploadFile } from "@/lib/api/uploads"
-import { getUserPreferences } from "@/lib/api/user-preferences"
+import {
+  applyDuplicateResolutions,
+  findUploadDuplicates,
+} from "@/lib/uploads/upload-duplicate-flow"
+import type { DuplicateUploadConflict } from "@/lib/uploads/upload-duplicate-types"
+import type { UploadSettings } from "@/lib/types/models"
+import { useActiveUserPreferences } from "@/lib/hooks/use-active-user-preferences"
+import { shouldPlayUploadSound } from "@/lib/preferences/preferences-store"
+import { playUploadCompleteSound } from "@/lib/preferences/upload-sound"
 import { classifyFile, filterIdForMediaType } from "@/lib/files/classify-file"
 import {
   filesCacheKey,
@@ -37,8 +55,9 @@ import {
 } from "@/lib/files/files-cache"
 import { evictThumbnail } from "@/lib/files/thumbnail-cache"
 import {
-  assetCountForFilter,
+  assetCountsByFilter,
   findLibraryBySlug,
+  formatAssetCount,
   libraryIdForFilter,
   librarySlugForFilter,
   type FilesFilterId,
@@ -80,14 +99,8 @@ function SectionPlaceholder({
       className="flex flex-col items-center justify-center rounded-2xl bg-white px-6 py-10"
       style={{ border: "1px solid #e5e5e5" }}
     >
-      <div
-        className="flex size-14 items-center justify-center rounded-2xl"
-        style={{
-          backgroundColor: "rgba(255,79,18,0.08)",
-          border: "1px solid rgba(255,79,18,0.18)",
-        }}
-      >
-        <Icon className="size-7 text-[#ff4f12]" strokeWidth={1.75} />
+      <div className="empty-state-icon flex size-14 items-center justify-center rounded-2xl">
+        <Icon className="text-accent size-7" strokeWidth={1.75} />
       </div>
       <p className="mt-4 text-center text-[14px] font-semibold text-[#222222]">{title}</p>
       <p className="mt-1 max-w-[220px] text-center text-[12px] leading-relaxed text-[#a0a0a0]">
@@ -112,20 +125,45 @@ export function FilesPage() {
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState<number | null>(null)
   const [uploadName, setUploadName] = useState<string | null>(null)
-  const [uploadNotice, setUploadNotice] = useState<string | null>(null)
+  const [uploadSuccess, setUploadSuccess] = useState<{
+    title: string
+    detail: string
+  } | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [uploadIssue, setUploadIssue] = useState<UploadUserMessage | null>(null)
   const [viewerIndex, setViewerIndex] = useState<number | null>(null)
   const [createFolderOpen, setCreateFolderOpen] = useState(false)
   const [allFoldersOpen, setAllFoldersOpen] = useState(false)
   const [hasCache, setHasCache] = useState(false)
-  const [documentThumbnailsEnabled, setDocumentThumbnailsEnabled] = useState(false)
+  const userPrefs = useActiveUserPreferences()
+  const documentThumbnailsEnabled = userPrefs.media.documentThumbnails
   const [folderCredential, setFolderCredential] = useState<{
     folderId: string
     mode: "open" | "lock" | "remove-lock"
   } | null>(null)
   const [pinConfigured, setPinConfigured] = useState(false)
+  const [uploadLimits, setUploadLimits] = useState<UploadSettings | null>(null)
+  const [duplicateConflicts, setDuplicateConflicts] = useState<DuplicateUploadConflict[] | null>(
+    null,
+  )
+  const [queuedCleanFiles, setQueuedCleanFiles] = useState<File[]>([])
 
   const libraryScoped = filter !== "all"
+
+  useEffect(() => {
+    if (!connection || !serverOnline) return
+    let cancelled = false
+    void getUploadSettings(connection)
+      .then((limits) => {
+        if (!cancelled) setUploadLimits(limits)
+      })
+      .catch(() => {
+        /* use default pre-check */
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [connection, serverOnline])
 
   useEffect(() => {
     if (!connection) return
@@ -133,21 +171,6 @@ export function FilesPage() {
     void getPasswordVault(connection)
       .then((vault) => {
         if (!cancelled) setPinConfigured(vault.pinConfigured)
-      })
-      .catch(() => {})
-    return () => {
-      cancelled = true
-    }
-  }, [connection])
-
-  useEffect(() => {
-    if (!connection) return
-    let cancelled = false
-    void getUserPreferences(connection)
-      .then((prefs) => {
-        if (!cancelled) {
-          setDocumentThumbnailsEnabled(prefs.media?.documentThumbnails ?? false)
-        }
       })
       .catch(() => {})
     return () => {
@@ -192,7 +215,15 @@ export function FilesPage() {
 
       if (!isRefresh && cached) {
         applyCache(cached)
-        if (!isFilesCacheStale(cached)) return
+        if (!isFilesCacheStale(cached)) {
+          try {
+            const libs = await listLibraries(connection, signal)
+            if (!signal?.aborted) setLibraries(libs)
+          } catch {
+            /* keep cached library list */
+          }
+          return
+        }
         setRefreshing(true)
       } else if (isRefresh) {
         setRefreshing(true)
@@ -204,7 +235,7 @@ export function FilesPage() {
       setError(null)
 
       try {
-        const libs = libraries.length ? libraries : await listLibraries(connection, signal)
+        const libs = await listLibraries(connection, signal)
         if (signal?.aborted) return
 
         const resolvedLibId = libraryIdForFilter(libs, activeFilter)
@@ -242,7 +273,7 @@ export function FilesPage() {
         }
       }
     },
-    [applyCache, connection, filter, folderId, libraries, serverReachable],
+    [applyCache, connection, filter, folderId, serverReachable],
   )
 
   useEffect(() => {
@@ -342,61 +373,133 @@ export function FilesPage() {
     void load(undefined, false, { folderId: null })
   }, [load])
 
+  const executeUpload = useCallback(
+    async (files: File[]) => {
+      if (!connection || files.length === 0) return
+
+      setUploading(true)
+      setError(null)
+      setUploadIssue(null)
+      setUploadSuccess(null)
+
+      const forceInbox =
+        filter === "inbox" ? libraryIdForFilter(libraries, "inbox") : undefined
+
+      let lastDestination = ""
+      let reloadFilter: FilesFilterId = filter
+      const reloadFolderId = folderId
+
+      try {
+        for (const file of files) {
+          const hint = classifyFile(file)
+          setUploadName(`${file.name} → ${hint.toLowerCase()}`)
+          setUploadProgress(0)
+
+          const result = await uploadFile(connection, file, {
+            ...(forceInbox ? { targetLibraryId: forceInbox } : {}),
+            ...(folderId ? { targetFolderId: folderId } : {}),
+            onProgress: setUploadProgress,
+          })
+
+          const detected = result.detectedMediaType ?? hint
+          const destName = result.targetLibrary?.name
+          lastDestination = destName
+            ? `${destName} (${detected.toLowerCase()})`
+            : detected.toLowerCase()
+
+          if (result.detectedMediaType) {
+            const nextFilter = filterIdForMediaType(result.detectedMediaType)
+            reloadFilter = filter === "all" ? "all" : nextFilter
+            if (reloadFilter !== filter) setFilter(reloadFilter)
+          }
+        }
+
+        setUploadSuccess(
+          files.length === 1
+            ? {
+                title: "Upload complete",
+                detail: lastDestination,
+              }
+            : {
+                title: "Upload complete",
+                detail: `${files.length} files added`,
+              },
+        )
+        if (shouldPlayUploadSound()) void playUploadCompleteSound()
+        setTimeout(() => setUploadSuccess(null), 4000)
+
+        await load(undefined, true, { filter: reloadFilter, folderId: reloadFolderId })
+      } catch (err) {
+        if (serverReachable === false) {
+          setUploadIssue(null)
+          setError(null)
+        } else {
+          setUploadIssue(formatUploadUserMessage(err))
+          setError(null)
+        }
+      } finally {
+        setUploading(false)
+        setUploadProgress(null)
+        setUploadName(null)
+        if (inputRef.current) inputRef.current.value = ""
+      }
+    },
+    [connection, filter, folderId, libraries, load, serverReachable],
+  )
+
   async function handleFilesSelected(fileList: FileList | null) {
     if (!connection || !fileList?.length) return
     const files = Array.from(fileList)
-    setUploading(true)
-    setError(null)
-    setUploadNotice(null)
-
-    const forceInbox =
-      filter === "inbox" ? libraryIdForFilter(libraries, "inbox") : undefined
-
-    let lastDestination = ""
-    let reloadFilter: FilesFilterId = filter
-    const reloadFolderId = folderId
+    const maxMb = uploadLimits?.maxUploadSizeMb ?? 20 * 1024
+    for (const file of files) {
+      if (fileExceedsUploadLimit(file.size, maxMb)) {
+        setUploadIssue(uploadTooLargeMessage())
+        setError(null)
+        if (inputRef.current) inputRef.current.value = ""
+        return
+      }
+    }
 
     try {
-      for (const file of files) {
-        const hint = classifyFile(file)
-        setUploadName(`${file.name} → ${hint.toLowerCase()}`)
-        setUploadProgress(0)
+      const { clean, conflicts } = await findUploadDuplicates(
+        connection,
+        files,
+        filter,
+        libraries,
+        folderId,
+      )
 
-        const result = await uploadFile(connection, file, {
-          ...(forceInbox ? { targetLibraryId: forceInbox } : {}),
-          ...(folderId ? { targetFolderId: folderId } : {}),
-          onProgress: setUploadProgress,
-        })
-
-        const detected = result.detectedMediaType ?? hint
-        const destName = result.targetLibrary?.name
-        lastDestination = destName
-          ? `${destName} (${detected.toLowerCase()})`
-          : detected.toLowerCase()
-
-        if (result.detectedMediaType) {
-          const nextFilter = filterIdForMediaType(result.detectedMediaType)
-          reloadFilter = filter === "all" ? "all" : nextFilter
-          if (reloadFilter !== filter) setFilter(reloadFilter)
-        }
+      if (conflicts.length > 0) {
+        setQueuedCleanFiles(clean)
+        setDuplicateConflicts(conflicts)
+        if (inputRef.current) inputRef.current.value = ""
+        return
       }
 
-      setUploadNotice(
-        files.length === 1
-          ? `Uploaded to ${lastDestination}.`
-          : `${files.length} files uploaded.`,
-      )
-      setTimeout(() => setUploadNotice(null), 4000)
-
-      await load(undefined, true, { filter: reloadFilter, folderId: reloadFolderId })
-    } catch (err) {
-      setError(suppressFetchErrorWhenOffline(serverReachable, formatApiError(err)))
-    } finally {
-      setUploading(false)
-      setUploadProgress(null)
-      setUploadName(null)
-      if (inputRef.current) inputRef.current.value = ""
+      await executeUpload(files)
+    } catch {
+      await executeUpload(files)
     }
+  }
+
+  async function handleDuplicateResolve(resolved: DuplicateUploadConflict[]) {
+    if (!connection) return
+    setDuplicateConflicts(null)
+    try {
+      const fromConflicts = await applyDuplicateResolutions(connection, resolved)
+      const all = [...queuedCleanFiles, ...fromConflicts]
+      setQueuedCleanFiles([])
+      await executeUpload(all)
+    } catch (err) {
+      setQueuedCleanFiles([])
+      setUploadIssue(formatUploadUserMessage(err))
+    }
+  }
+
+  function handleDuplicateCancel() {
+    setDuplicateConflicts(null)
+    setQueuedCleanFiles([])
+    if (inputRef.current) inputRef.current.value = ""
   }
 
   function handleAssetDeleted(assetId: string) {
@@ -407,9 +510,19 @@ export function FilesPage() {
     void load(undefined, true)
   }
 
-  const filterLabel = FILES_FILTERS.find((f) => f.id === filter)?.label ?? "files"
-  const libraryTotal = useMemo(() => assetCountForFilter(libraries, filter), [libraries, filter])
-  const showFoldersSection = libraryScoped && !folderId
+  const filterLabel = FILES_FILTERS.find((f) => f.id === filter)?.label ?? "Assets"
+  const atLibraryRoot = libraryScoped && !folderId
+  const filterAssetCounts = useMemo(
+    () =>
+      assetCountsByFilter(libraries, {
+        activeFilter: filter,
+        folders,
+        rootAssets: assets,
+        atLibraryRoot,
+      }),
+    [libraries, filter, folders, assets, atLibraryRoot],
+  )
+  const showFoldersSection = atLibraryRoot
   const showSkeleton = loading && assets.length === 0 && visibleFolders.length === 0 && !hasCache
 
   const activeLibrary = libraryScoped
@@ -425,10 +538,10 @@ export function FilesPage() {
       : refreshing
         ? "Updating…"
         : currentFolder
-          ? `${currentFolder.name} · ${assets.length} files`
+          ? `${currentFolder.name} · ${formatAssetCount(assets.length)}`
           : filter === "all"
-            ? `${assets.length} files across all libraries`
-            : `${assets.length} in ${filterLabel}${libraryTotal !== assets.length ? ` · ${libraryTotal} in library` : ""}`
+            ? `${formatAssetCount(filterAssetCounts.all)} across all libraries`
+            : `${formatAssetCount(filterAssetCounts[filter])} in ${filterLabel}`
 
   const triggerUpload = useCallback(() => {
     inputRef.current?.click()
@@ -454,6 +567,7 @@ export function FilesPage() {
         : subtitle,
       filter,
       libraries,
+      filterAssetCounts,
       libraryScoped,
       breadcrumbLibrary,
       currentFolderName: currentFolder?.name ?? null,
@@ -476,6 +590,7 @@ export function FilesPage() {
     subtitle,
     filter,
     libraries,
+    filterAssetCounts,
     libraryScoped,
     breadcrumbLibrary,
     currentFolder,
@@ -526,9 +641,18 @@ export function FilesPage() {
         libraryName={breadcrumbLibrary}
         parentFolderId={folderId}
         parentFolderName={currentFolder?.name ?? null}
+        existingFolderNames={visibleFolders.map((folder) => folder.name)}
         onClose={() => setCreateFolderOpen(false)}
         onCreated={() => void load(undefined, true)}
       />
+
+      {duplicateConflicts && duplicateConflicts.length > 0 ? (
+        <MobileDuplicateUploadSheet
+          conflicts={duplicateConflicts}
+          onResolve={(resolved) => void handleDuplicateResolve(resolved)}
+          onCancel={handleDuplicateCancel}
+        />
+      ) : null}
 
       {folderCredential ? (
         <MobileFolderCredentialSheet
@@ -557,16 +681,22 @@ export function FilesPage() {
         />
       ) : (
         <>
-          {uploadNotice ? (
-            <p
-              className="rounded-xl px-4 py-2.5 text-center text-[12px] font-medium text-[#15803d]"
-              style={{ backgroundColor: "#f0fdf4", border: "1px solid #bbf7d0" }}
-            >
-              {uploadNotice}
-            </p>
+          {uploadSuccess ? (
+            <UploadSuccessBanner
+              title={uploadSuccess.title}
+              detail={uploadSuccess.detail}
+            />
           ) : null}
 
           <PageFetchErrorAlert error={error} onRetry={() => void load()} />
+
+          {uploadIssue ? (
+            <UploadIssueBanner
+              issue={uploadIssue}
+              onDismiss={() => setUploadIssue(null)}
+              onRetry={() => inputRef.current?.click()}
+            />
+          ) : null}
 
           {uploading && uploadName ? (
             <div
@@ -574,7 +704,7 @@ export function FilesPage() {
               style={{ border: "1px solid #e5e5e5" }}
             >
               <div className="flex items-center gap-2">
-                <CloudUpload className="size-4 shrink-0 text-[#ff4f12]" />
+                <CloudUpload className="text-accent size-4 shrink-0" />
                 <p className="min-w-0 flex-1 truncate text-[12px] font-medium text-[#222222]">
                   {uploadName}
                 </p>
@@ -584,8 +714,8 @@ export function FilesPage() {
               </div>
               <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#f0f0f0]">
                 <div
-                  className="h-full rounded-full transition-all"
-                  style={{ width: `${uploadProgress ?? 0}%`, backgroundColor: "#ff4f12" }}
+                  className="bg-accent h-full rounded-full transition-all"
+                  style={{ width: `${uploadProgress ?? 0}%` }}
                 />
               </div>
             </div>
@@ -606,8 +736,7 @@ export function FilesPage() {
                         <button
                           type="button"
                           onClick={() => setAllFoldersOpen(true)}
-                          className="text-[12px] font-semibold active:opacity-70"
-                          style={{ color: "#ff4f12" }}
+                          className="text-accent text-[12px] font-semibold active:opacity-70"
                         >
                           View all ({visibleFolders.length})
                         </button>
@@ -616,6 +745,7 @@ export function FilesPage() {
                     {visibleFolders.length > 0 ? (
                       <div
                         className="overflow-hidden rounded-2xl bg-white"
+                        data-folder-grid
                         style={{ border: "1px solid #e5e5e5" }}
                       >
                         {visibleFolders.slice(0, 2).map((folder, i) => (
@@ -652,11 +782,11 @@ export function FilesPage() {
                 <section className="flex flex-col gap-2">
                   {(showFoldersSection || assets.length > 0) && (
                     <p className="text-[11px] font-semibold uppercase tracking-wider text-[#a0a0a0]">
-                      {showFoldersSection ? "Files" : "Assets"}
+                      Assets
                     </p>
                   )}
                   {assets.length > 0 ? (
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-2 gap-3" data-asset-grid>
                       {assets.map((asset, i) => (
                         <button
                           key={asset.id}
@@ -686,15 +816,15 @@ export function FilesPage() {
                       icon={CloudUpload}
                       title={
                         currentFolder
-                          ? "No files in this folder"
+                          ? "No assets in this folder"
                           : filter === "all"
-                            ? "No files yet"
+                            ? "No assets yet"
                             : `No ${filterLabel.toLowerCase()} yet`
                       }
                       description={
                         currentFolder
-                          ? "Upload files here or move items from another folder."
-                          : "Tap upload above to add files to this library."
+                          ? "Upload assets here or move items from another folder."
+                          : "Tap upload above to add assets to this library."
                       }
                     />
                   )}
@@ -705,8 +835,7 @@ export function FilesPage() {
                     type="button"
                     disabled={uploading}
                     onClick={() => inputRef.current?.click()}
-                    className="flex items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-[13px] font-semibold text-white active:opacity-90 disabled:opacity-50"
-                    style={{ backgroundColor: "#ff4f12" }}
+                    className="btn-accent-solid flex items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-[13px] font-semibold active:opacity-90 disabled:opacity-50"
                   >
                     <CloudUpload className="size-4" />
                     Upload files
@@ -755,10 +884,7 @@ function AllFoldersList({
   return (
     <div className="flex flex-col gap-4 pt-safe">
       {/* intro card */}
-      <div
-        className="relative overflow-hidden rounded-2xl px-4 pb-4 pt-4"
-        style={{ background: "linear-gradient(155deg, #ff6a30 0%, #c82d00 100%)" }}
-      >
+      <div className="page-intro-hero relative overflow-hidden rounded-2xl px-4 pb-4 pt-4">
         <button
           type="button"
           onClick={onClose}
@@ -788,7 +914,7 @@ function AllFoldersList({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search folders…"
-            className="w-full rounded-2xl border border-[#e5e5e5] bg-white py-3 pl-10 pr-10 text-[14px] text-[#222222] outline-none placeholder:text-[#a0a0a0] focus:border-[#ff4f12]"
+            className="w-full rounded-2xl border border-[#e5e5e5] bg-white py-3 pl-10 pr-10 text-[14px] text-[#222222] outline-none placeholder:text-[#a0a0a0] focus:border-[var(--arciin-accent,#ff4f12)]"
             autoComplete="off"
             aria-label="Search folders"
           />

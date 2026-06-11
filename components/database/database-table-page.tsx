@@ -16,7 +16,6 @@ import { useConnection } from "@/components/providers/connection-provider"
 import { fetchAdminTableData, fetchAdminTables } from "@/lib/api/admin"
 import { formatApiError } from "@/lib/api/errors"
 import { formatColumnLabel, TableCell } from "@/lib/database/table-cell"
-import { tableIconFor } from "@/lib/database/table-icons"
 import type { AdminTable, AdminTableData } from "@/lib/types/database"
 
 const PRIMARY_FIELDS = ["name", "email", "title", "originalFilename", "slug", "id"]
@@ -78,14 +77,11 @@ function SoloRecordDetail({
 
   return (
     <section
-      className="flex min-h-[min(520px,calc(100dvh-11rem))] flex-col overflow-hidden rounded-2xl"
-      style={{ ...CARD_STYLE, borderLeft: "4px solid #ff4f12" }}
+      className="accent-border-l-4 flex min-h-[min(520px,calc(100dvh-11rem))] flex-col overflow-hidden rounded-2xl"
+      style={CARD_STYLE}
     >
-      <div
-        className="border-b border-[#ececec] px-5 py-5"
-        style={{ background: "linear-gradient(165deg, #fff7f4 0%, #fafafa 100%)" }}
-      >
-        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#ff4f12]">
+      <div className="accent-soft-panel-header border-b border-[#ececec] px-5 py-5">
+        <p className="text-accent text-[10px] font-bold uppercase tracking-[0.14em]">
           {meta.label}
         </p>
         <h2
@@ -133,11 +129,11 @@ function RecordCard({
 
   return (
     <article
-      className="overflow-hidden rounded-2xl"
-      style={{ ...CARD_STYLE, borderLeft: "3px solid #ff4f12" }}
+      className="accent-border-l-3 overflow-hidden rounded-2xl"
+      style={CARD_STYLE}
     >
       <div className="flex items-center justify-between gap-2 border-b border-[#ececec] px-4 py-2.5">
-        <span className="text-[11px] font-bold uppercase tracking-wider text-[#ff4f12]">
+        <span className="text-accent text-[11px] font-bold uppercase tracking-wider">
           #{rowLabel}
         </span>
         {columns.includes("id") && row.id != null ? (
@@ -194,78 +190,6 @@ function RecordsSkeleton({ solo }: { solo?: boolean }) {
         ))}
       </div>
     </article>
-  )
-}
-
-function TableHero({
-  meta,
-  data,
-  tableName,
-  page,
-  totalPages,
-  compact,
-}: {
-  meta: AdminTable
-  data: AdminTableData | null
-  tableName: string
-  page: number
-  totalPages: number
-  compact?: boolean
-}) {
-  const Icon = tableIconFor(tableName)
-
-  return (
-    <section
-      className={`rounded-2xl ${compact ? "p-4" : "p-5"}`}
-      style={CARD_STYLE}
-    >
-      <div className="flex items-start gap-3">
-        <div
-          className="flex size-12 shrink-0 items-center justify-center rounded-xl"
-          style={{
-            background: "linear-gradient(145deg, rgba(255,79,18,0.15) 0%, rgba(255,79,18,0.04) 100%)",
-            border: "1px solid rgba(255,79,18,0.2)",
-          }}
-        >
-          <Icon className="size-5 text-[#ff4f12]" strokeWidth={2} />
-        </div>
-        <div className="min-w-0 flex-1">
-          <h1
-            className="text-[18px] font-bold leading-tight text-[#222222]"
-            style={{ fontFamily: "var(--font-space-grotesk, sans-serif)" }}
-          >
-            {meta.label}
-          </h1>
-          {!compact ? (
-            <p className="mt-1.5 text-[12px] leading-relaxed text-[#717171]">{meta.description}</p>
-          ) : null}
-        </div>
-      </div>
-
-      <div className="mt-4 grid grid-cols-3 gap-2">
-        <div className="rounded-xl bg-white/70 px-2 py-2 text-center" style={{ border: "1px solid #ececec" }}>
-          <p className="text-[9px] font-semibold uppercase tracking-wider text-[#a0a0a0]">Rows</p>
-          <p className="mt-0.5 text-[14px] font-bold tabular-nums text-[#222222]">
-            {data?.total.toLocaleString() ?? "—"}
-          </p>
-        </div>
-        <div className="rounded-xl bg-white/70 px-2 py-2 text-center" style={{ border: "1px solid #ececec" }}>
-          <p className="text-[9px] font-semibold uppercase tracking-wider text-[#a0a0a0]">On page</p>
-          <p className="mt-0.5 text-[14px] font-bold tabular-nums text-[#222222]">
-            {data?.rows.length ?? 0}
-          </p>
-        </div>
-        <div
-          className="rounded-xl px-2 py-2 text-center"
-          style={{ backgroundColor: "#fff7f4", border: "1px solid rgba(255,79,18,0.18)" }}
-        >
-          <p className="text-[9px] font-semibold uppercase tracking-wider text-[#ff4f12]/80">Page</p>
-          <p className="mt-0.5 text-[14px] font-bold tabular-nums text-[#ff4f12]">
-            {totalPages > 1 ? `${page}/${totalPages}` : "1"}
-          </p>
-        </div>
-      </div>
-    </section>
   )
 }
 
@@ -382,11 +306,11 @@ export function DatabaseTablePage({ tableName }: { tableName: string }) {
     <div className="flex flex-col gap-4">
 
       {/* ── sticky intro card ───────────────────────────────────── */}
-      <div className="sticky top-0 z-10 -mx-4 -mt-4 px-4 pt-4 pb-2" style={{ backgroundColor: "#f7f7f7" }}>
-        <div
-          className="overflow-hidden rounded-3xl"
-          style={{ background: "linear-gradient(155deg, #ff6a30 0%, #c82d00 100%)" }}
-        >
+      <div
+        className="sticky top-0 z-10 -mx-4 -mt-4 px-4 pb-2"
+        style={{ backgroundColor: "#f7f7f7", paddingTop: "max(1rem, env(safe-area-inset-top, 0px))" }}
+      >
+        <div className="page-intro-hero overflow-hidden rounded-3xl">
           <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-5">
             <div className="min-w-0 flex-1">
               <p
@@ -468,11 +392,8 @@ export function DatabaseTablePage({ tableName }: { tableName: string }) {
           className="flex flex-col items-center justify-center gap-3 rounded-2xl bg-white py-14 px-6 text-center"
           style={{ border: "1px solid #e5e5e5" }}
         >
-          <div
-            className="flex size-14 items-center justify-center rounded-2xl"
-            style={{ backgroundColor: "#fff4f0", border: "1px solid rgba(255,79,18,0.15)" }}
-          >
-            <Database className="size-6 text-[#ff4f12]" />
+          <div className="accent-empty-icon-tile flex size-14 items-center justify-center rounded-2xl">
+            <Database className="text-accent size-6" />
           </div>
           <div>
             <p className="text-[14px] font-semibold text-[#222222]">No rows yet</p>

@@ -6,8 +6,6 @@ import {
   connectionFromAccount,
   getActiveAccount,
   listMobileAccounts,
-  removeAccount,
-  setActiveAccount,
   updateActiveServerProfile,
   upsertAccountFromConnection,
 } from "@/lib/connection/accounts"

@@ -53,6 +53,17 @@ export function changePassword(connection: MobileConnection, input: ChangePasswo
   })
 }
 
+export function setupPasswordRecovery(
+  connection: MobileConnection,
+  input: { question: string; answer: string },
+) {
+  return fetchApi<{ success: true }>("/auth/recovery/setup", {
+    connection,
+    method: "POST",
+    body: input,
+  })
+}
+
 export function getSessions(connection: MobileConnection, signal?: AbortSignal) {
   return fetchApi<SessionDetail[]>("/auth/sessions", {
     connection,

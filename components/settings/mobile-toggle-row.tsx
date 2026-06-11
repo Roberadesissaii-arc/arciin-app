@@ -27,13 +27,7 @@ export function MobilePillSwitch({
         aria-checked={on}
         disabled={disabled}
         onClick={onChange}
-        className="relative shrink-0 transition-colors disabled:opacity-50"
-        style={{
-          width: 44,
-          height: 26,
-          borderRadius: 13,
-          backgroundColor: on ? "#ff4f12" : "#e5e5e5",
-        }}
+        className="accent-switch relative shrink-0 transition-colors disabled:opacity-50"
       >
         <span
           className="absolute top-[3px] size-5 rounded-full bg-white shadow-sm transition-transform"
@@ -49,8 +43,7 @@ export function SettingsPanelLink({ href, label }: { href: string; label: string
   return (
     <Link
       href={href}
-      className="mt-3 flex h-10 items-center justify-center rounded-xl text-[13px] font-semibold text-[#ff4f12] active:opacity-70"
-      style={{ border: "1px solid rgba(255,79,18,0.35)", backgroundColor: "rgba(255,79,18,0.06)" }}
+      className="accent-settings-panel-link mt-3 flex h-10 items-center justify-center rounded-xl text-[13px] font-semibold active:opacity-70"
     >
       {label}
     </Link>

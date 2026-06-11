@@ -1,8 +1,7 @@
 "use client"
 
-import Image from "next/image"
 import Link from "next/link"
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 import { flushSync } from "react-dom"
 import {
   Copy,
@@ -21,11 +20,16 @@ import {
   X,
 } from "lucide-react"
 
-import { syncChatKeyboardOffset, useChatKeyboard } from "@/hooks/use-chat-keyboard"
+import {
+  forceResetChatKeyboard,
+  syncChatKeyboardOffset,
+  useChatKeyboard,
+} from "@/hooks/use-chat-keyboard"
 import { useTextToSpeech } from "@/hooks/use-text-to-speech"
 import { ChatMarkdownContent } from "@/components/chat/chat-markdown-content"
 import { ChatModelBar } from "@/components/chat/chat-model-bar"
 import { ChatReasoningBlock } from "@/components/chat/chat-reasoning-block"
+import { VoicePickerSheet } from "@/components/chat/voice-picker-sheet"
 import { ArciinMark } from "@/components/ui/arciin-mark"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useChatChrome } from "@/components/chat/chat-chrome-context"
@@ -40,6 +44,7 @@ import { resolveChatModelForProfile } from "@/lib/models/resolve-chat-model"
 import {
   createChatConversation,
   deleteChatConversation,
+  setChatSelection,
   getChatConversation,
   getChatConversations,
   getChatInstanceContext,
@@ -53,13 +58,20 @@ import {
 } from "@/lib/api/chat"
 import { buildOutboundChatMessages } from "@/lib/chat/build-context"
 import {
+  mergeAssetTagsFromThinking,
+  stripAssetTagsFromText,
+} from "@/lib/chat/asset-tag-patterns"
+import { finalizeAssistantContent } from "@/lib/chat/finalize-assistant"
+import {
   deriveStreamingThinkingAndAnswer,
+  displayThinkingDuringStream,
   hasVisibleAssistantAnswer,
   resolveFinalAssistantMessage,
 } from "@/lib/chat/reasoning"
+import { getAiSettings } from "@/lib/api/settings"
 import { plainTextFromMessage } from "@/lib/chat/plain-text-from-message"
 import { ARCIIN_MOBILE_SYSTEM_INSTRUCTION } from "@/lib/chat/system-prompt"
-import { formatApiError, isNetworkError } from "@/lib/api/errors"
+import { formatApiError, formatChatProviderError, isNetworkError } from "@/lib/api/errors"
 import type { MobileConnection } from "@/lib/types/api"
 import type {
   ChatConversationSummary,
@@ -70,6 +82,10 @@ import type {
 import { relativeTime } from "@/lib/utils/relative-time"
 import { cn } from "@/lib/utils"
 
+import {
+  readLocalChatSelection,
+  writeLocalChatSelection,
+} from "@/lib/chat/chat-selection-storage"
 import { createId } from "@/lib/utils/create-id"
 
 function messagePersistId(msg: ChatMessage): string | null {
@@ -84,13 +100,11 @@ function titleFromMessage(text: string) {
 }
 
 const CHAT_SUGGESTIONS = [
-  "What files did I upload recently?",
-  "How much storage am I using?",
-  "Show me all my videos",
+  "How many PDFs do I have?",
   "List my documents",
+  "What files did I upload recently?",
+  "Show me all my videos",
 ] as const
-
-const GEMINI_ICON = "/assets/icons/models/gemini-color.svg"
 
 function ChatWelcomePanel({
   ready,
@@ -118,8 +132,7 @@ function ChatWelcomePanel({
         </p>
         <Link
           href="/profile"
-          className="rounded-2xl px-6 py-3 text-[13px] font-semibold text-white active:opacity-90"
-          style={{ backgroundColor: "#ff4f12" }}
+          className="btn-accent-solid rounded-2xl px-6 py-3 text-[13px] font-semibold active:opacity-90"
         >
           {!connection ? "Connect your server" : "Server settings"}
         </Link>
@@ -147,8 +160,7 @@ function ChatWelcomePanel({
         </p>
         <Link
           href="/models"
-          className="rounded-2xl px-6 py-3 text-[13px] font-semibold text-white active:opacity-90"
-          style={{ backgroundColor: "#ff4f12" }}
+          className="btn-accent-solid rounded-2xl px-6 py-3 text-[13px] font-semibold active:opacity-90"
         >
           Configure models
         </Link>
@@ -171,14 +183,12 @@ function ChatWelcomePanel({
             className="flex flex-col items-center justify-center gap-2 rounded-2xl bg-white px-3 py-3.5 text-center active:bg-[#f7f7f7]"
             style={{ border: "1px solid #e5e5e5" }}
           >
-            <Image
-              src={GEMINI_ICON}
-              alt=""
-              width={20}
-              height={20}
-              className="size-5 shrink-0 object-contain"
+            <span
+              className="text-accent flex size-8 shrink-0 items-center justify-center rounded-full border border-[#e5e5e5] bg-white"
               aria-hidden
-            />
+            >
+              <Sparkles className="size-4" />
+            </span>
             <span className="text-[11px] leading-snug text-[#717171]">{s}</span>
           </button>
         ))}
@@ -259,8 +269,7 @@ function HistoryDrawer({
           <button
             type="button"
             onClick={onNew}
-            className="flex w-full items-center justify-center gap-2 rounded-xl py-3 text-[13px] font-semibold text-white active:opacity-90"
-            style={{ backgroundColor: "#ff4f12" }}
+            className="btn-accent-solid flex w-full items-center justify-center gap-2 rounded-xl py-3 text-[13px] font-semibold active:opacity-90"
           >
             <Plus className="size-4" />
             New chat
@@ -389,7 +398,16 @@ function MessageActions({
   const btn =
     "flex size-8 items-center justify-center rounded-lg text-[#717171] active:bg-[#f7f7f7]"
   const [copied, setCopied] = useState(false)
-  const { supported: ttsSupported, speaking, speak, stop: stopSpeech } = useTextToSpeech()
+  const [showVoiceTip, setShowVoiceTip] = useState(false)
+  const [showVoiceSheet, setShowVoiceSheet] = useState(false)
+  const {
+    supported: ttsSupported,
+    speaking,
+    speak,
+    stop: stopSpeech,
+    voiceQuality,
+    isIOS,
+  } = useTextToSpeech()
   const plain = plainTextFromMessage(content)
 
   async function handleCopy() {
@@ -408,16 +426,36 @@ function MessageActions({
       stopSpeech()
       return
     }
+    // One-time nudge: on iOS the natural voices must be downloaded by the user.
+    if (isIOS && voiceQuality === "limited") {
+      try {
+        if (!localStorage.getItem("arciin:voice-tip-dismissed")) {
+          setShowVoiceTip(true)
+        }
+      } catch {
+        /* storage blocked — skip the hint */
+      }
+    }
     await speak(plain)
   }
 
+  function dismissVoiceTip() {
+    setShowVoiceTip(false)
+    try {
+      localStorage.setItem("arciin:voice-tip-dismissed", "1")
+    } catch {
+      /* ignore */
+    }
+  }
+
   return (
-    <div className="mt-1.5 flex items-center gap-0.5">
+    <div className="mt-1.5">
+    <div className="flex items-center gap-0.5">
       {onFeedback ? (
         <>
           <button
             type="button"
-            className={cn(btn, feedback === "LIKE" && "text-[#ff4f12]")}
+            className={cn(btn, feedback === "LIKE" && "text-accent")}
             aria-label="Good response"
             onClick={() => onFeedback(feedback === "LIKE" ? null : "LIKE")}
           >
@@ -448,7 +486,7 @@ function MessageActions({
       {ttsSupported ? (
         <button
           type="button"
-          className={cn(btn, speaking && "text-[#ff4f12]")}
+          className={cn(btn, speaking && "text-accent")}
           aria-label={speaking ? "Stop read aloud" : "Listen to response"}
           disabled={!plain}
           onClick={() => void handleListen()}
@@ -457,6 +495,31 @@ function MessageActions({
         </button>
       ) : null}
     </div>
+      {showVoiceTip ? (
+        <div className="mt-2 rounded-xl bg-[#f7f7f7] px-3 py-2.5 text-[12px] leading-relaxed text-[#555]">
+          <p>
+            Want a more natural voice? Choose from the voices on your phone — or download an
+            Enhanced one — and preview each before setting it.
+          </p>
+          <div className="mt-2 flex items-center gap-4">
+            <button
+              type="button"
+              className="font-semibold text-accent"
+              onClick={() => {
+                setShowVoiceSheet(true)
+                dismissVoiceTip()
+              }}
+            >
+              Choose a voice
+            </button>
+            <button type="button" className="font-semibold text-[#888]" onClick={dismissVoiceTip}>
+              Not now
+            </button>
+          </div>
+        </div>
+      ) : null}
+      <VoicePickerSheet open={showVoiceSheet} onClose={() => setShowVoiceSheet(false)} />
+    </div>
   )
 }
 
@@ -464,12 +527,14 @@ function MessageBubble({
   msg,
   isStreaming = false,
   canRegenerate = false,
+  reasoningUiEnabled = true,
   onRegenerate,
   onFeedback,
 }: {
   msg: ChatMessage
   isStreaming?: boolean
   canRegenerate?: boolean
+  reasoningUiEnabled?: boolean
   onRegenerate?: () => void
   onFeedback?: (rating: ChatMessageFeedbackRating | null) => void
 }) {
@@ -477,8 +542,10 @@ function MessageBubble({
   const hasAnswer = hasVisibleAssistantAnswer(msg.content)
   const hasThinkingText = Boolean((msg.thinking ?? "").trim())
   const showReasoning =
-    !isUser && (hasThinkingText || isStreaming || msg.thinking !== undefined)
-  const liveReasoning = !isUser && isStreaming
+    !isUser &&
+    reasoningUiEnabled &&
+    (hasThinkingText || isStreaming || msg.thinking !== undefined)
+  const liveReasoning = Boolean(!isUser && reasoningUiEnabled && isStreaming)
   const hideAnswerBubble =
     !isUser && !hasAnswer && (showReasoning || (msg.pending && isStreaming))
   const showWorking =
@@ -495,7 +562,7 @@ function MessageBubble({
       <div
         className={cn(
           "flex size-8 shrink-0 items-center justify-center rounded-full",
-          isUser ? "bg-[#ff4f12] text-white" : "border border-[#e5e5e5] bg-white text-[#ff4f12]",
+          isUser ? "bg-accent text-on-accent" : "text-accent border border-[#e5e5e5] bg-white",
         )}
       >
         {isUser ? <User className="size-4" /> : <Sparkles className="size-4" />}
@@ -516,7 +583,7 @@ function MessageBubble({
             className={cn(
               "min-w-0 rounded-2xl px-3.5 py-2.5 text-[13px] leading-relaxed",
               isUser
-                ? "rounded-tr-sm bg-[#ff4f12] text-white shadow-sm"
+                ? "bg-accent text-on-accent rounded-tr-sm shadow-sm"
                 : "rounded-tl-sm border border-[#e5e5e5] bg-[#fafafa]/90 text-[#222222] shadow-[0_1px_6px_rgba(0,0,0,0.04)]",
             )}
           >
@@ -599,69 +666,189 @@ export function ChatPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
   const [chatContext, setChatContext] = useState<ChatInstanceContext | null>(null)
+  const [showThinking, setShowThinking] = useState(true)
 
   const pageRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const messagesInnerRef = useRef<HTMLDivElement>(null)
+  const stickToBottomRef = useRef(true)
+  const wasStreamingRef = useRef(false)
+  const composerRef = useRef<HTMLDivElement>(null)
   const abortRef = useRef<AbortController | null>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
-  useChatKeyboard(pageRef)
+  useChatKeyboard(pageRef, composerRef)
+
+  const reasoningUiEnabled = showThinking
+
+  useEffect(() => {
+    return () => forceResetChatKeyboard(pageRef.current, composerRef.current)
+  }, [])
+
+  useEffect(() => {
+    if (!connection || !ready) return
+    let cancelled = false
+    void getAiSettings(connection)
+      .then((settings) => {
+        if (!cancelled) setShowThinking(settings.showThinking)
+      })
+      .catch(() => {
+        /* non-admins may not read instance AI settings — keep default */
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [connection, ready])
+
+  useEffect(() => {
+    const page = pageRef.current
+    const composer = composerRef.current
+    if (!page || !composer) return
+
+    const syncComposerInset = () => {
+      const h = Math.ceil(composer.getBoundingClientRect().height)
+      page.style.setProperty("--chat-composer-inset", `${h}px`)
+    }
+
+    syncComposerInset()
+    const ro = new ResizeObserver(syncComposerInset)
+    ro.observe(composer)
+    return () => ro.disconnect()
+  }, [])
 
   const [selectedProfile, setSelectedProfile] = useState<ChatProfile | null>(null)
   const [selectedModel, setSelectedModel] = useState("")
 
-  const scrollToBottom = useCallback(() => {
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
     const el = scrollRef.current
-    if (el) el.scrollTop = el.scrollHeight
+    if (!el || !stickToBottomRef.current) return
+    el.scrollTo({ top: el.scrollHeight, behavior })
   }, [])
 
-  useEffect(() => {
-    scrollToBottom()
+  const handleMessagesScroll = useCallback(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const dist = el.scrollHeight - el.scrollTop - el.clientHeight
+    stickToBottomRef.current = dist < 100
+  }, [])
+
+  useLayoutEffect(() => {
+    scrollToBottom("auto")
   }, [messages, streaming, scrollToBottom])
 
-  const applyProfileSelection = useCallback((list: ChatProfile[], profile: ChatProfile, model: string) => {
-    setSelectedProfile(profile)
-    setSelectedModel(model || profile.defaultModel || "")
-  }, [])
+  useEffect(() => {
+    const outer = scrollRef.current
+    const inner = messagesInnerRef.current
+    if (!outer || !inner) return
 
-  const loadProfiles = useCallback(async () => {
-    if (!connection || !serverOnline) {
-      setProfilesLoading(false)
-      return
+    const bump = () => {
+      if (!stickToBottomRef.current) return
+      outer.scrollTo({ top: outer.scrollHeight, behavior: "auto" })
     }
-    setProfilesLoading(true)
-    try {
-      const [list, remote] = await Promise.all([
-        getChatProfiles(connection),
-        getChatSelection(connection).catch(() => null),
-      ])
-      setProfiles(list)
-      if (list.length === 0) {
-        setSelectedProfile(null)
-        setSelectedModel("")
-        setStatusNote("No AI model configured — add one in Arciin Models")
+
+    const ro = new ResizeObserver(bump)
+    ro.observe(inner)
+    return () => ro.disconnect()
+  }, [messages.length])
+
+  useLayoutEffect(() => {
+    if (wasStreamingRef.current && !streaming) {
+      stickToBottomRef.current = true
+      const el = scrollRef.current
+      if (el) {
+        el.scrollTo({ top: el.scrollHeight, behavior: "smooth" })
+      }
+    }
+    wasStreamingRef.current = streaming
+  }, [streaming])
+
+  const selectedProfileRef = useRef<ChatProfile | null>(null)
+  const selectedModelRef = useRef("")
+  selectedProfileRef.current = selectedProfile
+  selectedModelRef.current = selectedModel
+
+  const applyProfileSelection = useCallback(
+    (_list: ChatProfile[], profile: ChatProfile, model: string) => {
+      const resolved = model.trim() || profile.defaultModel?.trim() || ""
+      setSelectedProfile(profile)
+      setSelectedModel(resolved)
+      if (resolved) writeLocalChatSelection(profile.id, resolved)
+    },
+    [],
+  )
+
+  const loadProfiles = useCallback(
+    async (opts?: { refreshOnly?: boolean }) => {
+      if (!connection || !serverOnline) {
+        setProfilesLoading(false)
         return
       }
+      setProfilesLoading(true)
+      try {
+        const list = await getChatProfiles(connection)
+        setProfiles(list)
+        if (list.length === 0) {
+          setSelectedProfile(null)
+          setSelectedModel("")
+          setStatusNote("No AI model configured — add one in Arciin Models")
+          return
+        }
 
-      const remoteProfile = remote?.profileId
-        ? list.find((p) => p.id === remote.profileId)
-        : null
-      const profile = remoteProfile ?? list.find((p) => p.isDefault) ?? list[0]
-      const model = await resolveChatModelForProfile(connection, profile, remote?.model)
-      applyProfileSelection(list, profile, model)
-      if (!model.trim() && isOllamaProvider(profile.provider)) {
-        setStatusNote("Open the model picker and choose an Ollama model")
+        if (opts?.refreshOnly) {
+          const current = selectedProfileRef.current
+          if (current && list.some((p) => p.id === current.id)) {
+            setStatusNote("")
+            setError(null)
+            return
+          }
+        }
+
+        const [remote, local] = await Promise.all([
+          getChatSelection(connection).catch(() => null),
+          Promise.resolve(readLocalChatSelection()),
+        ])
+
+        let profile: ChatProfile | undefined
+        let preferredModel: string | null = null
+
+        if (remote?.profileId) {
+          profile = list.find((p) => p.id === remote.profileId)
+          preferredModel = remote.model ?? null
+          if (profile && remote.model) {
+            writeLocalChatSelection(profile.id, remote.model)
+          }
+        }
+        if (!profile && local?.profileId) {
+          profile = list.find((p) => p.id === local.profileId)
+          preferredModel = local.model || preferredModel
+        }
+        if (!profile) {
+          profile = list.find((p) => p.isDefault) ?? list[0]
+        }
+
+        const model = await resolveChatModelForProfile(connection, profile, preferredModel)
+        applyProfileSelection(list, profile, model)
+
+        if ((!remote?.profileId || !remote?.model?.trim()) && model.trim()) {
+          void setChatSelection(connection, {
+            profileId: profile.id,
+            model: model.trim(),
+          }).catch(() => {})
+        } else if (isOllamaProvider(profile.provider) && !model.trim()) {
+          setStatusNote("Open the model picker and choose an Ollama model")
+        }
+        setStatusNote("")
+        setError(null)
+      } catch (err) {
+        const msg = formatApiError(err, serverHint(connection))
+        setError(suppressFetchErrorWhenOffline(serverReachable, msg))
+        setStatusNote("")
+      } finally {
+        setProfilesLoading(false)
       }
-      setStatusNote("")
-      setError(null)
-    } catch (err) {
-      const msg = formatApiError(err, serverHint(connection))
-      setError(suppressFetchErrorWhenOffline(serverReachable, msg))
-      setStatusNote("")
-    } finally {
-      setProfilesLoading(false)
-    }
-  }, [applyProfileSelection, connection, serverOnline, serverReachable])
+    },
+    [applyProfileSelection, connection, serverOnline, serverReachable],
+  )
 
   const loadHistory = useCallback(async () => {
     if (!connection) return
@@ -707,7 +894,7 @@ export function ChatPage() {
     if (!connection) return
     const onVisible = () => {
       if (document.visibilityState === "visible") {
-        void loadProfiles()
+        void loadProfiles({ refreshOnly: true })
         void loadChatContext()
       }
     }
@@ -730,6 +917,7 @@ export function ChatPage() {
   }, [setChrome])
 
   function startNewChat() {
+    stickToBottomRef.current = true
     setConversationId(null)
     setMessages([])
     setError(null)
@@ -762,7 +950,12 @@ export function ChatPage() {
                 : undefined,
             }
             if (m.role === "assistant") {
-              const resolved = resolveFinalAssistantMessage(m.content, "")
+              const resolved = resolveFinalAssistantMessage(
+                m.content,
+                "",
+                showThinking,
+                reasoningUiEnabled,
+              )
               return {
                 ...base,
                 content: resolved.content,
@@ -773,6 +966,7 @@ export function ChatPage() {
           }),
       )
       setHistoryOpen(false)
+      stickToBottomRef.current = true
     } catch (err) {
       const msg = formatApiError(err, serverHint(connection))
       setError(suppressFetchErrorWhenOffline(serverReachable, msg))
@@ -848,7 +1042,12 @@ export function ChatPage() {
     async (
       assistantId: string,
       history: { role: string; content: string }[],
-      opts?: { conversationId?: string | null; pendingUserId?: string },
+      opts?: {
+        conversationId?: string | null
+        pendingUserId?: string
+        userText?: string
+        priorMessages?: { role: string; content: string }[]
+      },
     ) => {
       if (!connection || !selectedProfile) return { content: "", usage: undefined as TokenUsage | undefined }
 
@@ -862,11 +1061,28 @@ export function ChatPage() {
             : "No model configured for this provider.",
         )
       }
+
+      const userText =
+        opts?.userText ??
+        [...history].reverse().find((m) => m.role === "user")?.content ??
+        ""
+      const priorMessages = opts?.priorMessages ?? history.slice(0, -1)
+
+      let contextForSend = chatContext
+      if (!contextForSend) {
+        try {
+          contextForSend = await getChatInstanceContext(connection)
+          setChatContext(contextForSend)
+        } catch {
+          /* send without instance snapshot */
+        }
+      }
+
       const apiBase = connection.apiBaseUrl ?? connection.webUrl ?? ""
       const payload = buildOutboundChatMessages(
         history,
         ARCIIN_MOBILE_SYSTEM_INSTRUCTION,
-        chatContext,
+        contextForSend,
         apiBase,
       )
 
@@ -876,18 +1092,26 @@ export function ChatPage() {
       let thinkingAccum = ""
 
       const pushStreamState = () => {
-        const derived = deriveStreamingThinkingAndAnswer(textAccum, thinkingAccum)
-        const thinking =
-          derived.thinking.length > 0 || derived.inReasoningBlock
-            ? derived.thinking
-            : undefined
+        const derived = deriveStreamingThinkingAndAnswer(
+          textAccum,
+          thinkingAccum,
+          showThinking,
+        )
+        const mergedAnswer = mergeAssetTagsFromThinking(derived.answer, derived.thinking)
+        const displayContent = finalizeAssistantContent(mergedAnswer, userText, priorMessages, {
+          documentFiles: contextForSend?.documentFiles,
+        })
+        const thinkingRaw = displayThinkingDuringStream(reasoningUiEnabled, derived)
+        const thinking = thinkingRaw
+          ? stripAssetTagsFromText(thinkingRaw) || (derived.inReasoningBlock ? "" : undefined)
+          : undefined
         flushSync(() => {
           setMessages((prev) =>
             prev.map((m) =>
               m.id === assistantId
                 ? {
                     ...m,
-                    content: derived.answer,
+                    content: displayContent,
                     thinking,
                     pending: false,
                   }
@@ -923,8 +1147,15 @@ export function ChatPage() {
         },
       )
 
-      const final = resolveFinalAssistantMessage(streamResult.text, streamResult.thinking)
-      const content = final.content
+      const resolved = resolveFinalAssistantMessage(
+        streamResult.text,
+        streamResult.thinking,
+        showThinking,
+        reasoningUiEnabled,
+      )
+      const content = finalizeAssistantContent(resolved.content, userText, priorMessages, {
+        documentFiles: contextForSend?.documentFiles,
+      })
 
       flushSync(() => {
         setMessages((prev) =>
@@ -932,8 +1163,8 @@ export function ChatPage() {
             m.id === assistantId
               ? {
                   ...m,
-                  content: final.content,
-                  thinking: final.thinking,
+                  content,
+                  thinking: resolved.thinking,
                   pending: false,
                 }
               : m,
@@ -960,8 +1191,8 @@ export function ChatPage() {
             m.id === assistantId || m.dbId === saved.messages.find((r) => r.role === "assistant")?.id
               ? {
                   ...m,
-                  content: final.content,
-                  thinking: final.thinking,
+                  content,
+                  thinking: resolved.thinking,
                   usage,
                   pending: false,
                 }
@@ -971,14 +1202,35 @@ export function ChatPage() {
         void loadHistory()
       }
 
-      return { content: final.content, usage }
+      return { content, usage }
     },
-    [chatContext, connection, conversationId, loadChatContext, loadHistory, selectedModel, selectedProfile],
+    [
+      chatContext,
+      connection,
+      conversationId,
+      loadChatContext,
+      loadHistory,
+      reasoningUiEnabled,
+      selectedModel,
+      selectedProfile,
+      showThinking,
+    ],
   )
 
   async function sendMessage() {
     const text = input.trim()
     if (!text || streaming || !connection || !selectedProfile || !serverOnline) return
+
+    const modelToSend =
+      selectedModel.trim() || selectedProfile.defaultModel?.trim() || ""
+    if (!modelToSend) {
+      setError(
+        isOllamaProvider(selectedProfile.provider)
+          ? "Choose an Ollama model from the model picker (boxes icon below)."
+          : "No model configured for this provider. Set one under Models.",
+      )
+      return
+    }
 
     const userMsg: ChatMessage = { id: createId(), role: "user", content: text }
     const assistantId = createId()
@@ -999,10 +1251,9 @@ export function ChatPage() {
       inputEl.style.height = "auto"
       inputEl.blur()
     }
-    syncChatKeyboardOffset(pageRef.current)
-    requestAnimationFrame(() => syncChatKeyboardOffset(pageRef.current))
-    window.setTimeout(() => syncChatKeyboardOffset(pageRef.current), 320)
+    forceResetChatKeyboard(pageRef.current, composerRef.current)
     setError(null)
+    stickToBottomRef.current = true
     const priorMessages = messages
     setMessages((prev) => [...prev, userMsg, pendingMsg])
     setStreaming(true)
@@ -1039,13 +1290,15 @@ export function ChatPage() {
       await runAssistantStream(assistantId, history, {
         conversationId: activeConvoId,
         pendingUserId: userMsg.id,
+        userText: text,
+        priorMessages: priorMessages.map((m) => ({ role: m.role, content: m.content })),
       })
       setStatusNote("")
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") {
         setMessages((prev) => prev.filter((m) => m.id !== assistantId || m.content))
       } else {
-        const msg = formatApiError(err, serverHint(connection))
+        const msg = formatChatProviderError(formatApiError(err, serverHint(connection)))
         setError(suppressFetchErrorWhenOffline(serverReachable, msg))
         setStatusNote(isNetworkError(err) && serverReachable !== false ? "Send failed" : "")
         setMessages((prev) => prev.filter((m) => m.id !== assistantId))
@@ -1053,6 +1306,7 @@ export function ChatPage() {
     } finally {
       setStreaming(false)
       abortRef.current = null
+      forceResetChatKeyboard(pageRef.current, composerRef.current)
     }
   }
 
@@ -1074,6 +1328,7 @@ export function ChatPage() {
     }
 
     setError(null)
+    stickToBottomRef.current = true
     setMessages([...priorMessages, pendingMsg])
     setStreaming(true)
     setStatusNote("Regenerating…")
@@ -1083,12 +1338,16 @@ export function ChatPage() {
       .map((m) => ({ role: m.role, content: m.content.trim() }))
 
     try {
-      await runAssistantStream(assistantId, history, { conversationId })
+      await runAssistantStream(assistantId, history, {
+        conversationId,
+        userText: userMsg.content,
+        priorMessages: priorMessages.map((m) => ({ role: m.role, content: m.content })),
+      })
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") {
         setMessages((prev) => prev.filter((m) => m.id !== assistantId || m.content))
       } else {
-        const msg = formatApiError(err, serverHint(connection))
+        const msg = formatChatProviderError(formatApiError(err, serverHint(connection)))
         setError(suppressFetchErrorWhenOffline(serverReachable, msg))
         setStatusNote(isNetworkError(err) && serverReachable !== false ? "Regenerate failed" : "")
         setMessages((prev) => prev.filter((m) => m.id !== assistantId))
@@ -1145,15 +1404,24 @@ export function ChatPage() {
       />
 
       {visibleChatError ? (
-        <div
-          className="mb-3 shrink-0 rounded-xl px-3 py-2 text-[12px] text-[#b91c1c]"
-          style={{ backgroundColor: "#fef2f2", border: "1px solid #fecaca" }}
-        >
+        <div className="chat-page-error" role="alert">
           {visibleChatError}
+          <button
+            type="button"
+            onClick={() => setError(null)}
+            className="absolute right-1.5 top-1.5 flex size-7 items-center justify-center rounded-lg text-[#b91c1c] active:bg-[#fee2e2]"
+            aria-label="Dismiss error"
+          >
+            <X className="size-3.5" />
+          </button>
         </div>
       ) : null}
 
-      <div ref={scrollRef} className="chat-page-messages flex flex-1 flex-col gap-3 scrollbar-hide">
+      <div
+        ref={scrollRef}
+        onScroll={handleMessagesScroll}
+        className="chat-page-messages flex flex-1 flex-col gap-3 scrollbar-hide"
+      >
         {showWelcome ? (
           <ChatWelcomePanel
             ready={ready}
@@ -1164,13 +1432,14 @@ export function ChatPage() {
             onPickSuggestion={setInput}
           />
         ) : (
-          <div className="flex flex-col gap-3 pb-2">
+          <div ref={messagesInnerRef} className="flex flex-col gap-3 pb-2">
             {(() => {
               const lastAssistantId = [...messages].reverse().find((m) => m.role === "assistant")?.id
               return messages.map((msg) => (
                 <MessageBubble
                   key={msg.id}
                   msg={msg}
+                  reasoningUiEnabled={reasoningUiEnabled}
                   isStreaming={streaming && msg.id === lastAssistantId}
                   canRegenerate={
                     msg.role === "assistant" &&
@@ -1195,7 +1464,7 @@ export function ChatPage() {
         )}
       </div>
 
-      <div className="chat-page-composer">
+      <div ref={composerRef} className="chat-page-composer">
         <div
           className="flex items-center gap-2 rounded-2xl bg-white px-2 py-2 shadow-[0_2px_12px_rgba(0,0,0,0.06)]"
           style={{ border: "1px solid #e5e5e5" }}
@@ -1208,7 +1477,16 @@ export function ChatPage() {
               selectedProfile={selectedProfile}
               selectedModel={selectedModel}
               loading={profilesLoading}
-              onSelect={(profile, model) => applyProfileSelection(profiles, profile, model)}
+              onSelect={(profile, model) => {
+                applyProfileSelection(profiles, profile, model)
+                const resolved = model.trim() || profile.defaultModel?.trim() || ""
+                if (resolved) {
+                  void setChatSelection(connection, {
+                    profileId: profile.id,
+                    model: resolved,
+                  }).catch(() => {})
+                }
+              }}
             />
           ) : null}
           <textarea
@@ -1217,9 +1495,8 @@ export function ChatPage() {
             value={input}
             onChange={handleInputChange}
             onFocus={() => {
-              syncChatKeyboardOffset(pageRef.current)
               requestAnimationFrame(() => {
-                syncChatKeyboardOffset(pageRef.current)
+                syncChatKeyboardOffset(pageRef.current, composerRef.current)
                 scrollToBottom()
               })
             }}
@@ -1232,7 +1509,7 @@ export function ChatPage() {
             }}
             placeholder={composerPlaceholder}
             disabled={profilesLoading || !hasModel || !serverOnline}
-            className="max-h-[120px] min-h-[24px] min-w-0 flex-1 resize-none bg-transparent py-1 text-[14px] leading-snug text-[#222222] outline-none placeholder:text-[#a0a0a0] disabled:opacity-50"
+            className="max-h-[120px] min-h-[24px] min-w-0 flex-1 resize-none bg-transparent py-1 text-[16px] leading-snug text-[#222222] outline-none placeholder:text-[#a0a0a0] disabled:opacity-50"
           />
           {canStop ? (
             <button
@@ -1248,8 +1525,7 @@ export function ChatPage() {
               type="button"
               disabled={!canSend}
               onClick={() => void sendMessage()}
-              className="flex size-9 shrink-0 items-center justify-center rounded-xl transition-opacity disabled:opacity-40"
-              style={{ backgroundColor: "#ff4f12" }}
+              className="btn-accent-solid flex size-9 shrink-0 items-center justify-center rounded-xl transition-opacity disabled:opacity-40"
               aria-label="Send"
             >
               <Send className="size-[15px] text-white" />

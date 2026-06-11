@@ -5,17 +5,21 @@ import { FingerprintPattern, Loader2 } from "lucide-react"
 
 import { VaultAccountPasswordSheet } from "@/components/profile/vault-account-password-sheet"
 import { OfflineCachedNotice } from "@/components/settings/offline-cached-notice"
+import { PanelStatusBanner } from "@/components/settings/panel-status-banner"
 import { SettingsIntroCard } from "@/components/settings/settings-intro-card"
 import { MutedPanelError } from "@/components/shell/muted-panel-error"
 import { MobilePillSwitch, SettingsPanelLink } from "@/components/settings/mobile-toggle-row"
 import {
   getPasswordVault,
   lockPasswordVault,
+  removePasswordVaultPin,
+  setPasswordVaultPin,
   updatePasswordVaultDisplay,
   type PasswordVaultDisplaySettings,
   type PasswordVaultList,
 } from "@/lib/api/password-vault"
 import { formatApiError } from "@/lib/api/errors"
+import { usePanelStatusMessage } from "@/lib/hooks/use-panel-status-message"
 import { useStablePanelLoad } from "@/lib/hooks/use-stable-panel-load"
 
 const DEFAULT_DISPLAY: PasswordVaultDisplaySettings = {
@@ -49,8 +53,12 @@ export function VaultInlinePanel({ enabled }: { enabled: boolean }) {
 
   const [saving, setSaving] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
-  const [message, setMessage] = useState<string | null>(null)
+  const { message, showStatus, clearStatus } = usePanelStatusMessage(enabled)
   const [passwordSheetOpen, setPasswordSheetOpen] = useState(false)
+  const [pinSheetOpen, setPinSheetOpen] = useState(false)
+  const [removePinSheetOpen, setRemovePinSheetOpen] = useState(false)
+  const [pinValue, setPinValue] = useState("")
+  const [pinConfirm, setPinConfirm] = useState("")
 
   const display = vault ? { ...DEFAULT_DISPLAY, ...vault.display } : DEFAULT_DISPLAY
   const lockRequired = vault?.lockRequired ?? true
@@ -74,7 +82,7 @@ export function VaultInlinePanel({ enabled }: { enabled: boolean }) {
 
     setSaving(true)
     setActionError(null)
-    setMessage(null)
+    clearStatus()
     try {
       const next = await updatePasswordVaultDisplay(connection, patch)
       if (vault) {
@@ -83,7 +91,7 @@ export function VaultInlinePanel({ enabled }: { enabled: boolean }) {
           display: { ...DEFAULT_DISPLAY, ...next },
         })
       }
-      setMessage("Vault settings saved.")
+      showStatus("Vault settings saved.")
     } catch (err) {
       if (previous) setData(previous)
       setActionError(
@@ -101,7 +109,7 @@ export function VaultInlinePanel({ enabled }: { enabled: boolean }) {
     try {
       await lockPasswordVault(connection)
       reload()
-      setMessage("Vault locked.")
+      showStatus("Vault locked.")
     } catch (err) {
       setActionError(formatApiError(err, connection.webUrl ?? connection.apiBaseUrl))
     } finally {
@@ -132,11 +140,53 @@ export function VaultInlinePanel({ enabled }: { enabled: boolean }) {
           display: { ...DEFAULT_DISPLAY, ...next },
         })
       }
-      setMessage("Vault settings saved.")
+      showStatus("Vault settings saved.")
     } catch (err) {
       const msg = formatApiError(err, connection.webUrl ?? connection.apiBaseUrl)
       setActionError(msg)
       throw new Error(msg)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function confirmSetPin(password: string) {
+    if (!connection) throw new Error("Not connected to a server.")
+    if (!pinValue.trim() || pinValue !== pinConfirm) {
+      throw new Error("PINs must match.")
+    }
+    setSaving(true)
+    setActionError(null)
+    try {
+      await setPasswordVaultPin(connection, {
+        pin: pinValue,
+        confirmPin: pinConfirm,
+        accountPassword: password,
+      })
+      setPinValue("")
+      setPinConfirm("")
+      setPinSheetOpen(false)
+      reload()
+      showStatus("Vault PIN saved.")
+    } catch (err) {
+      const msg = formatApiError(err, connection.webUrl ?? connection.apiBaseUrl)
+      setActionError(msg)
+      throw new Error(msg)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleRemovePin(password: string) {
+    if (!connection) return
+    setSaving(true)
+    setActionError(null)
+    try {
+      await removePasswordVaultPin(connection, password)
+      reload()
+      showStatus("Vault PIN removed.")
+    } catch (err) {
+      setActionError(formatApiError(err, connection.webUrl ?? connection.apiBaseUrl))
     } finally {
       setSaving(false)
     }
@@ -172,7 +222,7 @@ export function VaultInlinePanel({ enabled }: { enabled: boolean }) {
           className="flex size-10 items-center justify-center rounded-xl bg-white"
           style={{ border: "1px solid #e5e5e5" }}
         >
-          <FingerprintPattern className="size-5 text-[#ff4f12]" />
+          <FingerprintPattern className="text-accent size-5" />
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-[13px] font-semibold text-[#222222]">
@@ -198,6 +248,61 @@ export function VaultInlinePanel({ enabled }: { enabled: boolean }) {
             Lock
           </button>
         ) : null}
+      </div>
+
+      <div>
+        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-[#a0a0a0]">
+          Vault PIN
+        </p>
+        <div
+          className="rounded-xl bg-[#f7f7f7] px-3 py-3"
+          style={{ border: "1px solid #e5e5e5" }}
+        >
+          <p className="text-[12px] text-[#717171]">
+            {pinConfigured
+              ? "PIN unlock is enabled for this vault."
+              : "Optional PIN for faster unlock on this device."}
+          </p>
+          {!pinConfigured ? (
+            <div className="mt-3 space-y-2">
+              <input
+                type="password"
+                inputMode="numeric"
+                placeholder="New PIN"
+                value={pinValue}
+                onChange={(e) => setPinValue(e.target.value)}
+                className="w-full rounded-lg bg-white px-3 py-2.5 text-[14px] outline-none"
+                style={{ border: "1px solid #e5e5e5" }}
+              />
+              <input
+                type="password"
+                inputMode="numeric"
+                placeholder="Confirm PIN"
+                value={pinConfirm}
+                onChange={(e) => setPinConfirm(e.target.value)}
+                className="w-full rounded-lg bg-white px-3 py-2.5 text-[14px] outline-none"
+                style={{ border: "1px solid #e5e5e5" }}
+              />
+              <button
+                type="button"
+                disabled={saving || !pinValue || pinValue !== pinConfirm}
+                onClick={() => setPinSheetOpen(true)}
+                className="btn-accent-solid h-10 w-full rounded-lg text-[12px] font-semibold disabled:opacity-50"
+              >
+                Save PIN
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => setRemovePinSheetOpen(true)}
+              className="mt-3 h-10 w-full rounded-lg border border-[#e5e5e5] bg-white text-[12px] font-semibold text-[#717171] disabled:opacity-50"
+            >
+              Remove PIN (account password required)
+            </button>
+          )}
+        </div>
       </div>
 
       <div>
@@ -293,9 +398,10 @@ export function VaultInlinePanel({ enabled }: { enabled: boolean }) {
                 onClick={() => void patchDisplay({ maskStyle: style }, { maskStyle: style })}
                 className="flex-1 rounded-lg py-2 text-[12px] font-semibold capitalize disabled:opacity-50"
                 style={{
-                  border: `1px solid ${display.maskStyle === style ? "#ff4f12" : "#e5e5e5"}`,
-                  backgroundColor: display.maskStyle === style ? "rgba(255,79,18,0.08)" : "#f7f7f7",
-                  color: display.maskStyle === style ? "#ff4f12" : "#717171",
+                  border: `1px solid ${display.maskStyle === style ? "var(--arciin-accent)" : "#e5e5e5"}`,
+                  backgroundColor:
+                    display.maskStyle === style ? "var(--arciin-accent-muted)" : "#f7f7f7",
+                  color: display.maskStyle === style ? "var(--arciin-accent)" : "#717171",
                 }}
               >
                 {style}
@@ -306,11 +412,7 @@ export function VaultInlinePanel({ enabled }: { enabled: boolean }) {
       ) : null}
 
       {actionError ? <MutedPanelError error={actionError} /> : null}
-      {message ? (
-        <p className="rounded-xl border border-[#bbf7d0] bg-[#f0fdf4] px-3 py-2 text-[12px] text-[#15803d]">
-          {message}
-        </p>
-      ) : null}
+      <PanelStatusBanner message={message} />
 
       <SettingsPanelLink href="/profile/passwords" label="Browse saved passwords" />
 
@@ -318,6 +420,18 @@ export function VaultInlinePanel({ enabled }: { enabled: boolean }) {
         open={passwordSheetOpen}
         onClose={() => setPasswordSheetOpen(false)}
         onConfirm={confirmRevealByDefault}
+      />
+      <VaultAccountPasswordSheet
+        open={pinSheetOpen}
+        onClose={() => setPinSheetOpen(false)}
+        onConfirm={confirmSetPin}
+      />
+      <VaultAccountPasswordSheet
+        open={removePinSheetOpen}
+        onClose={() => setRemovePinSheetOpen(false)}
+        onConfirm={async (password) => {
+          await handleRemovePin(password)
+        }}
       />
     </div>
   )

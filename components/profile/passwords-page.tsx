@@ -8,12 +8,18 @@ import {
   ExternalLink,
   FingerprintPattern,
   Loader2,
+  Plus,
   RefreshCw,
   Search,
   X,
 } from "lucide-react"
 
 import { useConnection } from "@/components/providers/connection-provider"
+import {
+  PasswordVaultAddEntrySheet,
+  PasswordVaultChooserSheet,
+  PasswordVaultImportSheet,
+} from "@/components/profile/password-vault-action-sheets"
 import { PasswordVaultEntryListSkeleton } from "@/components/profile/password-vault-entry-skeleton"
 import { PasswordVaultIntroSkeleton } from "@/components/profile/password-vault-intro-skeleton"
 import { MobileBottomSheet } from "@/components/shell/mobile-bottom-sheet"
@@ -90,15 +96,14 @@ function UnlockSheet({
         value={value}
         onChange={(e) => setValue(e.target.value)}
         placeholder={pinConfigured ? "Vault PIN" : "Account password"}
-        className="w-full rounded-xl border border-[#e5e5e5] bg-[#f7f7f7] px-3 py-2.5 text-[14px] outline-none focus:border-[#ff4f12]"
+        className="w-full rounded-xl border border-[#e5e5e5] bg-[#f7f7f7] px-3 py-2.5 text-[16px] outline-none focus:border-[var(--arciin-accent,#ff4f12)]"
         autoComplete={pinConfigured ? "off" : "current-password"}
       />
       <button
         type="button"
         disabled={saving || !value.trim()}
         onClick={() => void submit()}
-        className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl py-3 text-[14px] font-semibold text-white disabled:opacity-50"
-        style={{ backgroundColor: "#ff4f12" }}
+        className="btn-accent-solid mt-4 flex w-full items-center justify-center gap-2 rounded-xl py-3 text-[14px] font-semibold disabled:opacity-50"
       >
         {saving ? <Loader2 className="size-4 animate-spin" /> : null}
         Continue
@@ -196,7 +201,7 @@ function EntryRow({
         <button
           type="button"
           onClick={() => onCopy(entry.username!, "Username")}
-          className="mt-2 flex items-center gap-1.5 text-[12px] font-medium text-[#ff4f12]"
+          className="text-accent mt-2 flex items-center gap-1.5 text-[12px] font-medium"
         >
           <Copy className="size-3.5" />
           Copy username
@@ -219,6 +224,9 @@ export function PasswordsPage() {
   const [ephemeralPasswords, setEphemeralPasswords] = useState<Record<string, string>>({})
   const [copyMsg, setCopyMsg] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
+  const [chooserOpen, setChooserOpen] = useState(false)
+  const [addOpen, setAddOpen] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
 
   const load = useCallback(
     async (signal?: AbortSignal, isRefresh = false) => {
@@ -379,16 +387,27 @@ export function PasswordsPage() {
             </p>
           )}
         </div>
-        <button
-          type="button"
-          onClick={() => void load(undefined, true)}
-          disabled={loading}
-          className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white text-[#717171]"
-          style={{ border: "1px solid #e5e5e5" }}
-          aria-label="Refresh"
-        >
-          <RefreshCw className={`size-4 ${refreshing ? "animate-spin" : ""}`} />
-        </button>
+        <div className="flex shrink-0 gap-2">
+          <button
+            type="button"
+            onClick={() => void load(undefined, true)}
+            disabled={loading}
+            className="flex size-9 items-center justify-center rounded-xl bg-white text-[#717171] active:opacity-70 disabled:opacity-40"
+            style={{ border: "1px solid #e5e5e5" }}
+            aria-label="Refresh"
+          >
+            <RefreshCw className={`size-4 ${refreshing ? "animate-spin" : ""}`} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setChooserOpen(true)}
+            disabled={!connection}
+            className="btn-accent-solid flex size-9 items-center justify-center rounded-xl active:opacity-80 disabled:opacity-50"
+            aria-label="Add password"
+          >
+            <Plus className="size-4" />
+          </button>
+        </div>
       </div>
 
       {copyMsg ? (
@@ -409,18 +428,9 @@ export function PasswordsPage() {
       {statsLoading ? (
         <PasswordVaultIntroSkeleton />
       ) : (
-        <div
-          className="flex items-center gap-3 rounded-2xl p-4"
-          style={{
-            border: "1px solid rgba(255,79,18,0.25)",
-            background: "linear-gradient(135deg, #fff7f4 0%, #ffffff 70%)",
-          }}
-        >
-          <div
-            className="flex size-10 items-center justify-center rounded-xl"
-            style={{ backgroundColor: "rgba(255,79,18,0.12)" }}
-          >
-            <FingerprintPattern className="size-5 text-[#ff4f12]" />
+        <div className="accent-link-card flex items-center gap-3 rounded-2xl p-4">
+          <div className="accent-icon-tile flex size-10 items-center justify-center rounded-xl">
+            <FingerprintPattern className="text-accent size-5" />
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-[13px] font-semibold text-[#222222]">Password vault</p>
@@ -444,8 +454,7 @@ export function PasswordsPage() {
               <button
                 type="button"
                 onClick={() => openVaultUnlock()}
-                className="shrink-0 rounded-xl px-3 py-1.5 text-[12px] font-semibold text-white"
-                style={{ backgroundColor: "#ff4f12" }}
+                className="btn-accent-solid shrink-0 rounded-xl px-3 py-1.5 text-[12px] font-semibold"
               >
                 Unlock
               </button>
@@ -462,7 +471,7 @@ export function PasswordsPage() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search by name, username, URL, or keyword…"
-            className="w-full rounded-2xl border border-[#e5e5e5] bg-white py-3 pl-10 pr-10 text-[14px] text-[#222222] outline-none placeholder:text-[#a0a0a0] focus:border-[#ff4f12]"
+            className="w-full rounded-2xl border border-[#e5e5e5] bg-white py-3 pl-10 pr-10 text-[16px] text-[#222222] outline-none placeholder:text-[#a0a0a0] focus:border-[var(--arciin-accent,#ff4f12)]"
             autoComplete="off"
             aria-label="Search saved passwords"
           />
@@ -490,8 +499,17 @@ export function PasswordsPage() {
           <FingerprintPattern className="mx-auto mb-3 size-8 text-[#e5e5e5]" />
           <p className="text-[13px] font-medium text-[#222222]">No passwords saved</p>
           <p className="mt-1 text-[12px] text-[#a0a0a0]">
-            Add entries from the desktop app under Settings → Passwords.
+            Tap + to add a password or import from a file — right here on your phone.
           </p>
+          <button
+            type="button"
+            onClick={() => setChooserOpen(true)}
+            disabled={!connection}
+            className="btn-accent-solid mt-4 inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-[13px] font-semibold disabled:opacity-50"
+          >
+            <Plus className="size-4" />
+            Add password
+          </button>
         </div>
       ) : filteredEntries.length === 0 ? (
         <div
@@ -532,6 +550,37 @@ export function PasswordsPage() {
           }}
           onUnlock={handleUnlock}
         />
+      ) : null}
+
+      {connection ? (
+        <>
+          <PasswordVaultChooserSheet
+            open={chooserOpen}
+            onClose={() => setChooserOpen(false)}
+            onAddManual={() => setAddOpen(true)}
+            onImport={() => setImportOpen(true)}
+          />
+          <PasswordVaultAddEntrySheet
+            open={addOpen}
+            onClose={() => setAddOpen(false)}
+            connection={connection}
+            onSaved={(message) => {
+              setCopyMsg(message)
+              setTimeout(() => setCopyMsg(null), 2500)
+              void load(undefined, true)
+            }}
+          />
+          <PasswordVaultImportSheet
+            open={importOpen}
+            onClose={() => setImportOpen(false)}
+            connection={connection}
+            onSaved={(message) => {
+              setCopyMsg(message)
+              setTimeout(() => setCopyMsg(null), 2500)
+              void load(undefined, true)
+            }}
+          />
+        </>
       ) : null}
     </div>
   )

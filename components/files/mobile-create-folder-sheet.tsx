@@ -7,10 +7,9 @@ import { MobileBottomSheet } from "@/components/shell/mobile-bottom-sheet"
 import { useConnection } from "@/components/providers/connection-provider"
 import { createFolder } from "@/lib/api/folders"
 import { formatApiError } from "@/lib/api/errors"
+import { mobileInputClassMuted } from "@/lib/ui/mobile-input"
 import { generateFolderName } from "@/lib/utils/generate-folder-name"
 
-const inputClass =
-  "min-w-0 flex-1 rounded-xl bg-[#f7f7f7] px-4 py-3 text-[14px] text-[#222222] outline-none placeholder:text-[#a0a0a0]"
 const inputStyle = { border: "1px solid #e5e5e5" } as const
 
 export function MobileCreateFolderSheet({
@@ -19,6 +18,7 @@ export function MobileCreateFolderSheet({
   libraryName,
   parentFolderId,
   parentFolderName,
+  existingFolderNames = [],
   onClose,
   onCreated,
 }: {
@@ -27,19 +27,22 @@ export function MobileCreateFolderSheet({
   libraryName: string | null
   parentFolderId?: string | null
   parentFolderName?: string | null
+  existingFolderNames?: string[]
   onClose: () => void
   onCreated: (folder?: import("@/lib/types/folders").FolderSummary) => void
 }) {
   const { connection } = useConnection()
-  const [name, setName] = useState(() => generateFolderName())
+  const [name, setName] = useState(() => generateFolderName(existingFolderNames))
   const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState(null as string | null)
+  const existingKey = existingFolderNames.map((n) => n.trim().toLowerCase()).sort().join("\0")
 
   useEffect(() => {
     if (!open) return
-    setName(generateFolderName())
+    setName(generateFolderName(existingFolderNames))
     setError(null)
-  }, [open])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- regenerate when sibling names change
+  }, [open, existingKey])
 
   async function handleSubmit() {
     if (!connection || !libraryId) return
@@ -93,13 +96,19 @@ export function MobileCreateFolderSheet({
                 setName(e.target.value)
                 setError(null)
               }}
-              className={inputClass}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault()
+                  void handleSubmit()
+                }
+              }}
+              className={mobileInputClassMuted}
               style={inputStyle}
               autoComplete="off"
             />
             <button
               type="button"
-              onClick={() => setName(generateFolderName())}
+              onClick={() => setName(generateFolderName(existingFolderNames))}
               className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-[#f7f7f7] text-[#717171] active:bg-[#ececec]"
               style={{ border: "1px solid #e5e5e5" }}
               aria-label="Generate new name"
@@ -114,7 +123,7 @@ export function MobileCreateFolderSheet({
           type="button"
           disabled={saving || !libraryId}
           onClick={() => void handleSubmit()}
-          className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#ff4f12] text-[14px] font-semibold text-white disabled:opacity-50"
+          className="btn-accent-solid flex h-11 w-full items-center justify-center gap-2 rounded-xl text-[14px] font-semibold disabled:opacity-50"
         >
           {saving ? <Loader2 className="size-4 animate-spin" /> : null}
           {saving ? "Creating…" : "Create folder"}

@@ -12,6 +12,7 @@ export type FilesChromeModel = {
   subtitle: string
   filter: FilesFilterId
   libraries: LibrarySummary[]
+  filterAssetCounts: Record<FilesFilterId, number>
   libraryScoped: boolean
   breadcrumbLibrary: string | null
   currentFolderName: string | null

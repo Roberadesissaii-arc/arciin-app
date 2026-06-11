@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 
 import { ARCIIN_API_BASE_HEADER } from "@/lib/api/arciin-proxy"
+import { validateProxyApiBase } from "@/lib/security/validate-proxy-upstream"
 
 const API_BASE_HEADER = ARCIIN_API_BASE_HEADER
 
@@ -13,13 +14,21 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
+  const validatedBase = validateProxyApiBase(apiBase)
+  if (!validatedBase.ok) {
+    return NextResponse.json(
+      { error: validatedBase.message },
+      { status: validatedBase.code === "BAD_REQUEST" ? 400 : 403 },
+    )
+  }
+
   const { searchParams } = new URL(request.url)
   const userId = searchParams.get("userId")?.trim()
   if (!userId) {
     return NextResponse.json({ error: "Missing userId" }, { status: 400 })
   }
 
-  const upstream = `${apiBase}/auth/users/${encodeURIComponent(userId)}/avatar`
+  const upstream = `${validatedBase.normalizedBase}/auth/users/${encodeURIComponent(userId)}/avatar`
   const v = searchParams.get("v")
   const url = v ? `${upstream}?v=${encodeURIComponent(v)}` : upstream
 
@@ -28,6 +37,7 @@ export async function GET(request: Request) {
     res = await fetch(url, {
       headers: { Authorization: auth },
       cache: "no-store",
+      redirect: "manual",
     })
   } catch {
     return NextResponse.json({ error: "Upstream unreachable" }, { status: 502 })

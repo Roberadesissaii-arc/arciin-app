@@ -1,9 +1,11 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
-import { Bell, ChevronLeft, ChevronRight, Clock3, Loader2, RefreshCw, Search, X } from "lucide-react"
+import { Bell, Clock3, Loader2, RefreshCw, Search, X } from "lucide-react"
 
+import { activityBadgeStyle } from "@/lib/activity/badge-style"
 import { activityIconFor, activityTypeLabel } from "@/lib/activity/icons"
+import { MobilePagination } from "@/components/ui/mobile-pagination"
 import { formatApiError } from "@/lib/api/errors"
 import { PageFetchErrorAlert } from "@/components/shell/page-fetch-error-alert"
 import { isServerConnected, suppressFetchErrorWhenOffline } from "@/lib/connection/offline-ui"
@@ -16,25 +18,10 @@ import {
 import { subscribePublicUrlChanged } from "@/lib/notifications/public-url-changed"
 import { useConnection } from "@/components/providers/connection-provider"
 import type { ActivitySummary } from "@/lib/types/models"
+import { cn } from "@/lib/utils"
 import { formatRelativeDate } from "@/lib/utils/format-date"
 
 const PAGE_SIZE = 5
-
-/* ── badge color per entity type (icon stays original gray) ────── */
-
-const BADGE_STYLE: Record<string, { bg: string; color: string }> = {
-  upload:    { bg: "#dcfce7", color: "#16a34a" },
-  asset:     { bg: "#fff4f0", color: "#ff4f12" },
-  folder:    { bg: "#eff6ff", color: "#2563eb" },
-  library:   { bg: "#f5f3ff", color: "#7c3aed" },
-  "api-key": { bg: "#fffbeb", color: "#d97706" },
-  remote:    { bg: "#fff4f0", color: "#ff4f12" },
-}
-
-function badgeStyleFor(event: ActivitySummary) {
-  const key = event.entityType ?? event.type.split(".")[0] ?? ""
-  return BADGE_STYLE[key] ?? { bg: "#f7f7f7", color: "#717171" }
-}
 
 function isUnread(event: ActivitySummary, lastSeenIso: string | null) {
   if (!lastSeenIso) return true
@@ -53,19 +40,18 @@ function NotificationRow({
   unread: boolean
 }) {
   const Icon = activityIconFor(event)
-  const badge = badgeStyleFor(event)
+  const badge = activityBadgeStyle(event)
 
   return (
     <div
-      className="relative flex w-full items-start gap-3.5 px-4 py-4"
-      style={{ backgroundColor: unread ? "rgba(255,79,18,0.03)" : "transparent" }}
+      className={cn(
+        "relative flex w-full items-start gap-3.5 px-4 py-4",
+        unread && "unread-row-bg",
+      )}
     >
       {/* unread left accent */}
       {unread && (
-        <span
-          className="absolute left-0 top-4 bottom-4 w-[3px] rounded-r-full"
-          style={{ backgroundColor: "#ff4f12" }}
-        />
+        <span className="unread-row-accent absolute left-0 top-4 bottom-4 w-[3px] rounded-r-full" />
       )}
 
       {/* icon — original gray style */}
@@ -119,16 +105,22 @@ export function NotificationsPage() {
 
   const [items, setItems] = useState<ActivitySummary[]>([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [lastSeen, setLastSeen] = useState<string | null>(null)
   const [page, setPage] = useState(0)
   const [query, setQuery] = useState("")
+  const markedSeenRef = useRef(false)
 
-  const load = useCallback(async (signal?: AbortSignal) => {
+  const load = useCallback(async (signal?: AbortSignal, background = false) => {
     const conn = connectionRef.current
     const reachable = serverReachableRef.current
     if (!conn) return
-    setLoading(true)
+    if (background) {
+      setRefreshing(true)
+    } else {
+      setLoading(true)
+    }
     setError(null)
     try {
       const activity = await fetchRecentActivity(conn, signal)
@@ -139,7 +131,13 @@ export function NotificationsPage() {
         setError(suppressFetchErrorWhenOffline(reachable, formatApiError(err)))
       }
     } finally {
-      if (!signal?.aborted) setLoading(false)
+      if (!signal?.aborted) {
+        if (background) {
+          setRefreshing(false)
+        } else {
+          setLoading(false)
+        }
+      }
     }
   }, [])
 
@@ -163,16 +161,17 @@ export function NotificationsPage() {
   useEffect(() => {
     if (!ready || !connection || !isServerConnected(serverReachable)) return
     return subscribePublicUrlChanged(() => {
-      void load()
+      void load(undefined, true)
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, connection?.sessionToken, serverReachable])
 
   useEffect(() => {
-    if (!loading && !error) {
-      markNotificationsSeen()
-      setLastSeen(new Date().toISOString())
-    }
+    if (loading || error || markedSeenRef.current) return
+    markedSeenRef.current = true
+    const iso = new Date().toISOString()
+    markNotificationsSeen(iso)
+    setLastSeen(iso)
   }, [loading, error])
 
   const unread = countUnreadActivity(items, lastSeen)
@@ -186,11 +185,11 @@ export function NotificationsPage() {
     <div className="flex flex-col gap-4">
 
       {/* ── sticky intro card ───────────────────────────────────── */}
-      <div className="sticky top-0 z-10 -mx-4 -mt-4 px-4 pt-4 pb-2" style={{ backgroundColor: "#f7f7f7" }}>
-        <div
-          className="overflow-hidden rounded-3xl"
-          style={{ background: "linear-gradient(155deg, #ff6a30 0%, #c82d00 100%)" }}
-        >
+      <div
+        className="sticky top-0 z-10 -mx-4 -mt-4 px-4 pb-2"
+        style={{ backgroundColor: "#f7f7f7", paddingTop: "max(1rem, env(safe-area-inset-top, 0px))" }}
+      >
+        <div className="page-intro-hero overflow-hidden rounded-3xl">
           <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-4">
             <div className="min-w-0 flex-1">
               <p
@@ -205,9 +204,11 @@ export function NotificationsPage() {
               <p className="mt-2 text-[12px] font-semibold" style={{ color: "rgba(255,255,255,0.9)" }}>
                 {loading
                   ? "Loading activity…"
-                  : unread > 0
-                    ? `${unread} unread notification${unread === 1 ? "" : "s"}`
-                    : "You're all caught up"}
+                  : refreshing
+                    ? "Updating…"
+                    : unread > 0
+                      ? `${unread} unread notification${unread === 1 ? "" : "s"}`
+                      : "You're all caught up"}
               </p>
             </div>
             {unread > 0 && !loading ? (
@@ -254,13 +255,13 @@ export function NotificationsPage() {
           </div>
           <button
             type="button"
-            onClick={() => void load()}
-            disabled={loading}
+            onClick={() => void load(undefined, Boolean(items.length))}
+            disabled={loading && !items.length}
             className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-white text-[#717171] disabled:opacity-50 active:bg-[#f7f7f7]"
             style={{ border: "1px solid #e5e5e5" }}
             aria-label="Refresh"
           >
-            <RefreshCw className={`size-4 ${loading ? "animate-spin" : ""}`} />
+            <RefreshCw className={`size-4 ${loading || refreshing ? "animate-spin" : ""}`} />
           </button>
         </div>
       </div>
@@ -268,7 +269,7 @@ export function NotificationsPage() {
       <PageFetchErrorAlert error={error} onRetry={() => void load()} />
 
       {/* ── list ────────────────────────────────────────────────── */}
-      {loading ? (
+      {loading && items.length === 0 ? (
         <div className="flex justify-center py-14">
           <Loader2 className="size-7 animate-spin text-[#c0c0c0]" />
         </div>
@@ -277,11 +278,8 @@ export function NotificationsPage() {
           className="flex flex-col items-center justify-center gap-3 rounded-2xl bg-white py-14"
           style={{ border: "1px solid #e5e5e5" }}
         >
-          <div
-            className="flex size-14 items-center justify-center rounded-2xl"
-            style={{ backgroundColor: "#fff4f0", border: "1px solid rgba(255,79,18,0.15)" }}
-          >
-            <Bell className="size-6 text-[#ff4f12]" />
+          <div className="empty-state-icon flex size-14 items-center justify-center rounded-2xl">
+            <Bell className="text-accent size-6" />
           </div>
           <div className="text-center">
             <p className="text-[14px] font-semibold text-[#222222]">No notifications yet</p>
@@ -304,50 +302,11 @@ export function NotificationsPage() {
             ))}
           </div>
 
-          {/* ── pagination ────────────────────────────────────────── */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between gap-3 rounded-2xl bg-white px-4 py-3" style={{ border: "1px solid #e5e5e5" }}>
-              <button
-                type="button"
-                disabled={page === 0}
-                onClick={() => setPage((p) => p - 1)}
-                className="flex size-9 items-center justify-center rounded-xl bg-[#f7f7f7] text-[#717171] transition-opacity disabled:opacity-30 active:bg-[#efefef]"
-                style={{ border: "1px solid #e5e5e5" }}
-                aria-label="Previous page"
-              >
-                <ChevronLeft className="size-4" />
-              </button>
-
-              <div className="flex items-center gap-1.5">
-                {Array.from({ length: totalPages }).map((_, i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    onClick={() => setPage(i)}
-                    style={{
-                      width: page === i ? 20 : 8,
-                      height: 8,
-                      borderRadius: 99,
-                      transition: "width 0.2s, background-color 0.2s",
-                      backgroundColor: page === i ? "#ff4f12" : "#e0e0e0",
-                    }}
-                    aria-label={`Page ${i + 1}`}
-                  />
-                ))}
-              </div>
-
-              <button
-                type="button"
-                disabled={page === totalPages - 1}
-                onClick={() => setPage((p) => p + 1)}
-                className="flex size-9 items-center justify-center rounded-xl bg-[#f7f7f7] text-[#717171] transition-opacity disabled:opacity-30 active:bg-[#efefef]"
-                style={{ border: "1px solid #e5e5e5" }}
-                aria-label="Next page"
-              >
-                <ChevronRight className="size-4" />
-              </button>
-            </div>
-          )}
+          <MobilePagination
+            page={page}
+            totalPages={totalPages}
+            onPageChange={setPage}
+          />
         </>
       )}
     </div>

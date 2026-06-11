@@ -92,7 +92,7 @@ export function MobileMoveFolderSheet({
                   className="flex items-center gap-3 rounded-xl bg-[#f7f7f7] px-4 py-3 text-left text-[14px] font-semibold text-[#222222] active:bg-[#ececec] disabled:opacity-50"
                   style={{ border: "1px solid #e5e5e5" }}
                 >
-                  <Folder className="size-4 text-[#ff4f12]" />
+                  <Folder className="text-accent size-4" />
                   Library root (no folder)
                 </button>
               ) : null}
@@ -111,7 +111,7 @@ export function MobileMoveFolderSheet({
                           style={{ border: "1px solid #e5e5e5" }}
                         >
                           <span className="flex min-w-0 items-center gap-2">
-                            <Folder className="size-4 shrink-0 text-[#ff4f12]" />
+                            <Folder className="text-accent size-4 shrink-0" />
                             <span className="truncate">{folder.name}</span>
                           </span>
                           <span className="shrink-0 text-[11px] tabular-nums text-[#a0a0a0]">
@@ -141,7 +141,8 @@ export function MobileMoveFolderSheet({
                   type="button"
                   disabled={busy}
                   onClick={() => setCreateOpen(true)}
-                  className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-dashed border-[#ff4f12]/40 bg-[#fff7f4] text-[14px] font-semibold text-[#ff4f12] active:opacity-80 disabled:opacity-50"
+                  className="text-accent flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-dashed bg-accent-soft text-[14px] font-semibold active:opacity-80 disabled:opacity-50"
+                  style={{ borderColor: "var(--arciin-accent-ring, rgba(255, 79, 18, 0.25))" }}
                 >
                   <Plus className="size-4" />
                   Create folder

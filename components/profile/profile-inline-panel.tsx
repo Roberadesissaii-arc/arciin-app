@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react"
 
 import { Camera, Loader2, Save, Trash2 } from "lucide-react"
 
+import { PanelStatusBanner } from "@/components/settings/panel-status-banner"
 import { UserAvatarImage } from "@/components/profile/user-avatar-image"
 import { useConnection } from "@/components/providers/connection-provider"
 import {
@@ -18,6 +19,8 @@ import {
   isServerConnected,
   suppressFetchErrorWhenOffline,
 } from "@/lib/connection/offline-ui"
+import { usePanelStatusMessage } from "@/lib/hooks/use-panel-status-message"
+import { mobileFieldClass } from "@/lib/ui/mobile-input"
 import { joinDisplayName, splitDisplayName } from "@/lib/utils/display-name"
 
 function Field({
@@ -46,8 +49,7 @@ function Field({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="rounded-xl bg-[#f7f7f7] px-4 py-3 text-[14px] text-[#222222] outline-none placeholder-[#a0a0a0] focus:bg-white"
-        style={{ border: "1px solid #e5e5e5" }}
+        className={mobileFieldClass}
       />
     </div>
   )
@@ -64,7 +66,7 @@ export function ProfileInlinePanel({ enabled }: { enabled: boolean }) {
   const [initialEmail, setInitialEmail] = useState("")
   const [saving, setSaving] = useState(false)
   const [avatarBusy, setAvatarBusy] = useState(false)
-  const [message, setMessage] = useState<string | null>(null)
+  const { message, showStatus, clearStatus } = usePanelStatusMessage(enabled)
   const [error, setError] = useState<string | null>(null)
   const [avatarRevision, setAvatarRevision] = useState(0)
 
@@ -143,7 +145,7 @@ export function ProfileInlinePanel({ enabled }: { enabled: boolean }) {
     if (!connection || !dirty) return
     setSaving(true)
     setError(null)
-    setMessage(null)
+    clearStatus()
     try {
       const result = await updateProfile(connection, {
         name: displayName,
@@ -157,7 +159,7 @@ export function ProfileInlinePanel({ enabled }: { enabled: boolean }) {
       setInitialFirst(first)
       setInitialLast(last)
       setInitialEmail(result.user.email)
-      setMessage("Profile saved.")
+      showStatus("Profile saved.")
     } catch (err) {
       setError(formatApiError(err))
     } finally {
@@ -169,13 +171,13 @@ export function ProfileInlinePanel({ enabled }: { enabled: boolean }) {
     if (!connection || !file) return
     setAvatarBusy(true)
     setError(null)
-    setMessage(null)
+    clearStatus()
     try {
       const result = await uploadProfileAvatar(connection, file)
       updateUser(result.user)
       clearCachedUserAvatar(result.user.id)
       setAvatarRevision((n) => n + 1)
-      setMessage("Profile photo updated.")
+      showStatus("Profile photo updated.")
     } catch (err) {
       setError(formatApiError(err))
     } finally {
@@ -190,13 +192,13 @@ export function ProfileInlinePanel({ enabled }: { enabled: boolean }) {
     if (!ok) return
     setAvatarBusy(true)
     setError(null)
-    setMessage(null)
+    clearStatus()
     try {
       const result = await removeProfileAvatar(connection)
       updateUser(result.user)
       clearCachedUserAvatar(result.user.id)
       setAvatarRevision((n) => n + 1)
-      setMessage("Profile photo removed.")
+      showStatus("Profile photo removed.")
     } catch (err) {
       setError(formatApiError(err))
     } finally {
@@ -290,17 +292,13 @@ export function ProfileInlinePanel({ enabled }: { enabled: boolean }) {
           {visibleError}
         </p>
       ) : null}
-      {message ? (
-        <p className="rounded-xl px-3 py-2 text-[12px] text-[#15803d] bg-[#f0fdf4] border border-[#bbf7d0]">
-          {message}
-        </p>
-      ) : null}
+      <PanelStatusBanner message={message} />
 
       <button
         type="button"
         disabled={!dirty || saving}
         onClick={() => void handleSave()}
-        className="flex h-11 items-center justify-center gap-2 rounded-xl bg-[#ff4f12] text-[14px] font-semibold text-white disabled:opacity-50"
+        className="btn-accent-solid flex h-11 items-center justify-center gap-2 rounded-xl text-[14px] font-semibold disabled:opacity-50"
       >
         {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
         Save profile

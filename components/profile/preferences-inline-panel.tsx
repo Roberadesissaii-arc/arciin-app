@@ -1,15 +1,35 @@
 "use client"
 
 import { useCallback, useRef, useState } from "react"
-import { Globe, Loader2, Moon, Settings, Sun } from "lucide-react"
+import { Loader2, Settings } from "lucide-react"
 
 import { OfflineCachedNotice } from "@/components/settings/offline-cached-notice"
+import { AccentColorPicker } from "@/components/settings/accent-color-picker"
+import { MobileSettingsSegment } from "@/components/settings/mobile-segment"
+import { VoiceSettingRow } from "@/components/settings/voice-setting-row"
+import { PanelStatusBanner } from "@/components/settings/panel-status-banner"
 import { SettingsIntroCard } from "@/components/settings/settings-intro-card"
 import { MutedPanelError } from "@/components/shell/muted-panel-error"
 import { formatApiError } from "@/lib/api/errors"
 import { getUserPreferences, updateUserPreferences } from "@/lib/api/user-preferences"
+import { MOBILE_ACCENT_COLORS } from "@/lib/preferences/accent-colors"
+import { setActiveUserPreferences } from "@/lib/preferences/preferences-store"
+import { usePanelStatusMessage } from "@/lib/hooks/use-panel-status-message"
 import { useStablePanelLoad } from "@/lib/hooks/use-stable-panel-load"
 import type { UserPreferences } from "@/lib/types/models"
+
+const FONT_SIZE_OPTIONS = [
+  { label: "Small", value: "Small" },
+  { label: "Normal", value: "Normal" },
+  { label: "Large", value: "Large" },
+  { label: "XL", value: "Extra Large" },
+] as const
+
+const UI_RADIUS_OPTIONS = [
+  { label: "Comfortable", value: "comfortable" },
+  { label: "Compact", value: "compact" },
+  { label: "Sharp", value: "sharp" },
+] as const
 
 function Toggle({
   label,
@@ -36,13 +56,7 @@ function Toggle({
         aria-checked={checked}
         disabled={disabled}
         onClick={() => onChange(!checked)}
-        className="relative shrink-0 disabled:opacity-50"
-        style={{
-          width: 44,
-          height: 26,
-          borderRadius: 13,
-          backgroundColor: checked ? "#ff4f12" : "#e5e5e5",
-        }}
+        className="accent-switch relative shrink-0 disabled:opacity-50"
       >
         <span
           className="absolute top-[3px] size-5 rounded-full bg-white shadow-sm transition-transform"
@@ -74,6 +88,7 @@ export function PreferencesInlinePanel({ enabled }: { enabled: boolean }) {
   connectionRef.current = connection
   const [saving, setSaving] = useState(false)
   const [patchError, setPatchError] = useState<string | null>(null)
+  const { message, showStatus, clearStatus } = usePanelStatusMessage(enabled)
 
   if (!enabled) return null
 
@@ -93,36 +108,81 @@ export function PreferencesInlinePanel({ enabled }: { enabled: boolean }) {
     )
   }
 
-  async function patchAppearance(patch: Partial<UserPreferences["appearance"]>) {
+  async function patchAppearance(patch: Partial<UserPreferences["appearance"]>, msg?: string) {
     const conn = connectionRef.current
     if (!conn || !prefs) return
     setSaving(true)
     setPatchError(null)
+    clearStatus()
     const prev = prefs
-    setData({ ...prefs, appearance: { ...prefs.appearance, ...patch } })
+    const optimistic = { ...prefs, appearance: { ...prefs.appearance, ...patch } }
+    setData(optimistic)
+    setActiveUserPreferences(optimistic)
     try {
       const data = await updateUserPreferences(conn, { appearance: patch })
       setData(data)
+      setActiveUserPreferences(data)
+      if (msg) showStatus(msg)
     } catch (err) {
-      if (prev) setData(prev)
+      if (prev) {
+        setData(prev)
+        setActiveUserPreferences(prev)
+      }
       setPatchError(formatApiError(err))
     } finally {
       setSaving(false)
     }
   }
 
-  async function patchAccessibility(patch: Partial<UserPreferences["accessibility"]>) {
+  async function patchMedia(patch: Partial<UserPreferences["media"]>, msg?: string) {
     const conn = connectionRef.current
     if (!conn || !prefs) return
     setSaving(true)
     setPatchError(null)
+    clearStatus()
     const prev = prefs
-    setData({ ...prefs, accessibility: { ...prefs.accessibility, ...patch } })
+    const optimistic = { ...prefs, media: { ...prefs.media, ...patch } }
+    setData(optimistic)
+    setActiveUserPreferences(optimistic)
+    try {
+      const data = await updateUserPreferences(conn, { media: patch })
+      setData(data)
+      setActiveUserPreferences(data)
+      if (msg) showStatus(msg)
+    } catch (err) {
+      if (prev) {
+        setData(prev)
+        setActiveUserPreferences(prev)
+      }
+      setPatchError(formatApiError(err))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function patchAccessibility(
+    patch: Partial<UserPreferences["accessibility"]>,
+    msg?: string,
+  ) {
+    const conn = connectionRef.current
+    if (!conn || !prefs) return
+    setSaving(true)
+    setPatchError(null)
+    clearStatus()
+    const prev = prefs
+    const optimistic = { ...prefs, accessibility: { ...prefs.accessibility, ...patch } }
+    setData(optimistic)
+    setActiveUserPreferences(optimistic)
     try {
       const data = await updateUserPreferences(conn, { accessibility: patch })
       setData(data)
+      setActiveUserPreferences(data)
+      if (msg) showStatus(msg)
     } catch (err) {
-      if (prev) setData(prev)
+      if (prev) {
+        setData(prev)
+        setActiveUserPreferences(prev)
+      }
       setPatchError(formatApiError(err))
     } finally {
       setSaving(false)
@@ -137,37 +197,14 @@ export function PreferencesInlinePanel({ enabled }: { enabled: boolean }) {
       <SettingsIntroCard
         icon={Settings}
         title="Preferences"
-        description="Tune how Arciin looks and feels on this device. Changes sync to your account on this instance."
+        description="Appearance and accessibility — applies on this phone and syncs with desktop."
       />
 
       <div>
         <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-[#a0a0a0]">
-          Appearance
+          Layout
         </p>
         <div className="rounded-xl bg-[#f7f7f7] px-3 py-1" style={{ border: "1px solid #e5e5e5" }}>
-          <div className="flex gap-2 py-2">
-            {(["Light", "Dark"] as const).map((theme) => {
-              const isLight = theme === "Light"
-              const active = isLight
-              return (
-                <button
-                  key={theme}
-                  type="button"
-                  disabled={!active || saving}
-                  className="flex flex-1 flex-col items-center gap-1.5 rounded-xl py-2.5 text-[12px] font-semibold"
-                  style={{
-                    backgroundColor: active ? "#fff4f0" : "#fff",
-                    border: `1px solid ${active ? "#ff4f12" : "#e5e5e5"}`,
-                    color: active ? "#ff4f12" : "#717171",
-                  }}
-                >
-                  {isLight ? <Sun className="size-4" /> : <Moon className="size-4" />}
-                  {theme}
-                </button>
-              )
-            })}
-          </div>
-          <div className="h-px bg-[#ececec]" />
           <Toggle
             label="Compact view"
             sub="Smaller cards in file grids"
@@ -182,6 +219,52 @@ export function PreferencesInlinePanel({ enabled }: { enabled: boolean }) {
             disabled={saving}
             onChange={(v) => void patchAppearance({ animatedCards: v })}
           />
+          <div className="h-px bg-[#ececec]" />
+          <MobileSettingsSegment
+            label="Corner radius"
+            options={UI_RADIUS_OPTIONS}
+            value={prefs.appearance.uiRadius}
+            disabled={saving}
+            onChange={(value) =>
+              void patchAppearance({ uiRadius: value }, "Corner radius updated")
+            }
+          />
+        </div>
+      </div>
+
+      <div>
+        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-[#a0a0a0]">
+          Accent color
+        </p>
+        <AccentColorPicker
+          value={prefs.appearance.accentColor}
+          disabled={saving}
+          onChange={(hex) => {
+            const label =
+              MOBILE_ACCENT_COLORS.find((c) => c.hex.toLowerCase() === hex.toLowerCase())?.label ??
+              "Accent"
+            void patchAppearance({ accentColor: hex }, `Accent: ${label}`)
+          }}
+        />
+      </div>
+
+      <div>
+        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-[#a0a0a0]">
+          Files
+        </p>
+        <div className="rounded-xl bg-[#f7f7f7] px-3 py-1" style={{ border: "1px solid #e5e5e5" }}>
+          <Toggle
+            label="PDF previews"
+            sub="First-page thumbnails for PDFs in file grids"
+            checked={prefs.media.documentThumbnails}
+            disabled={saving}
+            onChange={(v) =>
+              void patchMedia(
+                { documentThumbnails: v },
+                v ? "PDF previews enabled." : "PDF previews disabled.",
+              )
+            }
+          />
         </div>
       </div>
 
@@ -190,6 +273,16 @@ export function PreferencesInlinePanel({ enabled }: { enabled: boolean }) {
           Accessibility
         </p>
         <div className="rounded-xl bg-[#f7f7f7] px-3 py-1" style={{ border: "1px solid #e5e5e5" }}>
+          <MobileSettingsSegment
+            label="Font size"
+            options={FONT_SIZE_OPTIONS}
+            value={prefs.accessibility.fontSize}
+            disabled={saving}
+            onChange={(value) =>
+              void patchAccessibility({ fontSize: value }, `Font size: ${value}`)
+            }
+          />
+          <div className="h-px bg-[#ececec]" />
           <Toggle
             label="Reduce animations"
             checked={prefs.accessibility.reduceAnimations}
@@ -203,20 +296,20 @@ export function PreferencesInlinePanel({ enabled }: { enabled: boolean }) {
             disabled={saving}
             onChange={(v) => void patchAccessibility({ highContrast: v })}
           />
+          <div className="h-px bg-[#ececec]" />
+          <Toggle
+            label="Keyboard navigation hints"
+            checked={prefs.accessibility.keyboardNav}
+            disabled={saving}
+            onChange={(v) => void patchAccessibility({ keyboardNav: v })}
+          />
+          <div className="h-px bg-[#ececec]" />
+          <VoiceSettingRow />
         </div>
       </div>
 
-      <div className="flex items-center gap-3 rounded-xl bg-[#f7f7f7] px-3 py-3" style={{ border: "1px solid #e5e5e5" }}>
-        <Globe className="size-4 text-[#717171]" />
-        <div className="flex-1">
-          <p className="text-[13px] font-medium text-[#222222]">Language</p>
-          <p className="text-[11px] text-[#a0a0a0]">English (US)</p>
-        </div>
-        <span className="text-[10px] font-semibold text-[#a0a0a0]">Soon</span>
-      </div>
-
+      <PanelStatusBanner message={message} />
       {patchError ? <MutedPanelError error={patchError} /> : null}
-
     </div>
   )
 }

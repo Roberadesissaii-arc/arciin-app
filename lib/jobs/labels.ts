@@ -101,7 +101,7 @@ export function jobIconFor(type: string): LucideIcon {
 }
 
 const CATEGORY_BADGE: Record<string, { bg: string; color: string }> = {
-  Media: { bg: "#fff4f0", color: "#ff4f12" },
+  Media: { bg: "var(--arciin-accent-soft, #fff4f0)", color: "var(--arciin-accent, #ff4f12)" },
   Storage: { bg: "#eff6ff", color: "#2563eb" },
   Maintenance: { bg: "#f7f7f7", color: "#717171" },
   Integration: { bg: "#f5f3ff", color: "#7c3aed" },

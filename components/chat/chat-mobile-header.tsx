@@ -22,7 +22,7 @@ export function ChatMobileHeader() {
   }
 
   return (
-    <div className="pointer-events-none absolute inset-x-0 top-0 z-50 pt-safe">
+    <div className="pointer-events-none fixed inset-x-0 top-0 z-50 pt-safe">
       <div className="flex items-start justify-between gap-2 px-3 pb-1 pt-2">
         <button
           type="button"

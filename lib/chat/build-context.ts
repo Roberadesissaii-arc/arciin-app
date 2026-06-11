@@ -76,6 +76,18 @@ export function buildContextBlock(ctx: ChatInstanceContext, apiBaseUrl: string):
           ),
         ].join("\n")
 
+  const documentFiles = ctx.documentFiles ?? []
+  const documentBlock =
+    documentFiles.length === 0
+      ? "Documents (PDFs, Office — not .py scripts): none in snapshot"
+      : [
+          `Documents (${documentFiles.length} recent — use read_pdf_asset for PDF bodies; list with [[ASSET_LIST:documents]]):`,
+          ...documentFiles.map(
+            (f) =>
+              `  - ${f.filename} id=${f.id} type=${f.mediaType} library=${f.librarySlug} size=${f.sizeBytes}B`,
+          ),
+        ].join("\n")
+
   return [
     "--- Current Instance Data ---",
     `REST API base (use this exact prefix in examples): ${restBase}`,
@@ -85,6 +97,7 @@ export function buildContextBlock(ctx: ChatInstanceContext, apiBaseUrl: string):
     folderBlock,
     appDbBlock,
     codeBlock,
+    documentBlock,
     `Total assets: ${total} (${byType || "none"})`,
     `Storage used: ${storageStr}`,
     lastUpload,

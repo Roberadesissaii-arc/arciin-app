@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server"
 
+import { validateProxyApiBase } from "@/lib/security/validate-proxy-upstream"
+
 const API_BASE_HEADER = "x-arciin-api-base"
+
+/** Abort if the upstream does not answer headers in time — never cuts an open stream. */
+const CONNECT_TIMEOUT_MS = 20_000
 
 /**
  * Same-origin SSE proxy for the mobile PWA.
@@ -17,8 +22,19 @@ export async function POST(request: Request) {
     )
   }
 
+  const validatedBase = validateProxyApiBase(apiBase)
+  if (!validatedBase.ok) {
+    return NextResponse.json(
+      { error: { code: validatedBase.code, message: validatedBase.message } },
+      { status: validatedBase.code === "BAD_REQUEST" ? 400 : 403 },
+    )
+  }
+
   const body = await request.text()
-  const upstream = `${apiBase}/chat`
+  const upstream = `${validatedBase.normalizedBase}/chat`
+
+  const controller = new AbortController()
+  const connectTimer = setTimeout(() => controller.abort(), CONNECT_TIMEOUT_MS)
 
   let res: Response
   try {
@@ -31,6 +47,8 @@ export async function POST(request: Request) {
       },
       body,
       cache: "no-store",
+      redirect: "manual",
+      signal: controller.signal,
     })
   } catch {
     return NextResponse.json(
@@ -40,6 +58,15 @@ export async function POST(request: Request) {
           message: "Could not reach your Arciin server. Check the URL or tunnel.",
         },
       },
+      { status: 502 },
+    )
+  } finally {
+    clearTimeout(connectTimer)
+  }
+
+  if (res.status >= 300 && res.status < 400) {
+    return NextResponse.json(
+      { error: { code: "UPSTREAM_REDIRECT", message: "Upstream redirect is not allowed." } },
       { status: 502 },
     )
   }

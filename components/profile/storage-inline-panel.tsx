@@ -1,25 +1,31 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
-import { BadgeCheck, FolderTree, HardDrive, Loader2, RefreshCw, Save } from "lucide-react"
+import { useCallback, useEffect, useRef, useState } from "react"
+import { FolderTree, HardDrive, Loader2, Save } from "lucide-react"
 
+import { AdminSettingsGate } from "@/components/settings/admin-settings-gate"
 import { OfflineCachedNotice } from "@/components/settings/offline-cached-notice"
+import { PanelStatusBanner } from "@/components/settings/panel-status-banner"
 import { SettingsIntroCard } from "@/components/settings/settings-intro-card"
 import { MutedPanelError } from "@/components/shell/muted-panel-error"
 import { formatApiError } from "@/lib/api/errors"
-import { getStorageSettings, getStorageVolumes, updateStorageSettings } from "@/lib/api/settings"
-import { getUserPreferences, updateUserPreferences } from "@/lib/api/user-preferences"
+import {
+  getStorageSettings,
+  getUploadSettings,
+  updateStorageSettings,
+  updateUploadSettings,
+} from "@/lib/api/settings"
+import {
+  DEFAULT_MAX_UPLOAD_SIZE_MB,
+  DEFAULT_UPLOAD_RATE_LIMIT_PER_MINUTE,
+  uploadGbInputToMb,
+  uploadMbToGbLabel,
+} from "@/lib/constants/upload-limits"
+import { usePanelStatusMessage } from "@/lib/hooks/use-panel-status-message"
 import { useStablePanelLoad } from "@/lib/hooks/use-stable-panel-load"
 import { suppressFetchErrorWhenOffline } from "@/lib/connection/offline-ui"
 import { useConnection } from "@/components/providers/connection-provider"
 import { formatBytes } from "@/lib/utils/format-bytes"
-import type { StorageSettings, StorageVolumeOption, StorageVolumesResponse } from "@/lib/types/models"
-
-function formatVolumeFree(option: StorageVolumeOption) {
-  if (option.availableBytes == null) return "Space unknown"
-  const total = option.totalBytes != null ? formatBytes(option.totalBytes) : "?"
-  return `${formatBytes(option.availableBytes)} free of ${total}`
-}
 
 const LAYOUT_HINTS = [
   { label: "objects", hint: "Binary blobs keyed by object ID" },
@@ -29,14 +35,8 @@ const LAYOUT_HINTS = [
   { label: "logs", hint: "Optional local logs" },
 ]
 
-function DrivesSkeleton() {
-  return (
-    <div className="flex flex-col gap-2 py-1" aria-hidden>
-      <div className="h-14 animate-pulse rounded-lg bg-[#ececec]" />
-      <div className="h-14 animate-pulse rounded-lg bg-[#ececec]" />
-    </div>
-  )
-}
+const PLAIN_NUMERIC_INPUT =
+  "rounded-xl bg-[#f7f7f7] px-4 py-3 font-mono text-[14px] text-[#222222] outline-none focus:bg-white arciin-plain-number-input"
 
 export function StorageInlinePanel({ enabled }: { enabled: boolean }) {
   const { serverReachable } = useConnection()
@@ -45,10 +45,9 @@ export function StorageInlinePanel({ enabled }: { enabled: boolean }) {
       getStorageSettings(connection, signal),
     [],
   )
-
-  const volumesLoader = useCallback(
-    (conn: Parameters<typeof getStorageVolumes>[0], signal: AbortSignal) =>
-      getStorageVolumes(conn, signal),
+  const uploadLimitsLoader = useCallback(
+    (connection: Parameters<typeof getUploadSettings>[0], signal: AbortSignal) =>
+      getUploadSettings(connection, signal),
     [],
   )
 
@@ -60,17 +59,20 @@ export function StorageInlinePanel({ enabled }: { enabled: boolean }) {
     isRevalidating: settingsRevalidating,
     connection,
     reload: reloadSettings,
-  } = useStablePanelLoad(enabled, settingsLoader, { cacheKey: "storage" })
+  } = useStablePanelLoad(enabled, settingsLoader, {
+    cacheKey: "storage",
+    staleTimeMs: 120_000,
+  })
 
   const {
-    data: volumesData,
-    loading: volumesWaiting,
-    isRevalidating: volumesRefreshing,
-    error: volumesError,
-    showingCachedOffline: volumesOffline,
-    reload: reloadVolumes,
-  } = useStablePanelLoad<StorageVolumesResponse>(enabled, volumesLoader, {
-    cacheKey: "storage-volumes",
+    data: uploadLimits,
+    loading: limitsWaiting,
+    isRevalidating: limitsRevalidating,
+    error: limitsFetchError,
+    setData: setUploadLimits,
+    reload: reloadUploadLimits,
+  } = useStablePanelLoad(enabled, uploadLimitsLoader, {
+    cacheKey: "upload-limits",
     staleTimeMs: 120_000,
   })
 
@@ -78,10 +80,14 @@ export function StorageInlinePanel({ enabled }: { enabled: boolean }) {
   const [initialPath, setInitialPath] = useState("")
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
-  const [message, setMessage] = useState<string | null>(null)
-  const [docThumbs, setDocThumbs] = useState(false)
-  const [prefsSaving, setPrefsSaving] = useState(false)
-  const [prefsError, setPrefsError] = useState<string | null>(null)
+  const { message, showStatus, clearStatus } = usePanelStatusMessage(enabled)
+  const [uploadLimitGb, setUploadLimitGb] = useState(() =>
+    uploadMbToGbLabel(DEFAULT_MAX_UPLOAD_SIZE_MB),
+  )
+  const [uploadRateLimit, setUploadRateLimit] = useState(String(DEFAULT_UPLOAD_RATE_LIMIT_PER_MINUTE))
+  const [limitsSaving, setLimitsSaving] = useState(false)
+  const [limitsError, setLimitsError] = useState<string | null>(null)
+  const limitsSyncedRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (!data) return
@@ -91,35 +97,58 @@ export function StorageInlinePanel({ enabled }: { enabled: boolean }) {
   }, [data])
 
   useEffect(() => {
-    if (!enabled || !connection) return
-    let cancelled = false
-    void getUserPreferences(connection)
-      .then((prefs) => {
-        if (!cancelled) setDocThumbs(prefs.media?.documentThumbnails ?? false)
-      })
-      .catch(() => {})
-    return () => {
-      cancelled = true
-    }
-  }, [enabled, connection])
+    if (!uploadLimits) return
+    const key = `${uploadLimits.maxUploadSizeMb}:${uploadLimits.uploadRateLimitPerMinute}`
+    if (limitsSyncedRef.current === key) return
+    limitsSyncedRef.current = key
+    setUploadLimitGb(uploadMbToGbLabel(uploadLimits.maxUploadSizeMb))
+    setUploadRateLimit(String(uploadLimits.uploadRateLimitPerMinute))
+  }, [uploadLimits])
 
-  async function toggleDocThumbs(next: boolean) {
+  useEffect(() => {
+    if (!enabled) limitsSyncedRef.current = null
+  }, [enabled])
+
+  async function handleSaveUploadLimits() {
     if (!connection) return
-    setPrefsSaving(true)
-    setPrefsError(null)
-    const prev = docThumbs
-    setDocThumbs(next)
+    const maxUploadSizeMb = uploadGbInputToMb(uploadLimitGb)
+    const uploadRateLimitPerMinute = Number.parseInt(uploadRateLimit, 10)
+    if (maxUploadSizeMb == null) {
+      setLimitsError("Enter a valid max file size in GB (e.g. 20).")
+      return
+    }
+    if (!Number.isFinite(uploadRateLimitPerMinute) || uploadRateLimitPerMinute < 1) {
+      setLimitsError("Rate limit must be at least 1 upload per minute.")
+      return
+    }
+    setLimitsSaving(true)
+    setLimitsError(null)
+    clearStatus()
     try {
-      const prefs = await updateUserPreferences(connection, {
-        media: { documentThumbnails: next },
+      const updated = await updateUploadSettings(connection, {
+        maxUploadSizeMb,
+        uploadRateLimitPerMinute,
       })
-      setDocThumbs(prefs.media?.documentThumbnails ?? next)
-      setMessage(next ? "PDF previews enabled." : "PDF previews disabled.")
+      setUploadLimits(updated, { fromFetch: true })
+      limitsSyncedRef.current = `${updated.maxUploadSizeMb}:${updated.uploadRateLimitPerMinute}`
+      setUploadLimitGb(uploadMbToGbLabel(updated.maxUploadSizeMb))
+      setUploadRateLimit(String(updated.uploadRateLimitPerMinute))
+      const gbLabel = uploadMbToGbLabel(updated.maxUploadSizeMb)
+      showStatus(
+        updated.webProxyRestartRequired
+          ? {
+              title: "Upload limits saved",
+              detail: `Restart the mobile app to allow files over ${uploadMbToGbLabel(updated.webProxyMaxUploadSizeMb)} GB · ${gbLabel} GB per file`,
+            }
+          : {
+              title: "Upload limits saved",
+              detail: `${gbLabel} GB per file`,
+            },
+      )
     } catch (err) {
-      setDocThumbs(prev)
-      setPrefsError(formatApiError(err))
+      setLimitsError(formatApiError(err))
     } finally {
-      setPrefsSaving(false)
+      setLimitsSaving(false)
     }
   }
 
@@ -127,13 +156,13 @@ export function StorageInlinePanel({ enabled }: { enabled: boolean }) {
     if (!connection || !path.trim() || path.trim() === initialPath) return
     setSaving(true)
     setSaveError(null)
-    setMessage(null)
+    clearStatus()
     try {
       const updated = await updateStorageSettings(connection, path.trim())
       const root = updated.storageRoot ?? path.trim()
       setPath(root)
       setInitialPath(root)
-      setMessage("Storage path updated.")
+      showStatus({ title: "Storage path updated", detail: "Saved" })
     } catch (err) {
       setSaveError(formatApiError(err))
     } finally {
@@ -148,238 +177,205 @@ export function StorageInlinePanel({ enabled }: { enabled: boolean }) {
     usage?.totalBytes && usage.totalBytes > 0
       ? Math.min(100, Math.round((usage.usageBytes / usage.totalBytes) * 100))
       : null
-
-  const volumes = volumesData?.volumes ?? []
-  const volumesNote = volumesData?.installNotes?.[0] ?? null
-  const showVolumesSkeleton = volumesWaiting && volumes.length === 0
-  const volumesErrorText = volumesError
-    ? volumesError
-    : null
+  const showUsageSkeleton = settingsLoading && !usage
+  const showLimitsSkeleton = limitsWaiting && !uploadLimits
+  const limitsErrorText =
+    limitsError ?? suppressFetchErrorWhenOffline(serverReachable, limitsFetchError)
+  const previewMb =
+    uploadGbInputToMb(uploadLimitGb) ?? uploadLimits?.maxUploadSizeMb ?? DEFAULT_MAX_UPLOAD_SIZE_MB
 
   return (
     <div className="flex flex-col gap-4">
-      <SettingsIntroCard
-        icon={HardDrive}
-        title="Instance storage"
-        description="Files and libraries are stored on disk under your configured root path on this server."
-      />
+      <AdminSettingsGate feature="Instance storage">
+        <>
+          <SettingsIntroCard
+            icon={HardDrive}
+            title="Instance storage"
+            description="Files and libraries are stored on disk under your configured root path on this server."
+          />
 
-      {settingsOffline || volumesOffline ? (
-        <OfflineCachedNotice
-          revalidating={settingsRevalidating || volumesRefreshing}
-        />
-      ) : null}
+          {settingsOffline ? (
+            <OfflineCachedNotice revalidating={settingsRevalidating} />
+          ) : null}
 
-      {suppressFetchErrorWhenOffline(serverReachable, settingsError) && !usage ? (
-        <MutedPanelError
-          error={suppressFetchErrorWhenOffline(serverReachable, settingsError)}
-          onRetry={() => void reloadSettings()}
-        />
-      ) : null}
-
-      <div className="rounded-xl bg-[#f7f7f7] p-3" style={{ border: "1px solid #e5e5e5" }}>
-        <div className="mb-2 flex items-center gap-2">
-          <HardDrive className="size-4 text-[#717171]" />
-          <span className="text-[13px] font-semibold text-[#222222]">Volume usage</span>
-          {settingsLoading && !usage ? (
-            <Loader2 className="ml-auto size-3.5 animate-spin text-[#c0c0c0]" />
-          ) : (
-            <span className="ml-auto text-[11px] text-[#a0a0a0]">
-              {usage?.totalBytes
-                ? `${formatBytes(usage.usageBytes)} / ${formatBytes(usage.totalBytes)}`
-                : formatBytes(usage?.usageBytes ?? 0)}
-            </span>
-          )}
-        </div>
-        {settingsLoading && !usage ? (
-          <div className="mt-2 h-2 animate-pulse rounded-full bg-[#ececec]" />
-        ) : usagePct !== null ? (
-          <div className="h-2 overflow-hidden rounded-full bg-[#ececec]">
-            <div className="h-full rounded-full bg-[#ff4f12]" style={{ width: `${usagePct}%` }} />
-          </div>
-        ) : (
-          <div className="h-2 rounded-full bg-[#ececec]" />
-        )}
-        <div className="mt-2 flex justify-between text-[11px] text-[#a0a0a0]">
-          <span>
-            {settingsLoading && !usage
-              ? "Loading…"
-              : `${(usage?.objectCount ?? 0).toLocaleString()} objects`}
-          </span>
-          <span>
-            {usagePct != null
-              ? `${usagePct}% full`
-              : usage?.writable === false
-                ? "Read-only"
-                : ""}
-          </span>
-        </div>
-      </div>
-
-      <div
-        className="rounded-xl bg-[#f7f7f7] p-3"
-        style={{ border: "1px solid #e5e5e5", minHeight: showVolumesSkeleton ? 140 : undefined }}
-      >
-        <div className="mb-2 flex items-center justify-between gap-2">
-          <p className="text-[12px] font-semibold text-[#222222]">Detected drives</p>
-          <button
-            type="button"
-            disabled={volumesRefreshing}
-            onClick={() => reloadVolumes()}
-            className="flex items-center gap-1 text-[11px] font-medium text-[#717171] disabled:opacity-50"
-          >
-            <RefreshCw
-              className={`size-3.5 ${volumesRefreshing ? "animate-spin" : ""}`}
+          {suppressFetchErrorWhenOffline(serverReachable, settingsError) && !usage ? (
+            <MutedPanelError
+              error={suppressFetchErrorWhenOffline(serverReachable, settingsError)}
+              onRetry={() => void reloadSettings()}
             />
-            {volumesRefreshing ? "Updating…" : "Rescan"}
-          </button>
-        </div>
+          ) : null}
 
-        {showVolumesSkeleton ? (
-          <DrivesSkeleton />
-        ) : volumesErrorText ? (
-          <p className="py-2 text-[12px] text-[#a0a0a0]">{volumesErrorText}</p>
-        ) : volumes.length === 0 ? (
-          <p className="py-2 text-[12px] text-[#a0a0a0]">
-            No volumes reported. Mount a drive on the server, then rescan.
-          </p>
-        ) : (
-          <ul className="flex flex-col gap-2">
-            {volumes.map((vol) => (
-              <li
-                key={vol.id}
-                className="rounded-lg px-2.5 py-2"
-                style={{
-                  border: vol.isCurrent ? "1px solid #ff4f12" : "1px solid #e5e5e5",
-                  backgroundColor: vol.isCurrent ? "rgba(255,79,18,0.06)" : "#fff",
-                }}
-              >
-                <div className="flex items-start gap-2">
-                  {vol.isCurrent ? (
-                    <BadgeCheck className="mt-0.5 size-4 shrink-0 text-[#ff4f12]" aria-hidden />
-                  ) : (
-                    <HardDrive className="mt-0.5 size-4 shrink-0 text-[#a0a0a0]" />
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <p className="text-[12px] font-medium text-[#222222]">{vol.label}</p>
-                      {vol.isCurrent ? (
-                        <span className="rounded-md bg-[#ff4f12]/10 px-1.5 py-0.5 text-[10px] font-semibold text-[#ff4f12]">
-                          In use
-                        </span>
-                      ) : null}
-                    </div>
-                    <p className="truncate font-mono text-[10px] text-[#a0a0a0]">{vol.arciinPath}</p>
-                    <p className="mt-0.5 text-[10px] text-[#a0a0a0]">{formatVolumeFree(vol)}</p>
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-
-        {volumesNote && !showVolumesSkeleton ? (
-          <p className="mt-2 text-[10px] leading-relaxed text-[#a0a0a0]">{volumesNote}</p>
-        ) : null}
-        <p className="mt-2 text-[10px] text-[#a0a0a0]">
-          To move all files to another disk, open Storage on the Arciin desktop app (owner/admin).
-        </p>
-      </div>
-
-      {usage?.isDockerRuntime && usage.hostStorageRoot ? (
-        <p className="text-[11px] leading-relaxed text-[#a0a0a0]">
-          Docker host folder:{" "}
-          <span className="font-mono text-[#222222]">{usage.hostStorageRoot}</span>
-        </p>
-      ) : null}
-
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="storage-root-inline" className="text-[12px] font-semibold text-[#717171]">
-          Storage root path
-        </label>
-        <input
-          id="storage-root-inline"
-          type="text"
-          value={path}
-          onChange={(e) => setPath(e.target.value)}
-          placeholder="/data/arciin"
-          disabled={settingsLoading && !usage}
-          className="rounded-xl bg-[#f7f7f7] px-4 py-3 font-mono text-[13px] text-[#222222] outline-none focus:bg-white disabled:opacity-60"
-          style={{ border: "1px solid #e5e5e5" }}
-        />
-      </div>
-
-      <div>
-        <div className="mb-2 flex items-center gap-2">
-          <FolderTree className="size-4 text-[#717171]" />
-          <p className="text-[12px] font-semibold text-[#222222]">Expected layout</p>
-        </div>
-        <div className="flex flex-col gap-2">
-          {LAYOUT_HINTS.map(({ label, hint }) => (
-            <div key={label} className="flex items-start gap-2">
-              <code
-                className="shrink-0 rounded-md px-2 py-0.5 font-mono text-[11px] text-[#717171]"
-                style={{ backgroundColor: "#fff", border: "1px solid #e5e5e5" }}
-              >
-                /{label}
-              </code>
-              <span className="text-[11px] leading-relaxed text-[#a0a0a0]">{hint}</span>
+          <div className="rounded-xl bg-[#f7f7f7] p-3" style={{ border: "1px solid #e5e5e5" }}>
+            <div className="mb-2 flex items-center gap-2">
+              <HardDrive className="size-4 text-[#717171]" />
+              <span className="text-[13px] font-semibold text-[#222222]">Volume usage</span>
+              {settingsRevalidating ? (
+                <Loader2 className="ml-auto size-3.5 animate-spin text-[#c0c0c0]" aria-hidden />
+              ) : (
+                <span className="ml-auto text-[11px] text-[#a0a0a0]">
+                  {usage?.totalBytes
+                    ? `${formatBytes(usage.usageBytes)} / ${formatBytes(usage.totalBytes)}`
+                    : formatBytes(usage?.usageBytes ?? 0)}
+                </span>
+              )}
             </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="rounded-xl bg-[#f7f7f7] px-3 py-1" style={{ border: "1px solid #e5e5e5" }}>
-        <p className="py-2 text-[11px] font-semibold uppercase tracking-wider text-[#a0a0a0]">
-          Technical
-        </p>
-        <div className="flex items-center justify-between gap-3 py-2.5">
-          <div className="min-w-0 flex-1">
-            <p className="text-[13px] font-medium text-[#222222]">PDF previews</p>
-            <p className="text-[11px] text-[#a0a0a0]">
-              First-page thumbnails for PDFs in file grids. Off by default.
-            </p>
+            {showUsageSkeleton ? (
+              <div className="mt-2 h-2 animate-pulse rounded-full bg-[#ececec]" />
+            ) : usagePct !== null ? (
+              <div className="h-2 overflow-hidden rounded-full bg-[#ececec]">
+                <div
+                  className="accent-progress-fill h-full rounded-full"
+                  style={{ width: `${usagePct}%` }}
+                />
+              </div>
+            ) : (
+              <div className="h-2 rounded-full bg-[#ececec]" />
+            )}
+            <div className="mt-2 flex justify-between text-[11px] text-[#a0a0a0]">
+              <span>{`${(usage?.objectCount ?? 0).toLocaleString()} objects`}</span>
+              <span>
+                {usagePct != null
+                  ? `${usagePct}% full`
+                  : usage?.writable === false
+                    ? "Read-only"
+                    : ""}
+              </span>
+            </div>
           </div>
+
+          {usage?.isDockerRuntime && usage.hostStorageRoot ? (
+            <p className="text-[11px] leading-relaxed text-[#a0a0a0]">
+              Docker host folder:{" "}
+              <span className="font-mono text-[#222222]">{usage.hostStorageRoot}</span>
+            </p>
+          ) : null}
+
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="storage-root-inline" className="text-[12px] font-semibold text-[#717171]">
+              Storage root path
+            </label>
+            <input
+              id="storage-root-inline"
+              type="text"
+              value={path}
+              onChange={(e) => setPath(e.target.value)}
+              placeholder="/data/arciin"
+              disabled={showUsageSkeleton}
+              className="rounded-xl bg-[#f7f7f7] px-4 py-3 font-mono text-[13px] text-[#222222] outline-none focus:bg-white disabled:opacity-60"
+              style={{ border: "1px solid #e5e5e5" }}
+            />
+          </div>
+
+          <div>
+            <div className="mb-2 flex items-center gap-2">
+              <FolderTree className="size-4 text-[#717171]" />
+              <p className="text-[12px] font-semibold text-[#222222]">Expected layout</p>
+            </div>
+            <div className="flex flex-col gap-2">
+              {LAYOUT_HINTS.map(({ label, hint }) => (
+                <div key={label} className="flex items-start gap-2">
+                  <code
+                    className="shrink-0 rounded-md px-2 py-0.5 font-mono text-[11px] text-[#717171]"
+                    style={{ backgroundColor: "#fff", border: "1px solid #e5e5e5" }}
+                  >
+                    /{label}
+                  </code>
+                  <span className="text-[11px] leading-relaxed text-[#a0a0a0]">{hint}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {saveError ? <MutedPanelError error={saveError} /> : null}
+
           <button
             type="button"
-            role="switch"
-            aria-checked={docThumbs}
-            disabled={prefsSaving}
-            onClick={() => void toggleDocThumbs(!docThumbs)}
-            className="relative shrink-0 disabled:opacity-50"
-            style={{
-              width: 44,
-              height: 26,
-              borderRadius: 13,
-              backgroundColor: docThumbs ? "#ff4f12" : "#e5e5e5",
-            }}
+            disabled={!path.trim() || path.trim() === initialPath || saving || showUsageSkeleton}
+            onClick={() => void handleSave()}
+            className="btn-accent-solid flex h-11 items-center justify-center gap-2 rounded-xl text-[14px] font-semibold disabled:opacity-50"
           >
-            <span
-              className="absolute top-[3px] size-5 rounded-full bg-white shadow-sm transition-transform"
-              style={{ left: 3, transform: docThumbs ? "translateX(18px)" : "translateX(0)" }}
-            />
+            {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+            Save storage path
           </button>
-        </div>
-      </div>
 
-      {prefsError ? <MutedPanelError error={prefsError} /> : null}
+          <div
+            className="mt-2 rounded-xl bg-white p-3"
+            style={{ border: "1px solid #e5e5e5" }}
+          >
+            <div className="flex items-center gap-2">
+              <p className="text-[13px] font-semibold text-[#222222]">Upload limits</p>
+              {limitsRevalidating ? (
+                <Loader2 className="ml-auto size-3.5 animate-spin text-[#c0c0c0]" aria-hidden />
+              ) : null}
+            </div>
+            <p className="mt-1 text-[11px] leading-relaxed text-[#a0a0a0]">
+              Per-file size and how many uploads each user can start per minute. Default is 20 GB per
+              file.
+            </p>
+            {showLimitsSkeleton ? (
+              <div className="mt-3 flex flex-col gap-2" aria-hidden>
+                <div className="h-11 animate-pulse rounded-xl bg-[#ececec]" />
+                <div className="h-11 animate-pulse rounded-xl bg-[#ececec]" />
+              </div>
+            ) : (
+              <div className="mt-3 flex flex-col gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="upload-max-gb" className="text-[12px] font-semibold text-[#717171]">
+                    Max file size (GB)
+                  </label>
+                  <input
+                    id="upload-max-gb"
+                    type="text"
+                    inputMode="decimal"
+                    autoComplete="off"
+                    value={uploadLimitGb}
+                    onChange={(e) => setUploadLimitGb(e.target.value)}
+                    className={PLAIN_NUMERIC_INPUT}
+                    style={{ border: "1px solid #e5e5e5" }}
+                  />
+                  <p className="text-[10px] text-[#a0a0a0]">≈ {formatBytes(previewMb * 1024 * 1024)} per file</p>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="upload-rate" className="text-[12px] font-semibold text-[#717171]">
+                    Uploads per minute (per user)
+                  </label>
+                  <input
+                    id="upload-rate"
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    value={uploadRateLimit}
+                    onChange={(e) => setUploadRateLimit(e.target.value.replace(/\D/g, ""))}
+                    className={PLAIN_NUMERIC_INPUT}
+                    style={{ border: "1px solid #e5e5e5" }}
+                  />
+                </div>
+                {limitsErrorText ? (
+                  <MutedPanelError
+                    error={limitsErrorText}
+                    onRetry={() => void reloadUploadLimits()}
+                  />
+                ) : null}
+                <button
+                  type="button"
+                  disabled={limitsSaving || showLimitsSkeleton}
+                  onClick={() => void handleSaveUploadLimits()}
+                  className="btn-accent-solid flex h-11 items-center justify-center gap-2 rounded-xl text-[14px] font-semibold disabled:opacity-50"
+                >
+                  {limitsSaving ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Save className="size-4" />
+                  )}
+                  Save upload limits
+                </button>
+              </div>
+            )}
+          </div>
+        </>
+      </AdminSettingsGate>
 
-      {saveError ? <MutedPanelError error={saveError} /> : null}
-      {message ? (
-        <p className="rounded-xl border border-[#bbf7d0] bg-[#f0fdf4] px-3 py-2 text-[12px] text-[#15803d]">
-          {message}
-        </p>
-      ) : null}
-
-      <button
-        type="button"
-        disabled={!path.trim() || path.trim() === initialPath || saving || (settingsLoading && !usage)}
-        onClick={() => void handleSave()}
-        className="flex h-11 items-center justify-center gap-2 rounded-xl bg-[#ff4f12] text-[14px] font-semibold text-white disabled:opacity-50"
-      >
-        {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-        Save storage path
-      </button>
+      <PanelStatusBanner message={message} />
     </div>
   )
 }

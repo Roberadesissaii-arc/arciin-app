@@ -10,6 +10,11 @@ import {
 import { serverProfileFromEndpoints } from "@/lib/connection/server-profile"
 import type { MobileServerProfile } from "@/lib/connection/storage"
 import type { MobileConnection } from "@/lib/types/api"
+import { isStandaloneApp } from "@/lib/standalone/config"
+import {
+  repairStandaloneConnection,
+  repairStandaloneServerProfile,
+} from "@/lib/standalone/repair-server-urls"
 
 async function probeHealth(apiBaseUrl: string, signal?: AbortSignal): Promise<boolean> {
   try {
@@ -56,7 +61,11 @@ export async function syncServerUrls(
   signal?: AbortSignal,
 ): Promise<SyncServerUrlsResult> {
   if (isLoopbackApiBase(connection.apiBaseUrl)) {
-    return { reachable: false }
+    if (isStandaloneApp()) {
+      connection = repairStandaloneConnection(connection)
+    } else {
+      return { reachable: false }
+    }
   }
 
   const healthOk = await probeHealth(connection.apiBaseUrl, signal)
@@ -73,14 +82,18 @@ export async function syncServerUrls(
         requestOrigin: endpoints.requestOrigin,
         canonicalPublicUrl: endpoints.webUrl,
       })
-      const changed = urlsChanged(connection, server)
+      const nextConnection = applyServerEndpointsToConnection(connection, server)
+      const nextServer = isStandaloneApp()
+        ? repairStandaloneServerProfile(server) ?? server
+        : server
+      const changed = urlsChanged(connection, nextConnection)
       if (changed) {
-        notifyIfPublicWebUrlChanged(connection.webUrl, server.webUrl)
+        notifyIfPublicWebUrlChanged(connection.webUrl, nextServer.webUrl)
       }
       return {
         reachable: true,
-        connection: applyServerEndpointsToConnection(connection, server),
-        server,
+        connection: nextConnection,
+        server: nextServer,
         urlChanged: changed,
       }
     } catch (err) {

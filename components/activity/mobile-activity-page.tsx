@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { Activity, Loader2, RefreshCw, Search, X } from "lucide-react"
 
+import { activityBadgeStyle } from "@/lib/activity/badge-style"
 import { activityIconFor, activityTypeLabel, Clock3 } from "@/lib/activity/icons"
+import { MobilePagination } from "@/components/ui/mobile-pagination"
 import { formatApiError } from "@/lib/api/errors"
 import { fetchRecentActivity } from "@/lib/api/notifications"
 import { PageFetchErrorAlert } from "@/components/shell/page-fetch-error-alert"
@@ -16,19 +18,6 @@ import type { ActivitySummary } from "@/lib/types/models"
 import { formatRelativeDate } from "@/lib/utils/format-date"
 
 const PAGE_SIZE = 5
-
-const BADGE_STYLE: Record<string, { bg: string; color: string }> = {
-  upload:    { bg: "#dcfce7", color: "#16a34a" },
-  asset:     { bg: "#fff4f0", color: "#ff4f12" },
-  folder:    { bg: "#eff6ff", color: "#2563eb" },
-  library:   { bg: "#f5f3ff", color: "#7c3aed" },
-  "api-key": { bg: "#fffbeb", color: "#d97706" },
-}
-
-function badgeStyleFor(event: ActivitySummary) {
-  const key = event.entityType ?? event.type.split(".")[0] ?? ""
-  return BADGE_STYLE[key] ?? { bg: "#f7f7f7", color: "#717171" }
-}
 
 export function MobileActivityPage({ title = "Activity" }: { title?: string }) {
   const { connection, ready, serverReachable } = useConnection()
@@ -89,11 +78,11 @@ export function MobileActivityPage({ title = "Activity" }: { title?: string }) {
     <div className="flex flex-col gap-4">
 
       {/* ── sticky intro card ───────────────────────────────────── */}
-      <div className="sticky top-0 z-10 -mx-4 -mt-4 px-4 pt-4 pb-2" style={{ backgroundColor: "#f7f7f7" }}>
-        <div
-          className="overflow-hidden rounded-3xl"
-          style={{ background: "linear-gradient(155deg, #ff6a30 0%, #c82d00 100%)" }}
-        >
+      <div
+        className="sticky top-0 z-10 -mx-4 -mt-4 px-4 pb-2"
+        style={{ backgroundColor: "#f7f7f7", paddingTop: "max(1rem, env(safe-area-inset-top, 0px))" }}
+      >
+        <div className="page-intro-hero overflow-hidden rounded-3xl">
           <div className="px-5 pt-5 pb-5">
             <p
               className="text-[22px] font-black leading-none tracking-tight text-white"
@@ -158,11 +147,8 @@ export function MobileActivityPage({ title = "Activity" }: { title?: string }) {
           className="flex flex-col items-center gap-3 rounded-2xl bg-white py-14"
           style={{ border: "1px solid #e5e5e5" }}
         >
-          <div
-            className="flex size-14 items-center justify-center rounded-2xl"
-            style={{ backgroundColor: "#fff4f0", border: "1px solid rgba(255,79,18,0.15)" }}
-          >
-            <Activity className="size-6 text-[#ff4f12]" />
+          <div className="empty-state-icon flex size-14 items-center justify-center rounded-2xl">
+            <Activity className="text-accent size-6" />
           </div>
           <div className="text-center">
             <p className="text-[14px] font-semibold text-[#222222]">No activity yet</p>
@@ -179,7 +165,7 @@ export function MobileActivityPage({ title = "Activity" }: { title?: string }) {
           >
             {pageItems.map((event, i) => {
               const Icon = activityIconFor(event)
-              const badge = badgeStyleFor(event)
+              const badge = activityBadgeStyle(event)
               return (
                 <div key={event.id}>
                   {i > 0 ? <div className="mx-4 h-px bg-[#f5f5f5]" /> : null}
@@ -216,50 +202,7 @@ export function MobileActivityPage({ title = "Activity" }: { title?: string }) {
             })}
           </div>
 
-          {/* ── pagination ────────────────────────────────────────── */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between gap-3 rounded-2xl bg-white px-4 py-3" style={{ border: "1px solid #e5e5e5" }}>
-              <button
-                type="button"
-                disabled={page === 0}
-                onClick={() => setPage((p) => p - 1)}
-                className="flex size-9 items-center justify-center rounded-xl bg-[#f7f7f7] text-[#717171] transition-opacity disabled:opacity-30 active:bg-[#efefef]"
-                style={{ border: "1px solid #e5e5e5" }}
-                aria-label="Previous page"
-              >
-                <svg className="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m15 18-6-6 6-6"/></svg>
-              </button>
-
-              <div className="flex items-center gap-1.5">
-                {Array.from({ length: totalPages }).map((_, i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    onClick={() => setPage(i)}
-                    style={{
-                      width: page === i ? 20 : 8,
-                      height: 8,
-                      borderRadius: 99,
-                      transition: "width 0.2s, background-color 0.2s",
-                      backgroundColor: page === i ? "#ff4f12" : "#e0e0e0",
-                    }}
-                    aria-label={`Page ${i + 1}`}
-                  />
-                ))}
-              </div>
-
-              <button
-                type="button"
-                disabled={page === totalPages - 1}
-                onClick={() => setPage((p) => p + 1)}
-                className="flex size-9 items-center justify-center rounded-xl bg-[#f7f7f7] text-[#717171] transition-opacity disabled:opacity-30 active:bg-[#efefef]"
-                style={{ border: "1px solid #e5e5e5" }}
-                aria-label="Next page"
-              >
-                <svg className="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m9 18 6-6-6-6"/></svg>
-              </button>
-            </div>
-          )}
+          <MobilePagination page={page} totalPages={totalPages} onPageChange={setPage} />
         </>
       )}
     </div>

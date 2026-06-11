@@ -6,6 +6,7 @@ import type React from "react"
 import {
   ChatInlineAssetBlock,
   ChatInlineAssetBlockByIds,
+  ChatInlineAssetFilenameList,
 } from "@/components/chat/chat-inline-assets"
 
 const FENCE_RE =
@@ -45,7 +46,7 @@ function parseInline(text: string): React.ReactNode {
           <Link
             key={k++}
             href={href}
-            className="font-medium text-[#ff4f12] underline-offset-2 hover:underline"
+            className="text-accent font-medium underline-offset-2 hover:underline"
           >
             {m[4]}
           </Link>,
@@ -57,7 +58,7 @@ function parseInline(text: string): React.ReactNode {
             href={href}
             target="_blank"
             rel="noopener noreferrer"
-            className="font-medium text-[#ff4f12] underline-offset-2 hover:underline"
+            className="text-accent font-medium underline-offset-2 hover:underline"
           >
             {m[4]}
           </a>,
@@ -70,22 +71,48 @@ function parseInline(text: string): React.ReactNode {
   return nodes.length === 1 ? nodes[0] : nodes
 }
 
-function renderAssetLine(line: string, key: number): React.ReactNode | null {
-  const idsMatch = line.match(/\[\[ASSETS:ids:([^\]]+)\]\]/)
-  if (idsMatch) {
+const ASSET_IDS_LINE_RE = /\[\[ASSETS:\s*ids:\s*([^\]]+?)\s*\]\]/i
+const ASSET_LIST_LINE_RE = /\[\[ASSET_LIST:\s*([a-z]+)\s*\]\]/i
+const ASSET_GALLERY_LINE_RE = /\[\[ASSETS:\s*([a-z]+)(?:\s*:\s*(\d+))?\s*\]\]/i
+const LEAKED_TOOL_LINE_RE = /^\[\[(?:read[A-Za-z_]+|readPdfAssetContent|read_text_asset):[^\]]+\]\]\s*$/i
+
+type AssetLineParts = {
+  before: string
+  after: string
+  node: React.ReactNode
+}
+
+function parseAssetLine(line: string, key: number): AssetLineParts | null {
+  const trimmed = line.trim()
+  if (!trimmed || LEAKED_TOOL_LINE_RE.test(trimmed)) return null
+
+  const idsMatch = line.match(ASSET_IDS_LINE_RE)
+  if (idsMatch && idsMatch.index != null) {
     const ids = idsMatch[1].split(",").map((s) => s.trim()).filter(Boolean)
-    return <ChatInlineAssetBlockByIds key={key} assetIds={ids} />
+    return {
+      before: line.slice(0, idsMatch.index).trim(),
+      after: line.slice(idsMatch.index + idsMatch[0].length).trim(),
+      node: <ChatInlineAssetBlockByIds key={key} assetIds={ids} />,
+    }
   }
 
-  const listMatch = line.match(/\[\[ASSET_LIST:([a-z]+)\]\]/)
-  if (listMatch) {
-    return <ChatInlineAssetBlock key={key} mediaType={listMatch[1]} limit={12} />
+  const listMatch = line.match(ASSET_LIST_LINE_RE)
+  if (listMatch && listMatch.index != null) {
+    return {
+      before: line.slice(0, listMatch.index).trim(),
+      after: line.slice(listMatch.index + listMatch[0].length).trim(),
+      node: <ChatInlineAssetFilenameList key={key} mediaType={listMatch[1]} />,
+    }
   }
 
-  const assetMatch = line.match(/\[\[ASSETS:([a-z]+)(?::(\d+))?\]\]/)
-  if (assetMatch) {
+  const assetMatch = line.match(ASSET_GALLERY_LINE_RE)
+  if (assetMatch && assetMatch.index != null && assetMatch[1] !== "ids") {
     const limit = assetMatch[2] ? parseInt(assetMatch[2], 10) : 9
-    return <ChatInlineAssetBlock key={key} mediaType={assetMatch[1]} limit={limit} />
+    return {
+      before: line.slice(0, assetMatch.index).trim(),
+      after: line.slice(assetMatch.index + assetMatch[0].length).trim(),
+      node: <ChatInlineAssetBlock key={key} mediaType={assetMatch[1]} limit={limit} />,
+    }
   }
 
   return null
@@ -245,18 +272,24 @@ function ProseMarkdown({ content }: { content: string }) {
 
   for (const line of lines) {
     const trimmed = line.trimStart()
-    const assetNode = renderAssetLine(line, k)
-    if (assetNode) {
+    const assetParts = parseAssetLine(line, k)
+    if (assetParts) {
       flushAll()
-      const before = line.replace(/\[\[(?:ASSETS|ASSET_LIST)[^\]]+\]\]/g, "").trim()
-      if (before) {
+      if (assetParts.before) {
         nodes.push(
           <p key={k++} className="break-words text-[13px] leading-relaxed text-[#333333]">
-            {parseInline(before)}
+            {parseInline(assetParts.before)}
           </p>,
         )
       }
-      nodes.push(assetNode)
+      nodes.push(assetParts.node)
+      if (assetParts.after) {
+        nodes.push(
+          <p key={k++} className="break-words text-[13px] leading-relaxed text-[#333333]">
+            {parseInline(assetParts.after)}
+          </p>,
+        )
+      }
       k++
       continue
     }

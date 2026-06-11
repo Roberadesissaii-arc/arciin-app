@@ -7,10 +7,12 @@ import { MobileAddProviderSheet } from "@/components/models/mobile-add-provider-
 import { MobileConnectSheet } from "@/components/models/mobile-connect-sheet"
 import { MobileProviderCard } from "@/components/models/mobile-provider-card"
 import { useModelsChromeOptional } from "@/components/models/models-chrome-context"
+import { PanelStatusBanner } from "@/components/settings/panel-status-banner"
 import { PageFetchErrorAlert } from "@/components/shell/page-fetch-error-alert"
 import { useConnection } from "@/components/providers/connection-provider"
 import { suppressFetchErrorWhenOffline } from "@/lib/connection/offline-ui"
 import { getChatSelection, setChatSelection } from "@/lib/api/chat"
+import { writeLocalChatSelection } from "@/lib/chat/chat-selection-storage"
 import { formatApiError } from "@/lib/api/errors"
 import { getModelProfiles, setDefaultModelProfile } from "@/lib/api/models"
 import type { ModelsFilterId } from "@/lib/models/filter-config"
@@ -21,6 +23,7 @@ import {
 } from "@/lib/models/model-helpers"
 import { providerMetaFor } from "@/lib/models/provider-catalog"
 import { MODEL_PROVIDERS, type ProviderMeta } from "@/lib/models/provider-catalog"
+import { usePanelStatusMessage } from "@/lib/hooks/use-panel-status-message"
 import type { ModelProfile } from "@/lib/types/models"
 
 export function MobileModelsPage() {
@@ -37,7 +40,7 @@ export function MobileModelsPage() {
   const [refreshing, setRefreshing] = useState(false)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [message, setMessage] = useState<string | null>(null)
+  const { message, showStatus, clearStatus } = usePanelStatusMessage()
   const [sheetMeta, setSheetMeta] = useState<ProviderMeta | null>(null)
   const [showAddSheet, setShowAddSheet] = useState(false)
 
@@ -157,10 +160,11 @@ export function MobileModelsPage() {
     if (!conn) return
     setBusyId(profile.id)
     setError(null)
-    setMessage(null)
+    clearStatus()
     const meta = providerMetaFor(profile.provider)
     const model = chatModelForProfile(profile, meta)
     try {
+      writeLocalChatSelection(profile.id, model)
       await setChatSelection(conn, { profileId: profile.id, model })
       setActiveProfileId(profile.id)
       const role = conn.user.role
@@ -172,7 +176,7 @@ export function MobileModelsPage() {
           /* chat selection saved; instance default is optional */
         }
       }
-      setMessage(`${profile.displayName} is now your active model for chat.`)
+      showStatus(`${profile.displayName} is now your active model for chat.`)
     } catch (err) {
       setError(suppressFetchErrorWhenOffline(serverReachable, formatApiError(err)))
     } finally {
@@ -207,14 +211,7 @@ export function MobileModelsPage() {
 
       <div className="flex flex-col gap-4 pb-6 pt-0">
         <PageFetchErrorAlert error={error} onRetry={() => void load({ refresh: true })} />
-        {message ? (
-          <p
-            className="rounded-xl px-4 py-3 text-[12px] text-[#15803d]"
-            style={{ backgroundColor: "#f0fdf4", border: "1px solid #bbf7d0" }}
-          >
-            {message}
-          </p>
-        ) : null}
+        <PanelStatusBanner message={message} />
 
         {!serverOnline && !loading ? (
           <div

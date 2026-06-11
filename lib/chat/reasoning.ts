@@ -1,3 +1,8 @@
+import {
+  extractAssetTags,
+  mergeAssetTagsFromThinking,
+  stripAssetTagsFromText,
+} from "@/lib/chat/asset-tag-patterns"
 import { normalizeAssistantDisplayText } from "@/lib/chat/strip-stream-markup"
 
 /** Split Ollama/Qwen reasoning from user-visible answer (ported from desktop chat). */
@@ -77,11 +82,12 @@ function withNormalizedAnswer(result: {
 export function deriveStreamingThinkingAndAnswer(
   accumulated: string,
   dedicatedThinking: string,
+  showReasoningPanel = true,
 ): { thinking: string; answer: string; inReasoningBlock: boolean } {
   if (dedicatedThinking) {
     const tagged = parseThinking(accumulated)
     return withNormalizedAnswer({
-      thinking: dedicatedThinking,
+      thinking: showReasoningPanel ? dedicatedThinking : "",
       answer: tagged.response || (tagged.inThink ? "" : accumulated),
       inReasoningBlock: false,
     })
@@ -89,19 +95,33 @@ export function deriveStreamingThinkingAndAnswer(
 
   const plain = splitPlainTextReasoningBlock(accumulated)
   if (plain.matched) {
+    if (showReasoningPanel) {
+      return withNormalizedAnswer({
+        thinking: plain.thinking,
+        answer: plain.answer,
+        inReasoningBlock: !plain.answer.trim(),
+      })
+    }
     return withNormalizedAnswer({
-      thinking: plain.thinking,
+      thinking: "",
       answer: plain.answer,
-      inReasoningBlock: !plain.answer.trim(),
+      inReasoningBlock: false,
     })
   }
 
   const tagged = parseThinking(accumulated)
   if (tagged.thinking || tagged.inThink) {
+    if (showReasoningPanel) {
+      return withNormalizedAnswer({
+        thinking: tagged.thinking,
+        answer: tagged.response,
+        inReasoningBlock: tagged.inThink,
+      })
+    }
     return withNormalizedAnswer({
-      thinking: tagged.thinking,
+      thinking: "",
       answer: tagged.response,
-      inReasoningBlock: tagged.inThink,
+      inReasoningBlock: false,
     })
   }
 
@@ -112,14 +132,25 @@ export function deriveStreamingThinkingAndAnswer(
   })
 }
 
+export function displayThinkingDuringStream(
+  reasoningUiEnabled: boolean,
+  derived: { thinking: string; inReasoningBlock: boolean },
+): string | undefined {
+  if (!reasoningUiEnabled) return undefined
+  if (derived.thinking.length > 0 || derived.inReasoningBlock) return derived.thinking
+  return ""
+}
+
 export function resolveFinalAssistantMessage(
   accumulated: string,
   thinkingAccum: string,
+  showReasoningPanel = true,
+  reasoningUiEnabled = true,
 ): { content: string; thinking: string | undefined } {
-  const derived = deriveStreamingThinkingAndAnswer(accumulated, thinkingAccum)
+  const derived = deriveStreamingThinkingAndAnswer(accumulated, thinkingAccum, showReasoningPanel)
   let content = derived.answer.trim()
   let thinking =
-    derived.thinking.length > 0 || derived.inReasoningBlock
+    reasoningUiEnabled && (derived.thinking.length > 0 || derived.inReasoningBlock)
       ? derived.thinking.trim()
       : undefined
 
@@ -136,9 +167,29 @@ export function resolveFinalAssistantMessage(
     content = accumulated.replace(REASONING_OPEN_TAG, "").replace(REASONING_CLOSE_TAG, "").trim()
   }
 
+  if (!content.trim() && thinking?.trim()) {
+    const planOnly =
+      /^(?:let\s+me|i(?:'ll| will)|still)\b/i.test(thinking.trim()) && thinking.trim().length < 320
+    if (!planOnly) {
+      content = thinking.trim()
+    }
+  }
+
+  content = mergeAssetTagsFromThinking(content, thinking)
+
+  if (!content.trim()) {
+    const tags = [
+      ...extractAssetTags(accumulated),
+      ...(thinking ? extractAssetTags(thinking) : []),
+    ]
+    if (tags.length > 0) {
+      content = [...new Set(tags)].join("\n\n")
+    }
+  }
+
   content = normalizeAssistantDisplayText(content)
   if (thinking) {
-    thinking = normalizeAssistantDisplayText(thinking)
+    thinking = stripAssetTagsFromText(normalizeAssistantDisplayText(thinking))
   }
 
   if (content && thinking && content === thinking) {
@@ -154,7 +205,14 @@ export function resolveFinalAssistantMessage(
 export function hasVisibleAssistantAnswer(content: string): boolean {
   const trimmed = content.trim()
   if (!trimmed) return false
-  const proseOnly = trimmed.replace(/\[\[ASSETS:[^\]]+\]\]/gi, "").replace(/\[\[ASSET_LIST:[^\]]+\]\]/gi, "").trim()
+  const proseOnly = trimmed
+    .replace(/\[\[ASSETS:[^\]]+\]\]/gi, "")
+    .replace(/\[\[ASSET_LIST:[^\]]+\]\]/gi, "")
+    .trim()
   if (proseOnly.length > 0) return true
-  return /\[\[ASSETS:/i.test(trimmed)
+  return (
+    /\[\[ASSETS:/i.test(trimmed) ||
+    /\[\[ASSET_LIST:/i.test(trimmed) ||
+    /\[\[ASSETS:\s*ids:/i.test(trimmed)
+  )
 }

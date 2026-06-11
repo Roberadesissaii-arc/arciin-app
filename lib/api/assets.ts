@@ -1,6 +1,18 @@
-import { arciinProxyHeaders, needsArciinSameOriginProxy } from "@/lib/api/arciin-proxy"
-import { buildApiUrl, fetchApi } from "@/lib/api/client"
-import { shouldUseArciinProxy } from "@/lib/api/proxy-fetch"
+import { fetchApi } from "@/lib/api/client"
+import {
+  assetDownloadFetchUrl,
+  assetDownloadRequestInit,
+  assetFilesViewUrl,
+  assetShareableMediaUrl,
+  assetThumbnailUrl,
+} from "@/lib/api/asset-media-urls"
+import { fetchAssetBlob } from "@/lib/api/asset-binary"
+import {
+  beginDownloadAsset,
+  beginShareAsset,
+  downloadAssetFile,
+  shareAssetFile,
+} from "@/lib/api/asset-share-download"
 import {
   TEXT_PREVIEW_MAX_BYTES,
   TEXT_PREVIEW_MAX_CHARS,
@@ -22,6 +34,20 @@ export type AssetFilters = {
   category?: "code" | "applications"
   search?: string
 }
+
+export {
+  assetDownloadFetchUrl,
+  assetDownloadRequestInit,
+  assetFilesViewUrl,
+  assetShareableMediaUrl,
+  assetThumbnailUrl,
+  beginDownloadAsset,
+  beginShareAsset,
+  downloadAssetFile,
+  fetchAssetBlob,
+  shareAssetFile,
+}
+export type { DownloadAssetResult, ShareAssetResult } from "@/lib/api/asset-share-download"
 
 export function getAssets(
   connection: MobileConnection,
@@ -51,50 +77,12 @@ export async function searchAssets(
   })
 }
 
-export function assetThumbnailUrl(connection: MobileConnection, assetId: string) {
-  const params = new URLSearchParams({ access_token: connection.sessionToken })
-  if (shouldUseArciinProxy(connection)) {
-    return `/api/arciin/assets/${encodeURIComponent(assetId)}/thumbnail?${params.toString()}`
-  }
-  return buildApiUrl(
-    connection.apiBaseUrl,
-    `/assets/${assetId}/thumbnail?${params.toString()}`,
-  )
-}
-
 export function assetDownloadUrl(
   connection: MobileConnection,
   assetId: string,
   inline = false,
 ) {
   return assetDownloadFetchUrl(connection, assetId, inline)
-}
-
-/** URL for authenticated fetch (supports Vercel same-origin proxy). */
-export function assetDownloadFetchUrl(
-  connection: MobileConnection,
-  assetId: string,
-  inline = false,
-) {
-  const params = new URLSearchParams()
-  if (inline) params.set("inline", "1")
-  const q = params.size ? `?${params.toString()}` : ""
-  if (shouldUseArciinProxy(connection)) {
-    return `/api/arciin/assets/${encodeURIComponent(assetId)}/download${q}`
-  }
-  return buildApiUrl(connection.apiBaseUrl, `/assets/${assetId}/download${q}`)
-}
-
-export function assetDownloadRequestInit(connection: MobileConnection): RequestInit {
-  const useProxy = needsArciinSameOriginProxy(connection.apiBaseUrl)
-  return {
-    headers: {
-      Authorization: `Bearer ${connection.sessionToken}`,
-      ...(useProxy ? arciinProxyHeaders(connection) : {}),
-    },
-    credentials: useProxy ? "same-origin" : "include",
-    cache: "no-store",
-  }
 }
 
 export async function fetchAssetTextContent(
@@ -122,19 +110,9 @@ export async function fetchAssetTextContent(
   }
 }
 
-/** Stream URL for `<audio>` / `<video>` when blob fetch is not used (large files). */
+/** Stream URL for `<audio>` / `<video>` (alias — always absolute when proxied). */
 export function assetStreamUrl(connection: MobileConnection, assetId: string) {
-  const params = new URLSearchParams({
-    inline: "1",
-    access_token: connection.sessionToken,
-  })
-  if (shouldUseArciinProxy(connection)) {
-    // <video>/<audio> elements can't send custom headers, so embed api_base in the query
-    // so the proxy route can extract it without the x-arciin-api-base header.
-    params.set("api_base", btoa(connection.apiBaseUrl))
-    return `/api/arciin/assets/${encodeURIComponent(assetId)}/download?${params.toString()}`
-  }
-  return buildApiUrl(connection.apiBaseUrl, `/assets/${assetId}/download?${params.toString()}`)
+  return assetShareableMediaUrl(connection, assetId)
 }
 
 export function getAsset(connection: MobileConnection, assetId: string, signal?: AbortSignal) {
@@ -164,23 +142,33 @@ export function deleteAsset(connection: MobileConnection, assetId: string) {
   })
 }
 
-export async function downloadAssetFile(
+export type DuplicateHit = { filename: string; assetId: string }
+
+export async function checkDuplicates(
   connection: MobileConnection,
-  asset: AssetSummary,
-): Promise<void> {
-  const url = assetDownloadUrl(connection, asset.id, false)
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${connection.sessionToken}` },
-  })
-  if (!res.ok) throw new Error("Download failed")
-  const blob = await res.blob()
-  const objectUrl = URL.createObjectURL(blob)
-  const anchor = document.createElement("a")
-  anchor.href = objectUrl
-  anchor.download = asset.originalFilename
-  anchor.rel = "noopener"
-  document.body.appendChild(anchor)
-  anchor.click()
-  anchor.remove()
-  URL.revokeObjectURL(objectUrl)
+  filenames: string[],
+  context: { libraryId?: string; folderId?: string | null } = {},
+) {
+  const unique = [...new Set(filenames)]
+  const duplicates: DuplicateHit[] = []
+  const chunkSize = 200
+
+  for (let i = 0; i < unique.length; i += chunkSize) {
+    const chunk = unique.slice(i, i + chunkSize)
+    const result = await fetchApi<{ duplicates: DuplicateHit[] }>(
+      "/assets/check-duplicates",
+      {
+        connection,
+        method: "POST",
+        body: {
+          filenames: chunk,
+          ...(context.libraryId ? { libraryId: context.libraryId } : {}),
+          ...(context.folderId !== undefined ? { folderId: context.folderId } : {}),
+        },
+      },
+    )
+    duplicates.push(...result.duplicates)
+  }
+
+  return { duplicates }
 }

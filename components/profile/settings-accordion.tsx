@@ -50,7 +50,7 @@ export function SettingsAccordion({
       {footerHref && footerLabel ? (
         <Link
           href={footerHref}
-          className="block w-full border-t border-[#f0f0f0] px-4 py-2.5 text-center text-[12px] font-semibold text-[#ff4f12] active:opacity-70"
+          className="text-accent block w-full border-t border-[#f0f0f0] px-4 py-2.5 text-center text-[12px] font-semibold active:opacity-70"
         >
           {footerLabel}
         </Link>

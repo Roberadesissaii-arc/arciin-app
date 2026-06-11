@@ -1,4 +1,13 @@
+import { getBrowserApiUrl } from "@/lib/api/browser-api-origin"
 import { ApiError, parseApiError } from "@/lib/api/errors"
+import {
+  ARCIIN_API_BASE_HEADER,
+  needsArciinSameOriginProxy,
+  resolveCoLocatedApiBase,
+} from "@/lib/api/arciin-proxy"
+import { isStandaloneApp } from "@/lib/standalone/config"
+import { normalizeApiBase } from "@/lib/connection/normalize-url"
+import { sleep } from "@/lib/uploads/sleep"
 import type { MobileConnection } from "@/lib/types/api"
 import type { UploadSessionSummary } from "@/lib/types/assets"
 
@@ -9,17 +18,65 @@ type UploadOptions = {
   signal?: AbortSignal
 }
 
-export function uploadFile(connection: MobileConnection, file: File, options?: UploadOptions) {
-  const base = connection.apiBaseUrl.replace(/\/+$/, "")
+function buildUploadRequest(connection: MobileConnection, params: URLSearchParams) {
+  const query = params.size ? `?${params.toString()}` : ""
+  const authHeader = { Authorization: `Bearer ${connection.sessionToken}` }
+
+  if (typeof window !== "undefined" && isStandaloneApp()) {
+    return { url: getBrowserApiUrl(`/uploads${query}`), headers: authHeader }
+  }
+
+  const apiBase = resolveCoLocatedApiBase(connection.apiBaseUrl)
+  const directUrl = `${apiBase.replace(/\/+$/, "")}/uploads${query}`
+
+  if (typeof window === "undefined" || !needsArciinSameOriginProxy(apiBase)) {
+    return { url: directUrl, headers: authHeader }
+  }
+
+  return {
+    url: `/api/arciin/uploads${query}`,
+    headers: {
+      ...authHeader,
+      [ARCIIN_API_BASE_HEADER]: normalizeApiBase(connection.apiBaseUrl).replace(/\/+$/, ""),
+    },
+  }
+}
+
+function retryDelayMs(error: ApiError, attempt: number): number {
+  if (error.status === 429) {
+    const details = error.details as { retryAfterSeconds?: number } | undefined
+    const sec = details?.retryAfterSeconds
+    if (typeof sec === "number" && sec > 0) return sec * 1000
+    return 15_000
+  }
+  return Math.min(30_000, 1_500 * 2 ** attempt)
+}
+
+function isRetryableUploadError(error: unknown): boolean {
+  if (!(error instanceof ApiError)) return false
+  if (error.code === "UPLOAD_ABORTED") return false
+  if (error.code === "UPLOAD_TOO_LARGE") return false
+  if (error.status === 413) return false
+  if (error.status === 429) return true
+  if (error.code === "NETWORK_ERROR") return true
+  if (error.status === 502 || error.status === 503 || error.status === 504) return true
+  return false
+}
+
+function uploadFileOnce(
+  connection: MobileConnection,
+  file: File,
+  options?: UploadOptions,
+): Promise<UploadSessionSummary> {
   const params = new URLSearchParams()
-  // Never send target library unless explicitly set (server classifies by file type).
   if (options?.targetLibraryId?.trim()) {
     params.set("targetLibraryId", options.targetLibraryId.trim())
   }
   if (options?.targetFolderId?.trim()) {
     params.set("targetFolderId", options.targetFolderId.trim())
   }
-  const url = `${base}/uploads${params.size ? `?${params.toString()}` : ""}`
+
+  const { url, headers } = buildUploadRequest(connection, params)
 
   return new Promise<UploadSessionSummary>((resolve, reject) => {
     const xhr = new XMLHttpRequest()
@@ -27,7 +84,10 @@ export function uploadFile(connection: MobileConnection, file: File, options?: U
     formData.append("file", file)
 
     xhr.open("POST", url)
-    xhr.setRequestHeader("Authorization", `Bearer ${connection.sessionToken}`)
+    xhr.timeout = 0
+    for (const [key, value] of Object.entries(headers)) {
+      xhr.setRequestHeader(key, value)
+    }
 
     if (options?.signal) {
       if (options.signal.aborted) {
@@ -37,9 +97,17 @@ export function uploadFile(connection: MobileConnection, file: File, options?: U
       options.signal.addEventListener("abort", () => xhr.abort())
     }
 
+    xhr.upload.addEventListener("loadstart", () => {
+      options?.onProgress?.(1)
+    })
+
     xhr.upload.addEventListener("progress", (event) => {
       if (event.lengthComputable && event.total > 0) {
-        options?.onProgress?.(Math.round((event.loaded / event.total) * 100))
+        options?.onProgress?.(Math.max(1, Math.round((event.loaded / event.total) * 100)))
+        return
+      }
+      if (event.loaded > 0) {
+        options?.onProgress?.(1)
       }
     })
 
@@ -53,11 +121,17 @@ export function uploadFile(connection: MobileConnection, file: File, options?: U
             return
           }
         } catch {
-          reject(new ApiError(xhr.status, "INVALID_RESPONSE", "Upload response was invalid."))
+          /* fall through to INVALID_RESPONSE below */
+        }
+        reject(new ApiError(xhr.status, "INVALID_RESPONSE", "Upload response was invalid."))
+        return
+      }
+
+      void (async () => {
+        if (xhr.status === 0) {
+          reject(new ApiError(0, "NETWORK_ERROR", "Upload failed — could not reach the server."))
           return
         }
-      }
-      void (async () => {
         reject(
           await parseApiError(
             new Response(xhr.responseText, {
@@ -73,10 +147,37 @@ export function uploadFile(connection: MobileConnection, file: File, options?: U
       reject(new ApiError(0, "NETWORK_ERROR", "Could not upload. Check your connection."))
     }
 
+    xhr.ontimeout = () => {
+      reject(new ApiError(0, "NETWORK_ERROR", "Upload timed out — try again with the app in the foreground."))
+    }
+
     xhr.onabort = () => {
       reject(new ApiError(0, "UPLOAD_ABORTED", "Upload cancelled."))
     }
 
     xhr.send(formData)
   })
+}
+
+export async function uploadFile(
+  connection: MobileConnection,
+  file: File,
+  options?: UploadOptions,
+) {
+  const maxAttempts = 5
+  let lastError: unknown
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      return await uploadFileOnce(connection, file, options)
+    } catch (error) {
+      lastError = error
+      if (!isRetryableUploadError(error) || attempt === maxAttempts - 1) {
+        throw error
+      }
+      await sleep(retryDelayMs(error as ApiError, attempt))
+    }
+  }
+
+  throw lastError
 }

@@ -9,26 +9,37 @@ const REDIRECT_MS = 1600
 export function ConnectionSuccessScreen({
   instanceName,
   onComplete,
+  embedded = false,
 }: {
   instanceName: string
   serverUrl: string
   onComplete: () => void
+  /** Render inside the sign-in card instead of replacing the whole screen. */
+  embedded?: boolean
 }) {
   useEffect(() => {
     const t = window.setTimeout(onComplete, REDIRECT_MS)
     return () => window.clearTimeout(t)
   }, [onComplete])
 
-  return (
+  const card = (
     <div
-      className="flex min-h-[100dvh] flex-col items-center justify-center px-4 pt-safe pb-safe"
-      style={{ backgroundColor: "#f7f7f7" }}
+      className={
+        embedded
+          ? "flex flex-1 flex-col items-center justify-center py-10 text-center"
+          : "flex min-h-[100dvh] flex-col items-center justify-center px-4 pt-safe pb-safe"
+      }
       role="status"
       aria-live="polite"
+      style={embedded ? undefined : { backgroundColor: "#f7f7f7" }}
     >
       <div
-        className="w-full max-w-sm rounded-3xl bg-white px-6 py-8 text-center"
-        style={{ border: "1px solid #efefef" }}
+        className={
+          embedded
+            ? "w-full text-center"
+            : "w-full max-w-sm rounded-3xl bg-white px-6 py-8 text-center"
+        }
+        style={embedded ? undefined : { border: "1px solid #efefef" }}
       >
         <div
           className="mx-auto mb-4 flex size-12 items-center justify-center rounded-full"
@@ -40,13 +51,13 @@ export function ConnectionSuccessScreen({
           className="text-[18px] font-bold tracking-tight text-[#111111]"
           style={{ fontFamily: "var(--font-space-grotesk, sans-serif)" }}
         >
-          Connected
+          You&apos;re all set
         </p>
         <p className="mt-1 text-[13px] font-medium text-[#717171]">{instanceName}</p>
-        <p className="mt-4 text-[12px] leading-relaxed text-[#a0a0a0]">
-          Opening your dashboard…
-        </p>
+        <p className="mt-4 text-[12px] leading-relaxed text-[#a0a0a0]">Opening Arciin…</p>
       </div>
     </div>
   )
+
+  return card
 }

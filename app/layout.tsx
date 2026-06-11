@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next"
 import { Geist, Geist_Mono, Space_Grotesk } from "next/font/google"
 
 import { ConnectionProvider } from "@/components/providers/connection-provider"
+import { UserPreferencesProvider } from "@/components/providers/user-preferences-provider"
 import { SwRegister } from "@/components/providers/sw-register"
 import "./globals.css"
 
@@ -46,10 +47,7 @@ export const viewport: Viewport = {
   themeColor: "#f7f7f7",
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
   viewportFit: "cover",
-  interactiveWidget: "resizes-visual",
 }
 
 export default function RootLayout({
@@ -92,9 +90,11 @@ export default function RootLayout({
         <link rel="apple-touch-startup-image" href="/splash/iphone-14-pro-max.png"
           media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3)" />
       </head>
-      <body className="min-h-full min-h-dvh bg-[#f7f7f7]">
+      <body className="mobile-app-host min-h-full min-h-dvh bg-[#f7f7f7]">
         <SwRegister />
-        <ConnectionProvider>{children}</ConnectionProvider>
+        <ConnectionProvider>
+          <UserPreferencesProvider>{children}</UserPreferencesProvider>
+        </ConnectionProvider>
       </body>
     </html>
   )

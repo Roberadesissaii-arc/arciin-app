@@ -1,8 +1,10 @@
+import { getBrowserApiUrl } from "@/lib/api/browser-api-origin"
 import {
   arciinProxyHeaders,
   needsArciinSameOriginProxy,
 } from "@/lib/api/arciin-proxy"
 import { apiBaseCandidates, buildApiUrl, fetchApi } from "@/lib/api/client"
+import { isStandaloneApp } from "@/lib/standalone/config"
 import { ApiError, networkErrorMessage, parseApiError } from "@/lib/api/errors"
 import { fetchArciinProxied, shouldUseArciinProxy } from "@/lib/api/proxy-fetch"
 import type { MobileConnection } from "@/lib/types/api"
@@ -33,6 +35,14 @@ export type ChatInstanceContext = {
   }[]
   byMediaType: { type: string; count: number }[]
   codeFiles?: {
+    id: string
+    filename: string
+    mediaType: string
+    sizeBytes: number
+    librarySlug: string
+    libraryName: string
+  }[]
+  documentFiles?: {
     id: string
     filename: string
     mediaType: string
@@ -199,8 +209,11 @@ type StreamHandlers = {
   signal?: AbortSignal
 }
 
-/** PWA on Vercel → same-origin proxy; LAN dev on same host → direct API (like desktop). */
+/** PWA on Vercel → same-origin proxy; standalone/LAN co-located → page origin `/api` (like desktop). */
 function chatStreamUrlCandidates(connection: MobileConnection): string[] {
+  if (typeof window !== "undefined" && isStandaloneApp()) {
+    return [getBrowserApiUrl("/chat")]
+  }
   if (needsArciinSameOriginProxy(connection.apiBaseUrl)) {
     return ["/api/arciin/chat"]
   }
@@ -306,24 +319,25 @@ export async function streamChat(
         streamDone = true
         continue
       }
-      try {
-        const json = JSON.parse(payload) as {
-          error?: string
-          text?: string
-          thinking?: string
-          usage?: TokenUsage
-          libraryAction?: string
-        }
-        if (json.error) throw new Error(json.error)
-        if (json.libraryAction) handlers.onLibraryAction?.(json.libraryAction)
-        if (json.thinking) handlers.onThinking?.(json.thinking)
-        if (json.text) handlers.onText(json.text)
-        if (json.usage) handlers.onUsage?.(json.usage)
-      } catch (parseErr) {
-        if (parseErr instanceof Error && parseErr.message !== "Unexpected end of JSON input") {
-          throw parseErr
-        }
+      let json: {
+        error?: string
+        text?: string
+        thinking?: string
+        usage?: TokenUsage
+        libraryAction?: string
       }
+      try {
+        json = JSON.parse(payload)
+      } catch {
+        // Truncated/malformed frame (connection drop mid-line) — skip it.
+        // Parse-error messages differ per engine (V8 vs WebKit), so never match on text.
+        continue
+      }
+      if (json.error) throw new Error(json.error)
+      if (json.libraryAction) handlers.onLibraryAction?.(json.libraryAction)
+      if (json.thinking) handlers.onThinking?.(json.thinking)
+      if (json.text) handlers.onText(json.text)
+      if (json.usage) handlers.onUsage?.(json.usage)
     }
 
     if (streamDone || done) break

@@ -15,7 +15,9 @@ import type {
 export async function discoverServer(
   serverInput: string,
   signal?: AbortSignal,
+  options?: { requireInitialized?: boolean },
 ): Promise<{ discover: MobileDiscoverResult; apiBaseUrl: string }> {
+  const requireInitialized = options?.requireInitialized !== false
   const candidates = buildApiBaseCandidates(serverInput)
   if (candidates.length === 0) {
     throw new Error(
@@ -41,9 +43,9 @@ export async function discoverServer(
           lastError = new Error("This address is not an Arciin server.")
           break
         }
-        if (!discover.initialized) {
+        if (requireInitialized && !discover.initialized) {
           throw new Error(
-            "This server has not been set up yet. Complete setup in the web app first.",
+            "This server has not been set up yet. Complete first-run setup to continue.",
           )
         }
         return {

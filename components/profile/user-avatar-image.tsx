@@ -39,7 +39,7 @@ export function UserAvatarImage({
   size = 72,
   className = "",
   fallbackClassName = "",
-  fallbackTextClassName = "text-[#ff4f12]",
+  fallbackTextClassName = "text-accent",
   tone = "dark",
   shape = "rounded",
 }: UserAvatarImageProps) {

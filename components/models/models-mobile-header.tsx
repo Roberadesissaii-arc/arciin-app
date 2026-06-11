@@ -10,6 +10,7 @@ import {
   mobilePageTitleClass,
   mobilePageTitleStyle,
 } from "@/lib/ui/mobile-page-header"
+import { cn } from "@/lib/utils"
 
 export function ModelsMobileHeader() {
   const pathname = usePathname()
@@ -48,8 +49,7 @@ export function ModelsMobileHeader() {
               type="button"
               onClick={() => chrome?.onAddProvider()}
               disabled={!chrome || chrome.loading || !chrome.serverOnline}
-              className="flex size-9 items-center justify-center rounded-xl text-white active:opacity-80 disabled:opacity-50"
-              style={{ backgroundColor: "#ff4f12" }}
+              className="btn-accent-solid flex size-9 items-center justify-center rounded-xl active:opacity-80 disabled:opacity-50"
               aria-label="Add AI provider"
             >
               <Plus className="size-[16px]" />
@@ -73,22 +73,21 @@ export function ModelsMobileHeader() {
                   type="button"
                   onClick={() => chrome?.onChangeFilter(id)}
                   disabled={!chrome}
-                  className="flex shrink-0 items-center gap-1.5 rounded-2xl py-2 pl-3.5 pr-3 text-[12px] font-semibold transition-colors active:opacity-70 disabled:opacity-50"
-                  style={{
-                    backgroundColor: active ? "#ff4f12" : "#ffffff",
-                    border: `1px solid ${active ? "#ff4f12" : "#e5e5e5"}`,
-                    color: active ? "#ffffff" : "#717171",
-                  }}
+                  className={cn(
+                    "flex shrink-0 items-center gap-1.5 rounded-2xl border py-2 pl-3.5 pr-3 text-[12px] font-semibold transition-colors active:opacity-70 disabled:opacity-50",
+                    active
+                      ? "chip-accent-active"
+                      : "border-[#e5e5e5] bg-white text-[#717171]",
+                  )}
                 >
                   <Icon className="size-[13px] shrink-0" />
                   {label}
                   {count !== null && (id === "connected" || count > 0) ? (
                     <span
-                      className="rounded-md px-1.5 py-0.5 text-[10px] font-bold tabular-nums"
-                      style={{
-                        backgroundColor: active ? "rgba(255,255,255,0.22)" : "#f7f7f7",
-                        color: active ? "#ffffff" : "#222222",
-                      }}
+                      className={cn(
+                        "rounded-md px-1.5 py-0.5 text-[10px] font-bold tabular-nums",
+                        active ? "bg-white/20 text-white" : "bg-[#f7f7f7] text-[#222222]",
+                      )}
                     >
                       {count}
                     </span>

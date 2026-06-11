@@ -1,76 +1,261 @@
 "use client"
 
-import { useRouter } from "next/navigation"
-import { Mail } from "lucide-react"
+import { useEffect, useState } from "react"
+import Link from "next/link"
+import { Eye, EyeOff, HelpCircle, Lock, Mail } from "lucide-react"
 
-import { BrandHeroStatic } from "@/components/auth/brand-hero"
+import { AuthMobileCardHeader } from "@/components/auth/auth-mobile-shell"
+import { AuthMobileField, AuthMobileFormMessage } from "@/components/auth/auth-mobile-field"
+import {
+  hasFieldErrors,
+  mapRecoveryApiError,
+  validateForgotPasswordEmail,
+  validateForgotPasswordReset,
+  type AuthFieldErrors,
+} from "@/lib/auth/form-validation"
+import { lookupPasswordRecovery, resetPasswordWithRecovery } from "@/lib/api/recovery"
+import { getStandaloneApiBaseUrl } from "@/lib/standalone/api-origin"
+import {
+  getCachedStandaloneInstanceGate,
+  loadStandaloneInstanceGate,
+} from "@/lib/standalone/instance-gate"
 
-function GhostButton({ label, onClick }: { label: string; onClick: () => void }) {
+const primaryButtonClass = "auth-primary-button"
+
+function BackToSignInLink() {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex h-[46px] w-full items-center justify-center rounded-2xl text-[14px] font-medium text-[#717171] transition-colors active:bg-[#f0f0f0]"
-      style={{ border: "1.5px solid #e8e8e8" }}
-    >
-      {label}
-    </button>
+    <p className="mt-auto pt-2 text-center">
+      <Link
+        href="/sign-in"
+        prefetch
+        className="text-[12.5px] font-medium text-[#717171] underline-offset-2 active:text-[#444444] hover:underline"
+      >
+        Back to sign in
+      </Link>
+    </p>
   )
 }
 
 export function ForgotPasswordPage() {
-  const router = useRouter()
+  const apiBase = getStandaloneApiBaseUrl()
+  const cachedGate = getCachedStandaloneInstanceGate()
+
+  const [instanceName, setInstanceName] = useState<string | null>(
+    cachedGate?.status?.instanceName ?? null,
+  )
+  const [step, setStep] = useState<"email" | "reset" | "done">("email")
+  const [busy, setBusy] = useState(false)
+  const [fieldErrors, setFieldErrors] = useState<AuthFieldErrors>({})
+  const [formError, setFormError] = useState<string | null>(null)
+  const [email, setEmail] = useState("")
+  const [question, setQuestion] = useState("")
+  const [answer, setAnswer] = useState("")
+  const [newPassword, setNewPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
+  const [showPw, setShowPw] = useState(false)
+  const [recoveryUnavailable, setRecoveryUnavailable] = useState(false)
+
+  useEffect(() => {
+    if (cachedGate?.status?.instanceName) return
+    let cancelled = false
+    void (async () => {
+      const gate = await loadStandaloneInstanceGate()
+      if (cancelled) return
+      if (gate.status?.instanceName) {
+        setInstanceName(gate.status.instanceName)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [cachedGate?.status?.instanceName])
+
+  const name = instanceName ?? "your Arciin"
+
+  const pageTitle =
+    step === "done" ? "Password updated" : step === "reset" ? "Reset password" : "Forgot password"
+
+  const pageSubtitle =
+    step === "done"
+      ? `Your ${name} password was updated. Sign in with your new password on this device.`
+      : step === "reset"
+        ? `Answer the security question you chose during ${name} setup, then choose a new password.`
+        : `Reset your ${name} password using the email and security question from setup — no email reset links.`
+
+  function clearFieldError(key: keyof AuthFieldErrors) {
+    setFieldErrors((prev) => (prev[key] ? { ...prev, [key]: undefined } : prev))
+    setFormError(null)
+    setRecoveryUnavailable(false)
+  }
+
+  async function handleLookup(e: React.FormEvent) {
+    e.preventDefault()
+    setFieldErrors({})
+    setFormError(null)
+    setRecoveryUnavailable(false)
+
+    const validation = validateForgotPasswordEmail(email)
+    if (hasFieldErrors(validation)) {
+      setFieldErrors(validation)
+      return
+    }
+
+    setBusy(true)
+    try {
+      const result = await lookupPasswordRecovery(email.trim().toLowerCase())
+      if (!result.available || !result.question) {
+        setRecoveryUnavailable(true)
+        return
+      }
+      setQuestion(result.question)
+      setStep("reset")
+    } catch (err) {
+      const mapped = mapRecoveryApiError(err, apiBase)
+      setFieldErrors(mapped.fields)
+      if (mapped.form) setFormError(mapped.form)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleReset(e: React.FormEvent) {
+    e.preventDefault()
+    setFieldErrors({})
+    setFormError(null)
+
+    const validation = validateForgotPasswordReset(answer, newPassword, confirmPassword)
+    if (hasFieldErrors(validation)) {
+      setFieldErrors(validation)
+      return
+    }
+
+    setBusy(true)
+    try {
+      await resetPasswordWithRecovery({
+        email: email.trim().toLowerCase(),
+        answer,
+        newPassword,
+      })
+      setStep("done")
+    } catch (err) {
+      const mapped = mapRecoveryApiError(err, apiBase)
+      setFieldErrors(mapped.fields)
+      if (mapped.form) setFormError(mapped.form)
+    } finally {
+      setBusy(false)
+    }
+  }
 
   return (
-    <div
-      className="flex min-h-[100dvh] flex-col pt-safe pb-safe"
-      style={{ backgroundColor: "#f7f7f7" }}
-    >
-      <BrandHeroStatic
-        title="Reset password"
-        description="Request a reset link for your Arciin account on this server. Password reset from the mobile app is coming soon — use the web app on your server to manage your account for now."
-        onBack={() => router.push("/sign-in")}
-      />
+    <>
+      <AuthMobileCardHeader title={pageTitle} subtitle={pageSubtitle} />
 
-      <div className="mx-4 mt-3 mb-6 shrink-0">
-        <div
-          className="rounded-3xl bg-white px-6 pt-6 pb-6"
-          style={{ border: "1px solid #efefef" }}
-        >
-          <div className="mt-0 flex flex-col gap-3.5">
-            <div className="flex flex-col gap-1.5 opacity-50">
-              <label className="text-[11px] font-semibold uppercase tracking-widest text-[#a0a0a0]">
-                Email
-              </label>
-              <div
-                className="flex items-center gap-3 rounded-2xl px-4 py-3.5"
-                style={{ backgroundColor: "#f7f7f7", border: "1.5px solid #e8e8e8" }}
-              >
-                <Mail className="size-[16px] shrink-0 text-[#c0c0c0]" />
-                <input
-                  disabled
-                  type="email"
-                  placeholder="you@example.com"
-                  className="min-w-0 flex-1 bg-transparent text-[14px] text-[#222222] outline-none placeholder-[#c0c0c0]"
-                />
-              </div>
-            </div>
+      {step === "email" ? (
+        <form onSubmit={handleLookup} className="mt-5 flex flex-1 flex-col gap-3.5">
+          {recoveryUnavailable ? (
+            <AuthMobileFormMessage
+              tone="info"
+              message="No security question on that account. Add one under Profile → Password after signing in."
+            />
+          ) : null}
+          <AuthMobileField
+            id="forgot-email"
+            label="Email"
+            icon={Mail}
+            type="email"
+            placeholder="you@example.com"
+            value={email}
+            onChange={(value) => {
+              setEmail(value)
+              clearFieldError("email")
+            }}
+            autoComplete="email"
+            error={fieldErrors.email}
+          />
+          <AuthMobileFormMessage message={formError} />
+          <button type="submit" disabled={busy} className={primaryButtonClass}>
+            {busy ? "Checking…" : "Continue"}
+          </button>
+          <BackToSignInLink />
+        </form>
+      ) : null}
 
-            <button
-              type="button"
-              disabled
-              className="flex h-[52px] w-full items-center justify-center rounded-2xl text-[15px] font-semibold text-white opacity-50"
-              style={{
-                background: "linear-gradient(135deg, #ff6a30 0%, #cc2e00 100%)",
-              }}
-            >
-              Send reset link
-            </button>
-
-            <GhostButton label="Back to sign in" onClick={() => router.push("/sign-in")} />
+      {step === "reset" ? (
+        <form onSubmit={handleReset} className="mt-5 flex flex-1 flex-col gap-3">
+          <div className="rounded-2xl border border-[#e8e8e8] bg-[#fafafa] px-4 py-3">
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-[#a0a0a0]">
+              Security question
+            </p>
+            <p className="mt-1 text-[13px] leading-snug text-[#222222]">{question}</p>
           </div>
+          <AuthMobileField
+            id="forgot-answer"
+            label="Your answer"
+            icon={HelpCircle}
+            type="text"
+            placeholder="Answer from setup"
+            value={answer}
+            onChange={(value) => {
+              setAnswer(value)
+              clearFieldError("answer")
+            }}
+            autoComplete="off"
+            error={fieldErrors.answer}
+          />
+          <AuthMobileField
+            id="forgot-new-password"
+            label="New password"
+            icon={Lock}
+            type={showPw ? "text" : "password"}
+            placeholder="At least 8 characters"
+            value={newPassword}
+            onChange={(value) => {
+              setNewPassword(value)
+              clearFieldError("newPassword")
+            }}
+            autoComplete="new-password"
+            error={fieldErrors.newPassword}
+            right={
+              <button
+                type="button"
+                onClick={() => setShowPw((v) => !v)}
+                className="text-[#c0c0c0]"
+                aria-label={showPw ? "Hide password" : "Show password"}
+              >
+                {showPw ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+              </button>
+            }
+          />
+          <AuthMobileField
+            id="forgot-confirm-password"
+            label="Confirm password"
+            icon={Lock}
+            type="password"
+            placeholder="Repeat password"
+            value={confirmPassword}
+            onChange={(value) => {
+              setConfirmPassword(value)
+              clearFieldError("confirmPassword")
+            }}
+            autoComplete="new-password"
+            error={fieldErrors.confirmPassword}
+          />
+          <AuthMobileFormMessage message={formError} />
+          <button type="submit" disabled={busy} className={primaryButtonClass}>
+            {busy ? "Updating…" : "Reset password"}
+          </button>
+          <BackToSignInLink />
+        </form>
+      ) : null}
+
+      {step === "done" ? (
+        <div className="mt-5 flex flex-1 flex-col gap-3.5">
+          <Link href="/sign-in" prefetch className={primaryButtonClass}>
+            Sign in
+          </Link>
+          <BackToSignInLink />
         </div>
-      </div>
-    </div>
+      ) : null}
+    </>
   )
 }
