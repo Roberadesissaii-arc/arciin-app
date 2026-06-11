@@ -216,5 +216,10 @@ export const DELETE = proxyUpstream
 export const PATCH = proxyUpstream
 export const PUT = proxyUpstream
 
-/** Allow large file uploads through the proxy (server-side ingest can take minutes). */
-export const maxDuration = 3600
+/**
+ * Vercel serverless function execution cap. Hobby plan allows a max of 300s, so
+ * cap here for the hosted-companion deploy. This is Vercel-only — on a self-hosted
+ * `next start` it is ignored, and large uploads are bounded by the route's own
+ * upstream timeout (AbortSignal.timeout above), not this value.
+ */
+export const maxDuration = 300
