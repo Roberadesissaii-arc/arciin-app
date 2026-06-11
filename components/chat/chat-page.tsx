@@ -16,7 +16,6 @@ import {
   ThumbsUp,
   Trash2,
   User,
-  Volume2,
   X,
 } from "lucide-react"
 
@@ -25,11 +24,9 @@ import {
   syncChatKeyboardOffset,
   useChatKeyboard,
 } from "@/hooks/use-chat-keyboard"
-import { useTextToSpeech } from "@/hooks/use-text-to-speech"
 import { ChatMarkdownContent } from "@/components/chat/chat-markdown-content"
 import { ChatModelBar } from "@/components/chat/chat-model-bar"
 import { ChatReasoningBlock } from "@/components/chat/chat-reasoning-block"
-import { VoicePickerSheet } from "@/components/chat/voice-picker-sheet"
 import { ArciinMark } from "@/components/ui/arciin-mark"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useChatChrome } from "@/components/chat/chat-chrome-context"
@@ -398,16 +395,6 @@ function MessageActions({
   const btn =
     "flex size-8 items-center justify-center rounded-lg text-[#717171] active:bg-[#f7f7f7]"
   const [copied, setCopied] = useState(false)
-  const [showVoiceTip, setShowVoiceTip] = useState(false)
-  const [showVoiceSheet, setShowVoiceSheet] = useState(false)
-  const {
-    supported: ttsSupported,
-    speaking,
-    speak,
-    stop: stopSpeech,
-    voiceQuality,
-    isIOS,
-  } = useTextToSpeech()
   const plain = plainTextFromMessage(content)
 
   async function handleCopy() {
@@ -420,37 +407,8 @@ function MessageActions({
     }
   }
 
-  async function handleListen() {
-    if (!plain || !ttsSupported) return
-    if (speaking) {
-      stopSpeech()
-      return
-    }
-    // One-time nudge: on iOS the natural voices must be downloaded by the user.
-    if (isIOS && voiceQuality === "limited") {
-      try {
-        if (!localStorage.getItem("arciin:voice-tip-dismissed")) {
-          setShowVoiceTip(true)
-        }
-      } catch {
-        /* storage blocked — skip the hint */
-      }
-    }
-    await speak(plain)
-  }
-
-  function dismissVoiceTip() {
-    setShowVoiceTip(false)
-    try {
-      localStorage.setItem("arciin:voice-tip-dismissed", "1")
-    } catch {
-      /* ignore */
-    }
-  }
-
   return (
-    <div className="mt-1.5">
-    <div className="flex items-center gap-0.5">
+    <div className="mt-1.5 flex items-center gap-0.5">
       {onFeedback ? (
         <>
           <button
@@ -483,42 +441,6 @@ function MessageActions({
           <Copy className="size-3.5" />
         )}
       </button>
-      {ttsSupported ? (
-        <button
-          type="button"
-          className={cn(btn, speaking && "text-accent")}
-          aria-label={speaking ? "Stop read aloud" : "Listen to response"}
-          disabled={!plain}
-          onClick={() => void handleListen()}
-        >
-          {speaking ? <Square className="size-3.5 fill-current" /> : <Volume2 className="size-3.5" />}
-        </button>
-      ) : null}
-    </div>
-      {showVoiceTip ? (
-        <div className="mt-2 rounded-xl bg-[#f7f7f7] px-3 py-2.5 text-[12px] leading-relaxed text-[#555]">
-          <p>
-            Want a more natural voice? Choose from the voices on your phone — or download an
-            Enhanced one — and preview each before setting it.
-          </p>
-          <div className="mt-2 flex items-center gap-4">
-            <button
-              type="button"
-              className="font-semibold text-accent"
-              onClick={() => {
-                setShowVoiceSheet(true)
-                dismissVoiceTip()
-              }}
-            >
-              Choose a voice
-            </button>
-            <button type="button" className="font-semibold text-[#888]" onClick={dismissVoiceTip}>
-              Not now
-            </button>
-          </div>
-        </div>
-      ) : null}
-      <VoicePickerSheet open={showVoiceSheet} onClose={() => setShowVoiceSheet(false)} />
     </div>
   )
 }

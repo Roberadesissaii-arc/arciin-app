@@ -6,7 +6,6 @@ import { Loader2, Settings } from "lucide-react"
 import { OfflineCachedNotice } from "@/components/settings/offline-cached-notice"
 import { AccentColorPicker } from "@/components/settings/accent-color-picker"
 import { MobileSettingsSegment } from "@/components/settings/mobile-segment"
-import { VoiceSettingRow } from "@/components/settings/voice-setting-row"
 import { PanelStatusBanner } from "@/components/settings/panel-status-banner"
 import { SettingsIntroCard } from "@/components/settings/settings-intro-card"
 import { MutedPanelError } from "@/components/shell/muted-panel-error"
@@ -303,8 +302,6 @@ export function PreferencesInlinePanel({ enabled }: { enabled: boolean }) {
             disabled={saving}
             onChange={(v) => void patchAccessibility({ keyboardNav: v })}
           />
-          <div className="h-px bg-[#ececec]" />
-          <VoiceSettingRow />
         </div>
       </div>
 

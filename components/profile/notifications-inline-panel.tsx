@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useCallback, useRef, useState } from "react"
-import { Bell, ChevronRight, Loader2, Volume2 } from "lucide-react"
+import { Bell, ChevronRight, Loader2 } from "lucide-react"
 
 import { OfflineCachedNotice } from "@/components/settings/offline-cached-notice"
 import { SettingsIntroCard } from "@/components/settings/settings-intro-card"
@@ -198,14 +198,6 @@ export function NotificationsInlinePanel({ enabled }: { enabled: boolean }) {
         </div>
         <ChevronRight className="size-4 shrink-0 text-[#c0c0c0]" />
       </Link>
-
-      <p className="flex items-start gap-2 text-[11px] leading-relaxed text-[#a0a0a0]">
-        <Volume2 className="mt-0.5 size-3.5 shrink-0" />
-        <span>
-          For read-aloud on AI replies, use the speaker button under each chat message on the Chat
-          tab.
-        </span>
-      </p>
 
       {patchError ? <MutedPanelError error={patchError} /> : null}
     </div>
