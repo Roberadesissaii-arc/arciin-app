@@ -10,7 +10,7 @@ import {
 } from "@/components/chat/chat-inline-assets"
 
 const FENCE_RE =
-  /(?:^|\n)\s*```([a-zA-Z0-9+#.-]*)(?:[ \t]+([^\n`]+)|\s*\r?\n([\s\S]*?))```[ \t]*(?:\r?\n|$)/g
+  /(?:^|\n)\s*```[ \t]*([a-zA-Z0-9+#.-]*)(?:[ \t]+([^\n`]+)|[ \t]*\r?\n([\s\S]*?))```[ \t]*(?:\r?\n|$)/g
 
 function parseInline(text: string): React.ReactNode {
   const pattern = /\*\*(.+?)\*\*|\*(.+?)\*|`([^`]+)`|\[([^\]]+)\]\(([^)]+)\)/g
@@ -33,7 +33,7 @@ function parseInline(text: string): React.ReactNode {
       nodes.push(
         <code
           key={k++}
-          className="rounded bg-[#f0f0f0] px-[5px] py-px font-mono text-[11px] text-[#444444]"
+          className="rounded bg-[#eef0f2] px-[5px] py-px font-mono text-[12px] text-[#b3261e]"
         >
           {m[3]}
         </code>,
@@ -122,14 +122,19 @@ function CodeBlock({ code, lang }: { code: string; lang?: string }) {
   const trimmed = code.replace(/\n+$/, "")
   if (!trimmed) return null
   return (
-    <div className="my-2.5 w-full min-w-0 max-w-full overflow-hidden rounded-xl border border-[#e5e5e5] bg-[#fafafa]">
-      {lang ? (
-        <div className="border-b border-[#ececec] px-3 py-1.5 font-mono text-[10px] font-medium uppercase tracking-wide text-[#717171]">
-          {lang}
-        </div>
-      ) : null}
-      <pre className="max-h-[min(40vh,280px)] overflow-x-auto overflow-y-auto px-3 py-2.5">
-        <code className="block font-mono text-[11px] leading-relaxed whitespace-pre text-[#222222]">
+    <div className="my-3 w-full min-w-0 max-w-full overflow-hidden rounded-xl border border-[#2a2f3a] bg-[#1e222a] shadow-sm">
+      <div className="flex items-center justify-between border-b border-white/10 px-3 py-1.5">
+        <span className="font-mono text-[10px] font-medium uppercase tracking-wide text-[#9aa4b2]">
+          {lang || "code"}
+        </span>
+        <span className="flex gap-1" aria-hidden>
+          <span className="size-2 rounded-full bg-[#ff5f56]" />
+          <span className="size-2 rounded-full bg-[#ffbd2e]" />
+          <span className="size-2 rounded-full bg-[#27c93f]" />
+        </span>
+      </div>
+      <pre className="max-h-[min(45vh,320px)] overflow-x-auto overflow-y-auto overscroll-x-contain px-3 py-2.5 [scrollbar-width:thin]">
+        <code className="block font-mono text-[12px] leading-[1.65] whitespace-pre text-[#e6e6e6]">
           {trimmed}
         </code>
       </pre>
@@ -167,7 +172,7 @@ function splitMarkdownSegments(content: string): Segment[] {
   const tail = content.slice(lastIndex)
   if (tail) {
     const open = tail.match(
-      /(?:^|\n)\s*```([a-zA-Z0-9+#.-]*)?(?:\s*\r?\n([\s\S]*)|\s*)$/,
+      /(?:^|\n)\s*```[ \t]*([a-zA-Z0-9+#.-]*)?(?:\s*\r?\n([\s\S]*)|\s*)$/,
     )
     if (open && open.index !== undefined) {
       const before = tail.slice(0, open.index)
@@ -190,6 +195,7 @@ function ProseMarkdown({ content }: { content: string }) {
   const nodes: React.ReactNode[] = []
   const listItems: { text: string; ordered: boolean }[] = []
   const tableLines: string[] = []
+  const quoteLines: string[] = []
   let k = 0
 
   function flushList() {
@@ -198,23 +204,52 @@ function ProseMarkdown({ content }: { content: string }) {
     const items = listItems.splice(0)
     nodes.push(
       ordered ? (
-        <ol key={k++} className="my-1 list-decimal space-y-0.5 pl-5 text-[13px]">
+        <ol key={k++} className="my-2 list-decimal space-y-1.5 pl-5 text-[13px]">
           {items.map((it, i) => (
-            <li key={i} className="pl-0.5 leading-relaxed text-[#333333]">
+            <li key={i} className="pl-1 leading-relaxed text-[#333333]">
               {parseInline(it.text)}
             </li>
           ))}
         </ol>
       ) : (
-        <ul key={k++} className="my-1 space-y-0.5 pl-1 text-[13px]">
+        <ul key={k++} className="my-2 space-y-1.5 pl-0.5 text-[13px]">
           {items.map((it, i) => (
-            <li key={i} className="flex gap-2 leading-relaxed">
-              <span className="mt-[7px] size-1.5 shrink-0 rounded-full bg-[#c0c0c0]" />
+            <li key={i} className="flex gap-2.5 leading-relaxed">
+              <span className="mt-[8px] size-1.5 shrink-0 rounded-full bg-accent/60" />
               <span className="min-w-0 break-words text-[#333333]">{parseInline(it.text)}</span>
             </li>
           ))}
         </ul>
       ),
+    )
+  }
+
+  function flushQuote() {
+    if (!quoteLines.length) return
+    const raw = quoteLines.splice(0)
+    // Group into paragraphs split on blank quote lines.
+    const paras: string[] = []
+    let cur = ""
+    for (const ln of raw) {
+      if (ln.trim() === "") {
+        if (cur) paras.push(cur)
+        cur = ""
+      } else {
+        cur = cur ? `${cur} ${ln.trim()}` : ln.trim()
+      }
+    }
+    if (cur) paras.push(cur)
+    nodes.push(
+      <blockquote
+        key={k++}
+        className="my-2.5 rounded-r-lg border-l-[3px] border-accent/50 bg-[#f6f7f9] py-2.5 pl-3.5 pr-3 text-[13px] leading-relaxed text-[#3a3a3a]"
+      >
+        {paras.map((p, i) => (
+          <p key={i} className={i > 0 ? "mt-2" : ""}>
+            {parseInline(p)}
+          </p>
+        ))}
+      </blockquote>,
     )
   }
 
@@ -268,6 +303,7 @@ function ProseMarkdown({ content }: { content: string }) {
   function flushAll() {
     flushList()
     flushTable()
+    flushQuote()
   }
 
   for (const line of lines) {
@@ -296,46 +332,54 @@ function ProseMarkdown({ content }: { content: string }) {
 
     if (trimmed.startsWith("|")) {
       flushList()
+      flushQuote()
       tableLines.push(line)
       continue
     }
     flushTable()
 
-    const h2 = trimmed.match(/^#{1,2}\s+(.+)/)
-    const h3 = !h2 && trimmed.match(/^###\s+(.+)/)
+    const isQuote = trimmed.startsWith(">")
+    if (!isQuote) flushQuote()
+
+    const h2 = !isQuote && trimmed.match(/^#{1,2}\s+(.+)/)
+    const h3 = !isQuote && !h2 && trimmed.match(/^###\s+(.+)/)
     const section =
+      !isQuote &&
       !h2 &&
       !h3 &&
       /^[A-Za-z][\w\s\-/]{1,48}:$/.test(trimmed) &&
       !trimmed.startsWith("-")
-    const hr = /^---+$/.test(trimmed)
-    const ul = trimmed.match(/^[-*]\s+(.+)/)
-    const ol = trimmed.match(/^\d+\.\s+(.+)/)
+    const hr = !isQuote && /^---+$/.test(trimmed)
+    const ul = !isQuote && trimmed.match(/^[-*]\s+(.+)/)
+    const ol = !isQuote && trimmed.match(/^\d+\.\s+(.+)/)
 
-    if (h2) {
+    if (isQuote) {
+      flushList()
+      quoteLines.push(trimmed.replace(/^>+[ \t]?/, ""))
+    } else if (h2) {
       flushList()
       nodes.push(
-        <p key={k++} className="mb-0.5 mt-3 text-[14px] font-bold text-[#222222] first:mt-0">
+        <p key={k++} className="mb-1 mt-4 text-[14px] font-bold text-[#222222] first:mt-0">
           {parseInline(h2[1])}
         </p>,
       )
     } else if (h3) {
       flushList()
       nodes.push(
-        <p key={k++} className="mb-0.5 mt-2 text-[13px] font-semibold text-[#222222]">
+        <p key={k++} className="mb-1 mt-3 text-[13px] font-semibold text-[#222222] first:mt-0">
           {parseInline(h3[1])}
         </p>,
       )
     } else if (section) {
       flushList()
       nodes.push(
-        <p key={k++} className="mb-0.5 mt-2.5 text-[13px] font-semibold text-[#222222] first:mt-0">
+        <p key={k++} className="mb-1 mt-3.5 text-[13px] font-semibold text-[#222222] first:mt-0">
           {trimmed.slice(0, -1)}
         </p>,
       )
     } else if (hr) {
       flushList()
-      nodes.push(<hr key={k++} className="my-2 border-[#ececec]" />)
+      nodes.push(<hr key={k++} className="my-3 border-[#ececec]" />)
     } else if (ul) {
       if (listItems[0]?.ordered) flushList()
       listItems.push({ text: ul[1], ordered: false })
@@ -355,7 +399,7 @@ function ProseMarkdown({ content }: { content: string }) {
   }
 
   flushAll()
-  return <div className="min-w-0 space-y-[3px]">{nodes}</div>
+  return <div className="min-w-0 space-y-2">{nodes}</div>
 }
 
 export function ChatMarkdownContent({ content }: { content: string }) {
@@ -363,7 +407,7 @@ export function ChatMarkdownContent({ content }: { content: string }) {
   let k = 0
 
   return (
-    <div className="min-w-0 max-w-full space-y-[2px]">
+    <div className="min-w-0 max-w-full space-y-1.5">
       {segments.map((seg) => {
         if (seg.type === "code") {
           return <CodeBlock key={k++} lang={seg.lang} code={seg.body} />
