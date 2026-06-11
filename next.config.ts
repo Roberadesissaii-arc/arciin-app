@@ -52,6 +52,24 @@ const nextConfig: NextConfig = {
     // Must match API MAX_UPLOAD_SIZE_MB — uploads via /api rewrite buffer in Next.
     proxyClientMaxBodySize: proxyMaxBodyBytes,
   },
+  /**
+   * Keep the chat SSE stream un-buffered end to end. `X-Accel-Buffering: no`
+   * stops nginx/Cloudflare-style proxies from buffering, and `no-transform`
+   * stops both Next's own gzip (the `compression` layer skips no-transform
+   * responses) and Cloudflare from re-compressing — gzip buffers chunks, which
+   * makes the reply appear all at once. Applies to the standalone rewrite path
+   * (/api/chat) and the hosted-companion route (/api/arciin/chat).
+   */
+  async headers() {
+    const noBuffer = [
+      { key: "X-Accel-Buffering", value: "no" },
+      { key: "Cache-Control", value: "no-cache, no-transform" },
+    ]
+    return [
+      { source: "/api/chat", headers: noBuffer },
+      { source: "/api/arciin/chat", headers: noBuffer },
+    ]
+  },
   async rewrites() {
     const upstream = apiUrl.replace(/\/$/, "")
     return [

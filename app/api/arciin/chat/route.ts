@@ -1,8 +1,14 @@
 import { NextResponse } from "next/server"
 
 import { validateProxyApiBase } from "@/lib/security/validate-proxy-upstream"
+import { getStandaloneApiBaseUrl } from "@/lib/standalone/api-origin"
+import { isStandaloneApp } from "@/lib/standalone/config"
 
 const API_BASE_HEADER = "x-arciin-api-base"
+
+// Stream the reply token-by-token — never let the platform cache or buffer it.
+export const dynamic = "force-dynamic"
+export const runtime = "nodejs"
 
 /** Abort if the upstream does not answer headers in time — never cuts an open stream. */
 const CONNECT_TIMEOUT_MS = 20_000
@@ -13,7 +19,14 @@ const CONNECT_TIMEOUT_MS = 20_000
  */
 export async function POST(request: Request) {
   const auth = request.headers.get("authorization")
-  const apiBase = request.headers.get(API_BASE_HEADER)?.replace(/\/+$/, "")
+  let apiBase = request.headers.get(API_BASE_HEADER)?.replace(/\/+$/, "")
+
+  // Standalone co-located: the browser sends no override header — resolve the
+  // server-side API base (ARCIIN_API_URL) so chat streams through this handler
+  // (which sets anti-buffering headers) instead of the bare /api rewrite.
+  if (!apiBase && isStandaloneApp()) {
+    apiBase = getStandaloneApiBaseUrl().replace(/\/+$/, "")
+  }
 
   if (!auth?.startsWith("Bearer ") || !apiBase) {
     return NextResponse.json(
@@ -90,7 +103,10 @@ export async function POST(request: Request) {
     status: 200,
     headers: {
       "Content-Type": res.headers.get("content-type") ?? "text/event-stream",
-      "Cache-Control": "no-cache",
+      // no-transform stops gzip (which buffers chunks); X-Accel-Buffering stops
+      // reverse-proxy buffering — together they keep the stream incremental.
+      "Cache-Control": "no-cache, no-transform",
+      "X-Accel-Buffering": "no",
       Connection: "keep-alive",
     },
   })

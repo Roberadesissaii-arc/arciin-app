@@ -1,4 +1,3 @@
-import { getBrowserApiUrl } from "@/lib/api/browser-api-origin"
 import {
   arciinProxyHeaders,
   needsArciinSameOriginProxy,
@@ -209,10 +208,15 @@ type StreamHandlers = {
   signal?: AbortSignal
 }
 
-/** PWA on Vercel → same-origin proxy; standalone/LAN co-located → page origin `/api` (like desktop). */
+/**
+ * Chat SSE endpoint. Both the standalone and Vercel-companion paths go through the
+ * `/api/arciin/chat` route handler — it streams explicitly and sets anti-buffering
+ * headers (the bare `/api` rewrite cannot, so it buffered the reply). Standalone sends
+ * no api-base header; the handler resolves the co-located server API itself.
+ */
 function chatStreamUrlCandidates(connection: MobileConnection): string[] {
   if (typeof window !== "undefined" && isStandaloneApp()) {
-    return [getBrowserApiUrl("/chat")]
+    return ["/api/arciin/chat"]
   }
   if (needsArciinSameOriginProxy(connection.apiBaseUrl)) {
     return ["/api/arciin/chat"]
