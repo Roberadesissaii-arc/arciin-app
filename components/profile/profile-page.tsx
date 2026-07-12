@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import {
   Bell,
   Clock3,
@@ -40,8 +40,12 @@ import { SessionsInlinePanel } from "@/components/profile/sessions-inline-panel"
 import { SessionSecurityInlinePanel } from "@/components/profile/session-security-inline-panel"
 import { ProfileInlinePanel } from "@/components/profile/profile-inline-panel"
 import { AttachDiskInlinePanel } from "@/components/profile/attach-disk-inline-panel"
+import { LicenseInlinePanel } from "@/components/profile/license-inline-panel"
 import { StorageInlinePanel } from "@/components/profile/storage-inline-panel"
 import { VaultInlinePanel } from "@/components/profile/vault-inline-panel"
+import { PlanBadge } from "@/components/shell/plan-badge"
+import { getLicenseStatus } from "@/lib/api/license"
+import { useStablePanelLoad } from "@/lib/hooks/use-stable-panel-load"
 import {
   SettingsGroup,
   SettingsGroupDivider,
@@ -90,6 +94,17 @@ export function ProfilePage() {
   const [error, setError] = useState<string | null>(null)
   const [profileOpen, setProfileOpen] = useState(false)
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+
+  const licenseLoader = useCallback(
+    (conn: Parameters<typeof getLicenseStatus>[0], signal: AbortSignal) =>
+      getLicenseStatus(conn, signal),
+    [],
+  )
+  const { data: licenseStatus } = useStablePanelLoad(true, licenseLoader, {
+    cacheKey: "license-status",
+    staleTimeMs: 60_000,
+  })
+  const currentPlan = licenseStatus?.plan ?? null
 
   const sessionKey = connection?.sessionToken ?? null
   const toggleSection = (key: string) =>
@@ -173,7 +188,6 @@ export function ProfilePage() {
   const serverConnected = isServerConnected(serverReachable)
   const displayName = profileDisplayName(user, serverReachable)
   const displayEmail = profileDisplayEmail(user, serverReachable)
-  const roleLabel = serverConnected ? (user?.role ?? "Member") : "—"
   const avatarCacheKey = `${user?.id ?? ""}-${user?.avatarUrl ?? ""}-${user?.updatedAt ?? ""}`
 
   return (
@@ -203,7 +217,8 @@ export function ProfilePage() {
               <User className="size-8 text-zinc-500" strokeWidth={1.5} />
             </div>
           )}
-          <div className="text-center">
+          <div className="flex flex-col items-center gap-2 text-center">
+            {currentPlan ? <PlanBadge plan={currentPlan} /> : null}
             <p
               className="text-[20px] font-bold text-white"
               style={{ fontFamily: "var(--font-space-grotesk, sans-serif)", letterSpacing: "-0.3px" }}
@@ -213,11 +228,6 @@ export function ProfilePage() {
             {displayEmail ? (
               <p className="mt-1 text-[12px] text-zinc-400">{displayEmail}</p>
             ) : null}
-            <div className="mt-2 inline-block rounded-xl border border-white/10 bg-white/[0.06] px-3 py-1">
-              <p className="text-[11px] font-bold uppercase tracking-wide text-zinc-300">
-                {roleLabel}
-              </p>
-            </div>
           </div>
           <div className="flex w-full items-center justify-center border-t border-white/[0.08] pt-4">
             <div className="flex flex-1 flex-col items-center gap-1">
@@ -308,6 +318,16 @@ export function ProfilePage() {
         <SectionLabel label="Instance" />
         <SettingsGroup>
           <SettingsGroupItem
+            icon={Usb}
+            label="Attach disk"
+            sub="Mounted drives, USB/SSD, and transfer"
+            open={sectionOpen("attach-disk")}
+            onToggle={() => toggleSection("attach-disk")}
+          >
+            <AttachDiskInlinePanel enabled={sectionOpen("attach-disk")} />
+          </SettingsGroupItem>
+          <SettingsGroupDivider />
+          <SettingsGroupItem
             icon={HardDrive}
             label="Storage"
             sub="Usage & root path"
@@ -318,16 +338,6 @@ export function ProfilePage() {
           </SettingsGroupItem>
           <SettingsGroupDivider />
           <SettingsGroupItem
-            icon={Usb}
-            label="Attach disk"
-            sub="SSD, USB & transfer"
-            open={sectionOpen("attach-disk")}
-            onToggle={() => toggleSection("attach-disk")}
-          >
-            <AttachDiskInlinePanel enabled={sectionOpen("attach-disk")} />
-          </SettingsGroupItem>
-          <SettingsGroupDivider />
-          <SettingsGroupItem
             icon={Globe}
             label="Remote access"
             sub="Domain, LAN & tunnel"
@@ -335,6 +345,20 @@ export function ProfilePage() {
             onToggle={() => toggleSection("remote")}
           >
             <RemoteAccessInlinePanel enabled={sectionOpen("remote")} />
+          </SettingsGroupItem>
+          <SettingsGroupDivider />
+          <SettingsGroupItem
+            icon={KeyRound}
+            label="License"
+            sub={
+              licenseStatus
+                ? `${licenseStatus.planName} plan${licenseStatus.premiumActive ? " · premium active" : ""}`
+                : "Plan & activation status"
+            }
+            open={sectionOpen("license")}
+            onToggle={() => toggleSection("license")}
+          >
+            <LicenseInlinePanel enabled={sectionOpen("license")} />
           </SettingsGroupItem>
         </SettingsGroup>
       </div>

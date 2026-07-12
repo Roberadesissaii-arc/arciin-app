@@ -88,7 +88,17 @@ export function useChatKeyboard(
     }
 
     const onFocusOut = () => {
-      window.setTimeout(scheduleUpdate, 80)
+      window.setTimeout(() => {
+        scheduleUpdate()
+        if (keyboardOverlapPx() === 0 && rootRef.current && composerRef.current) {
+          forceResetChatKeyboard(rootRef.current, composerRef.current)
+        }
+      }, 80)
+      window.setTimeout(() => {
+        if (keyboardOverlapPx() === 0 && rootRef.current && composerRef.current) {
+          forceResetChatKeyboard(rootRef.current, composerRef.current)
+        }
+      }, 320)
     }
 
     scheduleUpdate()

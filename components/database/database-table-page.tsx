@@ -13,6 +13,7 @@ import {
 } from "lucide-react"
 
 import { useConnection } from "@/components/providers/connection-provider"
+import { MobilePageIntro, MobilePageStickyHeader } from "@/components/shell/mobile-page-intro"
 import { fetchAdminTableData, fetchAdminTables } from "@/lib/api/admin"
 import { formatApiError } from "@/lib/api/errors"
 import { formatColumnLabel, TableCell } from "@/lib/database/table-cell"
@@ -305,44 +306,31 @@ export function DatabaseTablePage({ tableName }: { tableName: string }) {
   return (
     <div className="flex flex-col gap-4">
 
-      {/* ── sticky intro card ───────────────────────────────────── */}
-      <div
-        className="sticky top-0 z-10 -mx-4 -mt-4 px-4 pb-2"
-        style={{ backgroundColor: "#f7f7f7", paddingTop: "max(1rem, env(safe-area-inset-top, 0px))" }}
-      >
-        <div className="page-intro-hero overflow-hidden rounded-3xl">
-          <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-5">
-            <div className="min-w-0 flex-1">
-              <p
-                className="text-[22px] font-black leading-none tracking-tight text-white"
-                style={{ fontFamily: "var(--font-space-grotesk, sans-serif)" }}
-              >
-                {label}
-              </p>
-              <p className="mt-2 text-[12.5px] leading-relaxed" style={{ color: "rgba(255,255,255,0.72)" }}>
-                {description}
-              </p>
-              <p className="mt-2 text-[12px] font-semibold" style={{ color: "rgba(255,255,255,0.9)" }}>
-                {loading && !data
-                  ? "Loading…"
-                  : data
-                    ? `${data.total.toLocaleString()} row${data.total === 1 ? "" : "s"} · page ${page} of ${totalPages}`
-                    : "Read-only · PostgreSQL"}
-              </p>
-            </div>
+      <MobilePageStickyHeader>
+        <MobilePageIntro
+          title={label}
+          subtitle={description}
+          status={
+            loading && !data
+              ? "Loading…"
+              : data
+                ? `${data.total.toLocaleString()} row${data.total === 1 ? "" : "s"} · page ${page} of ${totalPages}`
+                : "Read-only · PostgreSQL"
+          }
+          cornerIcon={Database}
+          statusIcon={Database}
+          action={
             <Link
               href="/database"
-              className="flex size-9 shrink-0 items-center justify-center rounded-xl active:opacity-70"
-              style={{ backgroundColor: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.3)" }}
+              className="flex size-8 shrink-0 items-center justify-center rounded-xl border border-[#e5e5e5] bg-white text-[#717171] active:bg-[#f7f7f7]"
               aria-label="Back to database"
             >
-              <ArrowLeft className="size-4 text-white" />
+              <ArrowLeft className="size-4" />
             </Link>
-          </div>
-        </div>
+          }
+        />
 
-        {/* search + refresh */}
-        <div className="mt-2 flex items-center gap-2">
+        <div className="mt-1.5 flex items-center gap-2">
           <div
             className="flex flex-1 items-center gap-2 rounded-2xl bg-white px-3.5 py-2.5"
             style={{ border: "1px solid #e5e5e5" }}
@@ -372,7 +360,7 @@ export function DatabaseTablePage({ tableName }: { tableName: string }) {
             <RefreshCw className={`size-4 ${refreshing ? "animate-spin" : ""}`} />
           </button>
         </div>
-      </div>
+      </MobilePageStickyHeader>
 
       {/* ── error ───────────────────────────────────────────────── */}
       {error ? (

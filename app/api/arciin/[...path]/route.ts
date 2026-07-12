@@ -4,6 +4,7 @@ import { ARCIIN_API_BASE_HEADER } from "@/lib/api/arciin-proxy"
 import {
   buildUpstreamSearch,
   isCoLocatedProxyTarget,
+  resolveProxyUpstreamApiBase,
   validateProxyApiBase,
 } from "@/lib/security/validate-proxy-upstream"
 
@@ -64,6 +65,15 @@ async function proxyUpstream(request: Request, context: RouteContext) {
       try { resolvedApiBase = atob(encoded).replace(/\/+$/, "") } catch { /* ignore */ }
     }
   }
+
+  if (!resolvedApiBase) {
+    return NextResponse.json(
+      { error: { code: "BAD_REQUEST", message: "Missing server address." } },
+      { status: 400 },
+    )
+  }
+
+  resolvedApiBase = resolveProxyUpstreamApiBase(resolvedApiBase, request.url) ?? resolvedApiBase
 
   if (!resolvedApiBase) {
     return NextResponse.json(
@@ -147,7 +157,14 @@ async function proxyUpstream(request: Request, context: RouteContext) {
     upstreamHeaders.Range = rangeHeader
   }
 
-  const timeoutMs = isUploadPath ? 3_600_000 : isDownloadPath ? 600_000 : 15_000
+  const isTtsPath = subPath === "chat/tts"
+  const timeoutMs = isUploadPath
+    ? 3_600_000
+    : isDownloadPath
+      ? 600_000
+      : isTtsPath
+        ? 120_000
+        : 15_000
 
   let res: Response
   try {

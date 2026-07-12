@@ -1,7 +1,7 @@
 "use client"
 
 import { usePathname } from "next/navigation"
-import { ChevronRight, CloudUpload, FolderPlus, Loader2, RefreshCw } from "lucide-react"
+import { ChevronRight, CloudUpload, FolderPlus, Link2, Loader2, RefreshCw } from "lucide-react"
 
 import { useFilesChromeOptional } from "@/components/files/files-chrome-context"
 import { FILES_FILTERS } from "@/lib/files/filter-config"
@@ -21,9 +21,11 @@ export function FilesMobileHeader() {
 
   const chrome = ctx?.chrome
 
-  /* All-folders view has its own in-page header — do not show Files filters here */
+  /* All-folders view has its own in-page header — show only a safe-area spacer
+     so that page's title clears the status bar / notch (returning null here
+     left it tucked under the safe area). */
   if (chrome?.view === "all-folders") {
-    return null
+    return <div className="shrink-0 bg-[#f7f7f7] pt-safe" aria-hidden />
   }
 
   return (
@@ -61,6 +63,16 @@ export function FilesMobileHeader() {
                 <FolderPlus className="size-4" />
               </button>
             ) : null}
+            <button
+              type="button"
+              onClick={() => chrome?.onImportLink()}
+              disabled={!chrome?.canImportLink}
+              className="flex size-11 items-center justify-center rounded-xl bg-white text-[#717171] active:opacity-70 disabled:opacity-40"
+              style={{ border: "1px solid #e5e5e5" }}
+              aria-label="Import from link"
+            >
+              <Link2 className="size-4" />
+            </button>
             <button
               type="button"
               disabled={!chrome?.canUpload || chrome?.uploading}

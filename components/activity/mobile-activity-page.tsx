@@ -6,6 +6,7 @@ import { Activity, Loader2, RefreshCw, Search, X } from "lucide-react"
 import { activityBadgeStyle } from "@/lib/activity/badge-style"
 import { activityIconFor, activityTypeLabel, Clock3 } from "@/lib/activity/icons"
 import { MobilePagination } from "@/components/ui/mobile-pagination"
+import { MobilePageIntro, MobilePageStickyHeader } from "@/components/shell/mobile-page-intro"
 import { formatApiError } from "@/lib/api/errors"
 import { fetchRecentActivity } from "@/lib/api/notifications"
 import { PageFetchErrorAlert } from "@/components/shell/page-fetch-error-alert"
@@ -77,32 +78,20 @@ export function MobileActivityPage({ title = "Activity" }: { title?: string }) {
   return (
     <div className="flex flex-col gap-4">
 
-      {/* ── sticky intro card ───────────────────────────────────── */}
-      <div
-        className="sticky top-0 z-10 -mx-4 -mt-4 px-4 pb-2"
-        style={{ backgroundColor: "#f7f7f7", paddingTop: "max(1rem, env(safe-area-inset-top, 0px))" }}
-      >
-        <div className="page-intro-hero overflow-hidden rounded-3xl">
-          <div className="px-5 pt-5 pb-5">
-            <p
-              className="text-[22px] font-black leading-none tracking-tight text-white"
-              style={{ fontFamily: "var(--font-space-grotesk, sans-serif)" }}
-            >
-              {title}
-            </p>
-            <p className="mt-2 text-[12.5px] leading-relaxed" style={{ color: "rgba(255,255,255,0.72)" }}>
-              A timeline of everything happening on your Arciin instance — uploads, library changes, jobs, and system events.
-            </p>
-            <p className="mt-2 text-[12px] font-semibold" style={{ color: "rgba(255,255,255,0.9)" }}>
-              {loading
-                ? "Loading…"
-                : `${items.length} event${items.length === 1 ? "" : "s"} in timeline`}
-            </p>
-          </div>
-        </div>
+      <MobilePageStickyHeader>
+        <MobilePageIntro
+          title={title}
+          subtitle="A timeline of everything happening on your Arciin instance — uploads, library changes, jobs, and system events."
+          status={
+            loading
+              ? "Loading…"
+              : `${items.length} event${items.length === 1 ? "" : "s"} in timeline`
+          }
+          cornerIcon={Activity}
+          statusIcon={Activity}
+        />
 
-        {/* search + refresh */}
-        <div className="mt-2 flex items-center gap-2">
+        <div className="mt-1.5 flex items-center gap-2">
           <div
             className="flex flex-1 items-center gap-2 rounded-2xl bg-white px-3.5 py-2.5"
             style={{ border: "1px solid #e5e5e5" }}
@@ -132,7 +121,7 @@ export function MobileActivityPage({ title = "Activity" }: { title?: string }) {
             <RefreshCw className={`size-4 ${loading ? "animate-spin" : ""}`} />
           </button>
         </div>
-      </div>
+      </MobilePageStickyHeader>
 
       {/* ── error ───────────────────────────────────────────────── */}
       <PageFetchErrorAlert error={error} onRetry={() => void load()} />

@@ -19,12 +19,6 @@ import { authWithClientApiBase } from "@/lib/connection/merge-auth"
 import { displayServerLabel } from "@/lib/connection/normalize-url"
 import { loadServerProfile } from "@/lib/connection/storage"
 import { useConnection } from "@/components/providers/connection-provider"
-import { getStandaloneApiBaseUrl } from "@/lib/standalone/api-origin"
-import { isFirstRunSetupContext } from "@/lib/standalone/first-run"
-import {
-  getCachedStandaloneInstanceGate,
-  loadStandaloneInstanceGate,
-} from "@/lib/standalone/instance-gate"
 
 function detectDeviceName() {
   if (typeof navigator === "undefined") return "Mobile"
@@ -38,16 +32,11 @@ export function SignInPage() {
   const router = useRouter()
   const { ready, connection, applyAuth } = useConnection()
 
-  const initialGate = getCachedStandaloneInstanceGate()
-  const [booting, setBooting] = useState(!initialGate)
-  const [instanceReady, setInstanceReady] = useState(initialGate?.instanceReady ?? false)
-  const [instanceName, setInstanceName] = useState<string | null>(
-    initialGate?.status?.instanceName ?? null,
-  )
+  const [booting, setBooting] = useState(true)
+  const [instanceName, setInstanceName] = useState<string | null>(null)
   const [showSuccess, setShowSuccess] = useState(false)
   const [connectedUrl, setConnectedUrl] = useState("")
   const [connectedInstance, setConnectedInstance] = useState("Arciin")
-  const [bootError, setBootError] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<AuthFieldErrors>({})
   const [formError, setFormError] = useState<string | null>(null)
 
@@ -64,47 +53,14 @@ export function SignInPage() {
       return
     }
 
-    const cached = getCachedStandaloneInstanceGate()
-    if (cached) {
-      if (!cached.instanceReady || isFirstRunSetupContext(cached)) {
-        router.replace("/setup")
-        return
-      }
-      if (cached.error) {
-        setBootError(cached.error)
-        setBooting(false)
-        return
-      }
-      setInstanceReady(true)
-      setInstanceName(cached.status?.instanceName ?? "Arciin")
-      setBooting(false)
+    const profile = loadServerProfile()
+    if (!profile) {
+      router.replace("/connect")
       return
     }
 
-    let cancelled = false
-    void (async () => {
-      const gate = await loadStandaloneInstanceGate()
-      if (cancelled) return
-
-      if (!gate.instanceReady || isFirstRunSetupContext(gate)) {
-        router.replace("/setup")
-        return
-      }
-
-      if (gate.error) {
-        setBootError(gate.error)
-        setBooting(false)
-        return
-      }
-
-      setInstanceReady(true)
-      setInstanceName(gate.status?.instanceName ?? "Arciin")
-      setBooting(false)
-    })()
-
-    return () => {
-      cancelled = true
-    }
+    setInstanceName(profile.instanceName ?? "Arciin")
+    setBooting(false)
   }, [ready, connection, router])
 
   function clearFieldError(key: keyof AuthFieldErrors) {
@@ -123,7 +79,13 @@ export function SignInPage() {
       return
     }
 
-    const apiBase = loadServerProfile()?.apiBaseUrl ?? getStandaloneApiBaseUrl()
+    const profile = loadServerProfile()
+    if (!profile) {
+      router.replace("/connect")
+      return
+    }
+
+    const apiBase = profile.apiBaseUrl
     setSigningIn(true)
     try {
       const auth = await loginMobileDevice(
@@ -168,17 +130,9 @@ export function SignInPage() {
   return (
     <>
       <AuthMobileCardHeader
-        title={instanceReady ? "Sign in" : "Welcome back"}
-        subtitle={
-          instanceReady
-            ? `Sign in to ${name} with the email and password from setup.`
-            : "Sign in to your Arciin account on this device"
-        }
+        title="Sign in"
+        subtitle={`Sign in to ${name} with the email and password from your Arciin server.`}
       />
-
-      {bootError ? (
-        <AuthMobileFormMessage message={bootError} tone="error" />
-      ) : null}
 
       <form onSubmit={handleSignIn} className="mt-5 flex flex-1 flex-col gap-3.5">
         <AuthMobileField
@@ -248,13 +202,15 @@ export function SignInPage() {
 
         <AuthMobileFormMessage message={formError} />
 
-        <button
-          type="submit"
-          disabled={signingIn}
-          className="auth-primary-button"
-        >
+        <button type="submit" disabled={signingIn} className="auth-primary-button">
           {signingIn ? "Signing in…" : "Sign in"}
         </button>
+
+        <p className="text-center text-[12.5px] text-[#717171]">
+          <Link href="/connect" prefetch className="font-medium text-[#ff4f12] underline-offset-2 hover:underline">
+            Use a different server
+          </Link>
+        </p>
 
         <p className="mt-auto pt-2 text-center">
           <Link

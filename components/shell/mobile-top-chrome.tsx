@@ -39,5 +39,10 @@ export function MobileTopChrome() {
     return <ChatMobileHeader />
   }
 
-  return <div className="shrink-0 bg-[#f7f7f7] pt-safe" aria-hidden />
+  return (
+    <div
+      className="sticky top-0 z-[11] shrink-0 bg-[#f7f7f7] pt-safe"
+      aria-hidden
+    />
+  )
 }

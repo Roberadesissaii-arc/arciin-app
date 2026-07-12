@@ -1,15 +1,28 @@
 import { Skeleton } from "@/components/ui/skeleton"
 
-/** Placeholder matching the intro vault card on passwords-page. */
+/** Placeholder matching the light dashboard intro on passwords-page. */
 export function PasswordVaultIntroSkeleton() {
   return (
-    <div className="accent-link-card flex items-center gap-3 rounded-2xl p-4" aria-hidden>
-      <Skeleton className="size-10 shrink-0 rounded-xl" />
-      <div className="min-w-0 flex-1 space-y-2">
-        <Skeleton className="h-3.5 w-28 rounded-md" />
-        <Skeleton className="h-2.5 w-[85%] max-w-[240px] rounded-md" />
+    <div className="mobile-page-intro" aria-hidden>
+      <div className="mobile-page-intro__content">
+        <Skeleton className="h-5 w-32 rounded-md" />
+        <Skeleton className="mobile-page-intro__subtitle mt-2 h-3 w-56 max-w-full rounded-md" />
+        <Skeleton className="mobile-page-intro__description mt-1.5 h-3 w-full max-w-[260px] rounded-md" />
       </div>
-      <Skeleton className="h-8 w-16 shrink-0 rounded-xl" />
+      <div className="mobile-page-intro__footer">
+        <Skeleton className="h-7 w-24 rounded-full" />
+        <Skeleton className="h-8 w-28 rounded-full" />
+      </div>
+    </div>
+  )
+}
+
+export function PasswordVaultSearchRowSkeleton() {
+  return (
+    <div className="flex items-center gap-2" aria-hidden>
+      <Skeleton className="h-11 min-w-0 flex-1 rounded-2xl" />
+      <Skeleton className="size-10 shrink-0 rounded-2xl" />
+      <Skeleton className="size-10 shrink-0 rounded-2xl" />
     </div>
   )
 }

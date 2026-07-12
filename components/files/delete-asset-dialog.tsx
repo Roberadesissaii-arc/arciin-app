@@ -6,6 +6,7 @@ import { Loader2 } from "lucide-react"
 type DeleteAssetDialogProps = {
   open: boolean
   fileName: string
+  count?: number
   busy?: boolean
   onCancel: () => void
   onConfirm: () => void
@@ -14,6 +15,7 @@ type DeleteAssetDialogProps = {
 export function DeleteAssetDialog({
   open,
   fileName,
+  count = 1,
   busy,
   onCancel,
   onConfirm,
@@ -40,11 +42,20 @@ export function DeleteAssetDialog({
           className="text-[17px] font-bold text-[#111111]"
           style={{ fontFamily: "var(--font-space-grotesk, sans-serif)" }}
         >
-          Delete file?
+          {count > 1 ? `Delete ${count} files?` : "Delete file?"}
         </h2>
         <p id="delete-asset-desc" className="mt-2 text-[13px] leading-relaxed text-[#717171]">
-          <span className="font-medium text-[#222222]">{fileName}</span> will be removed from your
-          library. This cannot be undone.
+          {count > 1 ? (
+            <>
+              <span className="font-medium text-[#222222]">{count} files</span> will be removed from
+              your library. This cannot be undone.
+            </>
+          ) : (
+            <>
+              <span className="font-medium text-[#222222]">{fileName}</span> will be removed from your
+              library. This cannot be undone.
+            </>
+          )}
         </p>
         <div className="mt-5 flex gap-2">
           <button

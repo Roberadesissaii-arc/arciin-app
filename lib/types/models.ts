@@ -45,6 +45,8 @@ export type StorageVolumeOption = {
   label: string
   arciinPath: string
   mountPoint: string | null
+  filesystem?: string | null
+  device?: string | null
   totalBytes: number | null
   availableBytes: number | null
   writable: boolean
@@ -66,6 +68,31 @@ export type UnmountedBlockDevice = {
   type: "disk" | "part"
   suggestedMountPoint: string
   suggestedArciinPath: string
+  model?: string | null
+  transport?: string | null
+}
+
+export type CurrentStorageDeviceContext = {
+  mountDevice: string | null
+  mountPoint: string | null
+  filesystemTotalBytes: number | null
+  filesystemAvailableBytes: number | null
+  blockDevice: string | null
+  blockDeviceSizeBytes: number | null
+  blockDeviceModel: string | null
+  blockDeviceTransport: string | null
+}
+
+export type StorageBlockDisk = {
+  id: string
+  device: string
+  name: string
+  sizeLabel: string
+  sizeBytes: number | null
+  model: string | null
+  transport: string | null
+  role: "system" | "attached" | "internal"
+  unmountedPartitionCount: number
 }
 
 export type MountBlockDeviceResult = {
@@ -80,7 +107,10 @@ export type StorageVolumesResponse = {
   currentStorageRoot: string
   installNotes?: string[]
   isDockerRuntime?: boolean
-  unmountedDevices?: UnmountedBlockDevice[]
+  unmountedDevices: UnmountedBlockDevice[]
+  blockDisks?: StorageBlockDisk[]
+  currentDeviceContext?: CurrentStorageDeviceContext | null
+  mountPasswordlessSudo?: boolean
   migrationTargets?: StorageVolumeOption[]
 }
 
@@ -313,6 +343,7 @@ export type ModelProfile = {
   hasApiKey: boolean
   baseUrl: string | null
   defaultModel: string | null
+  ttsModel: string | null
   isDefault: boolean
   isEnabled: boolean
   createdAt: string
@@ -325,6 +356,7 @@ export type CreateModelProfileInput = {
   apiKey?: string | null
   baseUrl?: string | null
   defaultModel?: string | null
+  ttsModel?: string | null
   isDefault?: boolean
   isEnabled?: boolean
 }
@@ -342,6 +374,18 @@ export type OllamaAvailableModelsResult = {
   fromCache: boolean
 }
 
+export type OllamaModelCapabilityEntry = {
+  model: string
+  capabilities: string[]
+  vision: boolean
+  thinking: boolean
+}
+
+export type OllamaModelCapabilitiesResult = {
+  entries: OllamaModelCapabilityEntry[]
+  fromCache: boolean
+}
+
 export type OllamaCloudModelsResult = {
   probes: OllamaCloudModelProbe[]
   fromCache: boolean
@@ -356,6 +400,8 @@ export type HomeOverview = {
   uploadInProgress: number
   passwordVaultCount: number | null
   passwordVaultLocked: boolean | null
+  /** null when app databases are locked on this plan (403) or unavailable. */
+  appDataCount: number | null
   recentEventsCount: number
   storage: StorageSettings | null
   recentActivity: ActivitySummary[]

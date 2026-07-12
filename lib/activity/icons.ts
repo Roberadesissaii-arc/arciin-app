@@ -5,6 +5,7 @@ import {
   Globe,
   Key,
   Library,
+  Share2,
   Upload,
   Zap,
   type LucideIcon,
@@ -19,6 +20,7 @@ const ENTITY_ICONS: Record<string, LucideIcon> = {
   library: Library,
   "api-key": Key,
   remote: Globe,
+  share: Share2,
 }
 
 export function activityIconFor(event: ActivitySummary): LucideIcon {

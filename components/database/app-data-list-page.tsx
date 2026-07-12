@@ -15,9 +15,11 @@ import {
 } from "lucide-react"
 
 import { useConnection } from "@/components/providers/connection-provider"
+import { MobilePageIntro, MobilePageStickyHeader } from "@/components/shell/mobile-page-intro"
 import { MobileBottomSheet } from "@/components/shell/mobile-bottom-sheet"
 import { createAppDatabase, deleteAppDatabase, listAppDatabases } from "@/lib/api/app-databases"
-import { formatApiError } from "@/lib/api/errors"
+import { formatApiError, isLicenseRequiredError, licenseRequiredPlan } from "@/lib/api/errors"
+import { PlanGateCard } from "@/components/shell/plan-gate-card"
 import type { AppDatabaseSummary } from "@/lib/types/database"
 import { formatRelativeDate } from "@/lib/utils/format-date"
 
@@ -158,23 +160,41 @@ function DatabaseRow({
   )
 }
 
+const APP_DATA_STALE_MS = 60_000
+const appDataCache = new Map<string, { databases: AppDatabaseSummary[]; fetchedAt: number }>()
+
 export function AppDataListPage() {
   const { connection, ready } = useConnection()
-  const [databases, setDatabases] = useState<AppDatabaseSummary[]>([])
-  const [loading, setLoading] = useState(true)
+  const sessionKey = connection?.sessionToken ?? null
+  const cached = sessionKey ? appDataCache.get(sessionKey) : undefined
+
+  const [databases, setDatabases] = useState<AppDatabaseSummary[]>(() => cached?.databases ?? [])
+  const [loading, setLoading] = useState(() => !cached)
   const [error, setError] = useState<string | null>(null)
+  const [planGate, setPlanGate] = useState<string | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [query, setQuery] = useState("")
 
   const load = useCallback(
-    async (signal?: AbortSignal) => {
+    async (signal?: AbortSignal, background = false) => {
       if (!connection) return
-      setLoading(true)
+      if (!background) setLoading(true)
       setError(null)
+      setPlanGate(null)
       try {
-        setDatabases(await listAppDatabases(connection, signal))
+        const list = await listAppDatabases(connection, signal)
+        setDatabases(list)
+        if (!signal?.aborted && connection.sessionToken) {
+          appDataCache.set(connection.sessionToken, { databases: list, fetchedAt: Date.now() })
+        }
       } catch (err) {
-        if (!signal?.aborted) setError(formatApiError(err))
+        if (!signal?.aborted) {
+          if (isLicenseRequiredError(err)) {
+            setPlanGate(licenseRequiredPlan(err) ?? "pro")
+          } else {
+            setError(formatApiError(err))
+          }
+        }
       } finally {
         if (!signal?.aborted) setLoading(false)
       }
@@ -184,9 +204,12 @@ export function AppDataListPage() {
 
   useEffect(() => {
     if (!ready || !connection) return
+    const fresh = cached != null && Date.now() - cached.fetchedAt <= APP_DATA_STALE_MS
+    if (fresh) return
     const controller = new AbortController()
-    void load(controller.signal)
+    void load(controller.signal, cached != null)
     return () => controller.abort()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- cached is a read of a module map, not reactive state
   }, [ready, connection, load])
 
   async function handleDelete(id: string) {
@@ -210,45 +233,58 @@ export function AppDataListPage() {
       )
     : databases
 
+  if (planGate) {
+    return (
+      <div className="flex flex-col gap-4">
+        <MobilePageStickyHeader>
+          <MobilePageIntro
+            title="App Data"
+            subtitle="Store and manage structured JSON records for your apps and API clients. Each database has its own tables and access key."
+            status="Locked"
+            cornerIcon={Layers2}
+            statusIcon={Layers2}
+            action={
+              <Link
+                href="/database"
+                className="flex size-8 shrink-0 items-center justify-center rounded-xl border border-[#e5e5e5] bg-white text-[#717171] active:bg-[#f7f7f7]"
+                aria-label="Back to Database"
+              >
+                <ArrowLeft className="size-4" />
+              </Link>
+            }
+          />
+        </MobilePageStickyHeader>
+        <PlanGateCard featureLabel="App data databases" plan={planGate} />
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col gap-4">
 
-      {/* ── sticky intro card ───────────────────────────────────── */}
-      <div
-        className="sticky top-0 z-10 -mx-4 -mt-4 px-4 pb-2"
-        style={{ backgroundColor: "#f7f7f7", paddingTop: "max(1rem, env(safe-area-inset-top, 0px))" }}
-      >
-        <div className="page-intro-hero overflow-hidden rounded-3xl">
-          <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-5">
-            <div className="min-w-0 flex-1">
-              <p
-                className="text-[22px] font-black leading-none tracking-tight text-white"
-                style={{ fontFamily: "var(--font-space-grotesk, sans-serif)" }}
-              >
-                App Data
-              </p>
-              <p className="mt-2 text-[12.5px] leading-relaxed" style={{ color: "rgba(255,255,255,0.72)" }}>
-                Store and manage structured JSON records for your apps and API clients. Each database has its own tables and access key.
-              </p>
-              <p className="mt-2 text-[12px] font-semibold" style={{ color: "rgba(255,255,255,0.9)" }}>
-                {loading
-                  ? "Loading…"
-                  : `${databases.length} database${databases.length === 1 ? "" : "s"}`}
-              </p>
-            </div>
+      <MobilePageStickyHeader>
+        <MobilePageIntro
+          title="App Data"
+          subtitle="Store and manage structured JSON records for your apps and API clients. Each database has its own tables and access key."
+          status={
+            loading
+              ? "Loading…"
+              : `${databases.length} database${databases.length === 1 ? "" : "s"}`
+          }
+          cornerIcon={Layers2}
+          statusIcon={Layers2}
+          action={
             <Link
               href="/database"
-              className="flex size-9 shrink-0 items-center justify-center rounded-xl active:opacity-70"
-              style={{ backgroundColor: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.3)" }}
+              className="flex size-8 shrink-0 items-center justify-center rounded-xl border border-[#e5e5e5] bg-white text-[#717171] active:bg-[#f7f7f7]"
               aria-label="Back to Database"
             >
-              <ArrowLeft className="size-4 text-white" />
+              <ArrowLeft className="size-4" />
             </Link>
-          </div>
-        </div>
+          }
+        />
 
-        {/* ── search + refresh row ───────────────────────────────── */}
-        <div className="mt-2 flex items-center gap-2">
+        <div className="mt-1.5 flex items-center gap-2">
           <div
             className="flex flex-1 items-center gap-2 rounded-2xl bg-white px-3.5 py-2.5"
             style={{ border: "1px solid #e5e5e5" }}
@@ -278,7 +314,7 @@ export function AppDataListPage() {
             <RefreshCw className={`size-4 ${loading ? "animate-spin" : ""}`} />
           </button>
         </div>
-      </div>
+      </MobilePageStickyHeader>
 
       {error ? (
         <div

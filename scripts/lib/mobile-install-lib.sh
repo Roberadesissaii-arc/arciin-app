@@ -280,8 +280,8 @@ ensure_mobile_env_file() {
   fi
 }
 
-# Server-only secrets the mobile PWA never reads — don't duplicate them into mobile .env.local.
-_MOBILE_ENV_SKIP_KEYS=" DATABASE_URL REDIS_URL SESSION_SECRET "
+# Server-only secrets and desktop web port/URL — mobile uses ARCIIN_MOBILE_PORT (sequenced after desktop).
+_MOBILE_ENV_SKIP_KEYS=" DATABASE_URL REDIS_URL SESSION_SECRET PORT ARCIIN_WEB_PORT ARCIIN_PUBLIC_URL NEXT_PUBLIC_ARCIIN_PUBLIC_URL ARCIIN_MOBILE_PORT ARCIIN_MOBILE_PUBLIC_URL "
 
 sync_mobile_env_from_server() {
   local env_file="$1" server_dir="$2"
@@ -365,7 +365,7 @@ _apply_mobile_ports_to_env() {
   local env_file="$1" lan_ip="$2" web_port="$3" api_port="$4"
   _set_env_kv "$env_file" "NODE_ENV" "production"
   _set_env_kv "$env_file" "PORT" "${web_port}"
-  _set_env_kv "$env_file" "ARCIIN_WEB_PORT" "${web_port}"
+  _set_env_kv "$env_file" "ARCIIN_MOBILE_PORT" "${web_port}"
   _set_env_kv "$env_file" "ARCIIN_BIND_HOST" "0.0.0.0"
   _set_env_kv "$env_file" "ARCIIN_PUBLIC_URL" "http://${lan_ip}:${web_port}"
   _set_env_kv "$env_file" "ARCIIN_API_URL" "http://127.0.0.1:${api_port}"
@@ -389,21 +389,75 @@ _apply_mobile_ports_to_env() {
   fi
 }
 
+_server_desktop_web_port() {
+  local server_dir="$1"
+  local server_env="${server_dir}/.env"
+  [[ -f "$server_env" ]] || return 1
+
+  local port
+  port="$(grep -oP '(?<=^ARCIIN_WEB_PORT=)\d+' "$server_env" 2>/dev/null | head -1 || true)"
+  if [[ -n "$port" ]]; then
+    echo "$port"
+    return 0
+  fi
+  port="$(_env_public_url_port "$server_env")"
+  if [[ -n "$port" ]]; then
+    echo "$port"
+    return 0
+  fi
+  return 1
+}
+
+# Mobile PWA listens on the port after the desktop web UI (3000 → mobile 3001, 3002 → 3003, …).
+_mobile_port_sequence_start() {
+  local server_dir="$1"
+  local desktop_port
+  desktop_port="$(_server_desktop_web_port "$server_dir" 2>/dev/null || true)"
+  if [[ -n "$desktop_port" ]]; then
+    echo $((desktop_port + 1))
+    return 0
+  fi
+  # Desktop not installed yet — assume default web 3000, so mobile starts at 3001.
+  echo 3001
+}
+
+_ufw_allow_mobile_port() {
+  local port="$1"
+  command -v ufw >/dev/null 2>&1 || return 0
+  sudo ufw allow "${port}/tcp" comment "Arciin Mobile PWA" &>/dev/null || true
+}
+
+# Tell the Arciin API where the mobile PWA listens (remote access / tunnel target).
+sync_mobile_ports_to_server() {
+  local mobile_env="$1" server_dir="$2" lan_ip="$3" web_port="$4"
+  local server_env="${server_dir}/.env"
+  [[ -f "$server_env" ]] || return 0
+  _set_env_kv "$server_env" "ARCIIN_MOBILE_PORT" "${web_port}"
+  _set_env_kv "$server_env" "ARCIIN_MOBILE_PUBLIC_URL" "http://${lan_ip}:${web_port}"
+  ok "Synced ARCIIN_MOBILE_* to ${server_env}"
+}
+
 configure_mobile_ports() {
   local env_file="$1" default_web_port="$2" default_api_port="$3"
+  local server_dir="${4:-}"
   [[ -f "$env_file" ]] || return 0
 
-  local lan_ip web_port api_port saved_api
+  local lan_ip web_port api_port saved_api sequence_start saved_web desktop_port=""
   lan_ip="$(_detect_lan_ip)"
-  # Mobile PWA port (default 3002) — not the desktop web port copied from ../arciin/.env.
-  web_port="${ARCIIN_MOBILE_PORT:-$default_web_port}"
+  sequence_start="$(_mobile_port_sequence_start "$server_dir")"
+  saved_web="$(mobile_env_web_port "$env_file" "$sequence_start")"
+  web_port="$saved_web"
   api_port="$(grep -oP '(?<=^API_PORT=)\d+' "$env_file" 2>/dev/null || true)"
   api_port="${api_port:-$default_api_port}"
   saved_api="$(grep -oP '(?<=^API_PORT=)\d+' "$env_file" 2>/dev/null || true)"
 
-  if ! _port_available "$web_port"; then
-    warn "Port ${web_port} is in use — finding a free port"
-    web_port="$(_find_free_port "$default_web_port" 3099)"
+  if [[ "$web_port" -lt "$sequence_start" ]] || ! _port_available "$web_port"; then
+    if ! _port_available "$web_port"; then
+      warn "Port ${web_port} is in use — finding next free port from ${sequence_start}"
+    else
+      warn "Port ${web_port} is below desktop sequence — using ${sequence_start}+"
+    fi
+    web_port="$(_find_free_port "$sequence_start" 3099)"
   fi
 
   if [[ -n "$saved_api" ]]; then
@@ -412,6 +466,21 @@ configure_mobile_ports() {
 
   _apply_mobile_ports_to_env "$env_file" "$lan_ip" "$web_port" "$api_port"
 
+  if [[ -n "$server_dir" && -f "${server_dir}/.env" ]]; then
+    local desktop_public
+    desktop_public="$(grep '^ARCIIN_PUBLIC_URL=' "${server_dir}/.env" 2>/dev/null | cut -d= -f2- || true)"
+    if [[ -n "$desktop_public" ]]; then
+      _set_env_kv "$env_file" "NEXT_PUBLIC_ARCIIN_DESKTOP_WEB_URL" "$desktop_public"
+      ok "Desktop web URL for icons → ${desktop_public}"
+    fi
+  fi
+
+  if [[ -n "$server_dir" ]]; then
+    desktop_port="$(_server_desktop_web_port "$server_dir" 2>/dev/null || true)"
+  fi
+  if [[ -n "$desktop_port" ]]; then
+    ok "Desktop web UI     → port ${desktop_port} (../arciin)"
+  fi
   ok "Mobile PWA (LAN)   → http://${lan_ip}:${web_port}"
   ok "Mobile PWA (local) → http://localhost:${web_port}"
   ok "API (internal)     → http://127.0.0.1:${api_port} (browser uses http://${lan_ip}:${web_port}/api)"
@@ -419,26 +488,36 @@ configure_mobile_ports() {
 
 finalize_mobile_ports_before_launch() {
   local env_file="$1" default_web_port="$2" default_api_port="$3"
+  local server_dir="${4:-}"
   [[ -f "$env_file" ]] || return 0
 
-  local lan_ip web_port api_port saved_web saved_api changed=false
+  local lan_ip web_port api_port saved_web saved_api changed=false sequence_start
   lan_ip="$(_detect_lan_ip)"
+  sequence_start="$(_mobile_port_sequence_start "$server_dir")"
   web_port="$(_env_public_url_port "$env_file")"
-  web_port="${web_port:-$default_web_port}"
+  web_port="${web_port:-$sequence_start}"
   api_port="$(grep -oP '(?<=^API_PORT=)\d+' "$env_file" 2>/dev/null || true)"
   api_port="${api_port:-$default_api_port}"
 
   saved_web="$web_port"
   saved_api="$api_port"
 
-  if ! _port_available "$web_port"; then
-    web_port="$(_find_free_port "$default_web_port" 3099)"
+  while ! _port_available "$web_port"; do
+    warn "Mobile port ${web_port} is taken — trying $((web_port + 1))"
+    web_port=$((web_port + 1))
     changed=true
-    warn "Port ${saved_web} was taken before launch — using ${web_port}"
+  done
+
+  if [[ "$web_port" -lt "$sequence_start" ]]; then
+    web_port="$(_find_free_port "$sequence_start" 3099)"
+    changed=true
+    warn "Mobile port was below desktop sequence — using ${web_port}"
   fi
 
   if [[ "$changed" == true ]]; then
     _apply_mobile_ports_to_env "$env_file" "$lan_ip" "$web_port" "$api_port"
+    _ufw_allow_mobile_port "$web_port"
+    ok "Ports finalized for launch — mobile ${web_port}"
   fi
 }
 
@@ -449,7 +528,6 @@ purge_legacy_mobile_env_keys() {
     -e '/^NEXT_PUBLIC_ARCIIN_API_URL=/d' \
     -e '/^ARCIIN_SETUP_TOKEN_PREFILL=/d' \
     -e '/^NEXT_PUBLIC_ARCIIN_STANDALONE=/d' \
-    -e '/^ARCIIN_MOBILE_PORT=/d' \
     -e '/^ARCIIN_MOBILE_BIND_HOST=/d' \
     "$env_file" 2>/dev/null || true
 }
@@ -457,6 +535,11 @@ purge_legacy_mobile_env_keys() {
 mobile_env_web_port() {
   local env_file="$1" fallback="${2:-3002}"
   local port
+  port="$(grep -oP '(?<=^ARCIIN_MOBILE_PORT=)\d+' "$env_file" 2>/dev/null | head -1 || true)"
+  if [[ -n "$port" ]]; then
+    echo "$port"
+    return
+  fi
   port="$(_env_public_url_port "$env_file")"
   if [[ -n "$port" ]]; then
     echo "$port"

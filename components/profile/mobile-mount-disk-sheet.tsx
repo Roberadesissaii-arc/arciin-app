@@ -110,7 +110,9 @@ export function MobileMountDiskSheet({
       setError(msg)
       if (
         err instanceof ApiError &&
-        (err.code === "NO_FILESYSTEM" || err.code === "ERASE_NOT_CONFIRMED")
+        (err.code === "NO_FILESYSTEM" ||
+          err.code === "ERASE_NOT_CONFIRMED" ||
+          err.code === "FORMAT_FAILED")
       ) {
         setOfferFormat(true)
       }

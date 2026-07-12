@@ -6,6 +6,7 @@ import { Bell, Clock3, Loader2, RefreshCw, Search, X } from "lucide-react"
 import { activityBadgeStyle } from "@/lib/activity/badge-style"
 import { activityIconFor, activityTypeLabel } from "@/lib/activity/icons"
 import { MobilePagination } from "@/components/ui/mobile-pagination"
+import { MobilePageIntro, MobilePageIntroStatusPill, MobilePageStickyHeader } from "@/components/shell/mobile-page-intro"
 import { formatApiError } from "@/lib/api/errors"
 import { PageFetchErrorAlert } from "@/components/shell/page-fetch-error-alert"
 import { isServerConnected, suppressFetchErrorWhenOffline } from "@/lib/connection/offline-ui"
@@ -15,6 +16,7 @@ import {
   getNotificationsLastSeen,
   markNotificationsSeen,
 } from "@/lib/api/notifications"
+import { subscribeActivityCreated } from "@/lib/notifications/activity-created"
 import { subscribePublicUrlChanged } from "@/lib/notifications/public-url-changed"
 import { useConnection } from "@/components/providers/connection-provider"
 import type { ActivitySummary } from "@/lib/types/models"
@@ -96,6 +98,9 @@ function NotificationRow({
 
 /* ── main page ────────────────────────────────────────────────── */
 
+const NOTIFICATIONS_STALE_MS = 45_000
+const notificationsCache = new Map<string, { items: ActivitySummary[]; fetchedAt: number }>()
+
 export function NotificationsPage() {
   const { connection, ready, serverReachable } = useConnection()
   const connectionRef = useRef(connection)
@@ -103,8 +108,11 @@ export function NotificationsPage() {
   const serverReachableRef = useRef(serverReachable)
   serverReachableRef.current = serverReachable
 
-  const [items, setItems] = useState<ActivitySummary[]>([])
-  const [loading, setLoading] = useState(true)
+  const sessionKey = connection?.sessionToken ?? null
+  const cached = sessionKey ? notificationsCache.get(sessionKey) : undefined
+
+  const [items, setItems] = useState<ActivitySummary[]>(() => cached?.items ?? [])
+  const [loading, setLoading] = useState(() => !cached)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [lastSeen, setLastSeen] = useState<string | null>(null)
@@ -126,6 +134,9 @@ export function NotificationsPage() {
       const activity = await fetchRecentActivity(conn, signal)
       setItems(activity)
       setPage(0)
+      if (!signal?.aborted && conn.sessionToken) {
+        notificationsCache.set(conn.sessionToken, { items: activity, fetchedAt: Date.now() })
+      }
     } catch (err) {
       if (!signal?.aborted) {
         setError(suppressFetchErrorWhenOffline(reachable, formatApiError(err)))
@@ -152,17 +163,26 @@ export function NotificationsPage() {
 
   useEffect(() => {
     if (!ready || !connection || !isServerConnected(serverReachable)) return
+    const fresh = cached != null && Date.now() - cached.fetchedAt <= NOTIFICATIONS_STALE_MS
+    if (fresh) return
     const controller = new AbortController()
-    void load(controller.signal)
+    void load(controller.signal, cached != null)
     return () => controller.abort()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, connection?.sessionToken, serverReachable])
 
   useEffect(() => {
     if (!ready || !connection || !isServerConnected(serverReachable)) return
-    return subscribePublicUrlChanged(() => {
+    const unsubUrl = subscribePublicUrlChanged(() => {
       void load(undefined, true)
     })
+    const unsubActivity = subscribeActivityCreated(() => {
+      void load(undefined, true)
+    })
+    return () => {
+      unsubUrl()
+      unsubActivity()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, connection?.sessionToken, serverReachable])
 
@@ -184,24 +204,14 @@ export function NotificationsPage() {
   return (
     <div className="flex flex-col gap-4">
 
-      {/* ── sticky intro card ───────────────────────────────────── */}
-      <div
-        className="sticky top-0 z-10 -mx-4 -mt-4 px-4 pb-2"
-        style={{ backgroundColor: "#f7f7f7", paddingTop: "max(1rem, env(safe-area-inset-top, 0px))" }}
-      >
-        <div className="page-intro-hero overflow-hidden rounded-3xl">
-          <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-4">
-            <div className="min-w-0 flex-1">
-              <p
-                className="text-[22px] font-black leading-none tracking-tight text-white"
-                style={{ fontFamily: "var(--font-space-grotesk, sans-serif)" }}
-              >
-                Notifications
-              </p>
-              <p className="mt-2 text-[12.5px] leading-relaxed" style={{ color: "rgba(255,255,255,0.72)" }}>
-                Stay up to date with everything happening on your Arciin instance — uploads, library changes, and system events.
-              </p>
-              <p className="mt-2 text-[12px] font-semibold" style={{ color: "rgba(255,255,255,0.9)" }}>
+      <MobilePageStickyHeader>
+        <MobilePageIntro
+          title="Notifications"
+          subtitle="Stay up to date with everything happening on your Arciin instance — uploads, library changes, and system events."
+          cornerIcon={Bell}
+          footer={
+            <>
+              <MobilePageIntroStatusPill icon={Bell}>
                 {loading
                   ? "Loading activity…"
                   : refreshing
@@ -209,32 +219,28 @@ export function NotificationsPage() {
                     : unread > 0
                       ? `${unread} unread notification${unread === 1 ? "" : "s"}`
                       : "You're all caught up"}
-              </p>
-            </div>
-            {unread > 0 && !loading ? (
-              <button
-                type="button"
-                onClick={() => { markNotificationsSeen(); setLastSeen(new Date().toISOString()) }}
-                className="shrink-0 rounded-xl px-3 py-1.5 text-[11px] font-bold text-white active:opacity-70"
-                style={{ backgroundColor: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.3)" }}
-              >
-                Mark read
-              </button>
-            ) : null}
-          </div>
+              </MobilePageIntroStatusPill>
+              {unread > 0 && !loading ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    markNotificationsSeen()
+                    setLastSeen(new Date().toISOString())
+                  }}
+                  className="rounded-full border border-[#e5e5e5] bg-white px-3 py-1 text-[11px] font-semibold text-[#717171] active:bg-[#f7f7f7]"
+                >
+                  Mark read
+                </button>
+              ) : !loading && items.length > 0 ? (
+                <MobilePageIntroStatusPill icon={Clock3}>
+                  {items.length} event{items.length === 1 ? "" : "s"} total
+                </MobilePageIntroStatusPill>
+              ) : null}
+            </>
+          }
+        />
 
-          {!loading && items.length > 0 && (
-            <div className="flex items-center gap-1.5 px-5 pb-4" style={{ color: "rgba(255,255,255,0.55)" }}>
-              <Clock3 className="size-3" />
-              <span className="text-[11px]">
-                {items.length} event{items.length === 1 ? "" : "s"} total
-              </span>
-            </div>
-          )}
-        </div>
-
-        {/* search + refresh */}
-        <div className="mt-2 flex items-center gap-2">
+        <div className="mt-1.5 flex items-center gap-2">
           <div
             className="flex flex-1 items-center gap-2 rounded-2xl bg-white px-3.5 py-2.5"
             style={{ border: "1px solid #e5e5e5" }}
@@ -264,7 +270,7 @@ export function NotificationsPage() {
             <RefreshCw className={`size-4 ${loading || refreshing ? "animate-spin" : ""}`} />
           </button>
         </div>
-      </div>
+      </MobilePageStickyHeader>
 
       <PageFetchErrorAlert error={error} onRetry={() => void load()} />
 

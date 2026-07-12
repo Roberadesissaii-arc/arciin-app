@@ -38,7 +38,7 @@ if (!fs.existsSync(LOG_DIR)) {
 }
 
 const dotenv = parseEnvFile(path.join(ROOT, ".env.local"))
-const port = String(dotenv.PORT || dotenv.ARCIIN_WEB_PORT || dotenv.ARCIIN_MOBILE_PORT || "3002")
+const port = String(dotenv.ARCIIN_MOBILE_PORT || dotenv.PORT || "3002")
 const bindHost = dotenv.ARCIIN_BIND_HOST || dotenv.ARCIIN_MOBILE_BIND_HOST || "0.0.0.0"
 const runScript = path.join(ROOT, "scripts/run-mobile-prod.sh")
 

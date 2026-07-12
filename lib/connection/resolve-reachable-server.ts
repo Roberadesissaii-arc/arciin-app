@@ -16,7 +16,7 @@ import type { MobileConnection } from "@/lib/types/api"
 import type { MobileDiscoverResult } from "@/lib/types/api"
 import type { MobileServerProfile } from "@/lib/connection/storage"
 import { isStandaloneApp } from "@/lib/standalone/config"
-import { repairStandaloneConnection } from "@/lib/standalone/repair-server-urls"
+import { repairStandaloneConnection, repairStandaloneServerProfile } from "@/lib/standalone/repair-server-urls"
 
 function discoverMatchesInstance(
   discover: MobileDiscoverResult,
@@ -114,13 +114,31 @@ async function resolveFromDiscover(
   let server = serverProfileFromDiscover(discover, apiBaseUrl)
   let resolvedBase = apiBaseUrl
 
+  const addressIsPublic = (() => {
+    try {
+      const url = new URL(/^https?:\/\//i.test(address) ? address : `http://${address.split("/")[0]}`)
+      return (
+        url.protocol === "https:" ||
+        isTryCloudflareHostname(url.hostname) ||
+        isPublicServerAddress(address)
+      )
+    } catch {
+      return isPublicServerAddress(address)
+    }
+  })()
+
   const publicTry =
     discover.canonicalApiBaseUrl ??
     (discover.canonicalPublicUrl
       ? `${discover.canonicalPublicUrl.replace(/\/+$/, "")}/api`
       : null)
 
-  if (publicTry && isPublicServerAddress(publicTry) && (await probeHealth(publicTry, signal))) {
+  if (
+    addressIsPublic &&
+    publicTry &&
+    isPublicServerAddress(publicTry) &&
+    (await probeHealth(publicTry, signal))
+  ) {
     server = serverProfileFromDiscover(discover, publicTry)
     resolvedBase = server.apiBaseUrl
   } else if (!(await probeHealth(resolvedBase, signal))) {
@@ -141,8 +159,8 @@ async function resolveFromDiscover(
       server = serverProfileFromEndpoints(canonical.apiBaseUrl, {
         instanceName: canonical.instanceName,
         instanceId: canonical.instanceId,
-        webUrl: canonical.webUrl,
-        socketUrl: canonical.socketUrl,
+        webUrl: addressIsPublic ? canonical.webUrl : server.webUrl,
+        socketUrl: addressIsPublic ? canonical.socketUrl : server.socketUrl,
         lanUrls: canonical.lanUrls,
         requestOrigin: canonical.requestOrigin,
       })
@@ -150,6 +168,11 @@ async function resolveFromDiscover(
     }
   } catch {
     /* LAN discover already returned fresh canonicalPublicUrl when on Wi‑Fi */
+  }
+
+  if (isStandaloneApp()) {
+    server = repairStandaloneServerProfile(server) ?? server
+    next = repairStandaloneConnection(next)
   }
 
   return { connection: next, server }

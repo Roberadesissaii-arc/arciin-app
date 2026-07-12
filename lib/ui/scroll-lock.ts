@@ -57,6 +57,10 @@ export function resetMobileViewport(scrollY = window.scrollY) {
 
   const restore = () => {
     window.scrollTo(0, scrollY)
+    const vv = window.visualViewport
+    if (vv && (vv.offsetTop > 0 || vv.pageLeft > 0)) {
+      window.scrollTo(0, 0)
+    }
   }
   restore()
   requestAnimationFrame(restore)

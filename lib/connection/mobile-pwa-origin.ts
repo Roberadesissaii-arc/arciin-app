@@ -14,13 +14,17 @@ export function isSameOriginAsMobileApp(url: string): boolean {
   }
 }
 
-/** True when a saved URL points at this phone app, not the Arciin server. */
+/**
+ * True when a URL is this installed PWA tab or a hosted companion host — not a
+ * LAN/server address other phones should use (e.g. http://192.168.x.x:3003).
+ */
 export function isLikelyMobilePwaUrl(url: string | null | undefined): boolean {
   const raw = url?.trim()
   if (!raw) return false
   if (isSameOriginAsMobileApp(raw)) return true
   try {
-    return isMobileDevServerPort(new URL(raw).port)
+    const host = new URL(raw).hostname.toLowerCase()
+    return host.endsWith(".vercel.app") || host === "vercel.app"
   } catch {
     return false
   }

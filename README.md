@@ -43,7 +43,7 @@ This repo is the **mobile PWA host** (port **3002** by default). Your data, acco
 
 | Feature | Notes |
 |---------|--------|
-| **Sign in / setup** | Create account or sign in directly on the phone |
+| **Sign in** | Connect to your server URL, then sign in with your Arciin account |
 | **File uploads** | Upload from device camera or gallery |
 | **Password vault** | Add passwords or import CSV/JSON on mobile |
 | **Profile settings** | Preferences, notifications, remote access, vault PIN, AI security |
@@ -200,19 +200,13 @@ The PWA still needs your Arciin API running. Installing the icon does not instal
 
 ## First sign-in
 
-### New instance (first run on this server)
+1. Open the PWA → **`/connect`** if you have not saved a server yet.
+2. Enter your Arciin server address (LAN IP or public URL).
+3. Sign in at **`/sign-in`** with the email and password from your **server** setup.
 
-1. Open the PWA → you may be sent to **`/setup`** if the instance is unclaimed.
-2. Create your admin account and storage path (same flow as desktop first-run).
-3. Sign in with email and password.
+First-run **instance claim** happens on the Arciin **server web app** (desktop browser at `http://<server>:3004/setup`), not in this mobile client.
 
-### Existing instance
-
-1. Open **`/sign-in`**.
-2. Enter email and password.
-3. Session lasts **90 days** by default (server configuration).
-
-No pairing code is required in standalone mode (`NEXT_PUBLIC_ARCIIN_STANDALONE=1`, the default).
+Session lasts **90 days** by default (server configuration).
 
 ---
 

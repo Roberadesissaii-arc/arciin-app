@@ -20,11 +20,16 @@ import { HOSTED_APP_REMOTE_INTRO, isPwaHostedApp } from "@/lib/api/hosted-app"
 import {
   getCloudflareTunnelStatus,
   getRemoteAccessSettings,
-  startCloudflareTunnel,
+  startCloudflareTunnelMobile,
   stopCloudflareTunnel,
   updateRemoteAccessSettings,
   type CloudflareTunnelStatus,
 } from "@/lib/api/settings"
+import {
+  mobileAppWebOrigin,
+  mobileLanUrls,
+  mobileRemotePublicUrl,
+} from "@/lib/connection/mobile-access-urls"
 import { useConnection } from "@/components/providers/connection-provider"
 import { loadServerProfile } from "@/lib/connection/storage"
 import { dispatchAppForeground } from "@/lib/hooks/use-app-foreground"
@@ -76,10 +81,12 @@ export function RemoteAccessInlinePanel({ enabled }: { enabled: boolean }) {
 
   useEffect(() => {
     if (!data) return
-    setDomain(data.publicUrl ?? "")
-    setInitialDomain(data.publicUrl ?? "")
-    setLocalUrl(data.primaryLanUrl ?? data.localUrl ?? data.requestOrigin ?? null)
-    setLanUrls(data.lanUrls?.length ? data.lanUrls : [])
+    const publicForMobile = mobileRemotePublicUrl(data)
+    setDomain(publicForMobile)
+    setInitialDomain(publicForMobile)
+    const mobileLan = mobileLanUrls(data)
+    setLocalUrl(mobileLan[0] ?? data.requestOrigin ?? null)
+    setLanUrls(mobileLan)
     setConnectionMode(readStoredMode())
   }, [data])
 
@@ -138,11 +145,15 @@ export function RemoteAccessInlinePanel({ enabled }: { enabled: boolean }) {
     setTunnelBusy(true)
     setSaveError(null)
     try {
-      const status = await startCloudflareTunnel(connection)
+      if (tunnel?.running) {
+        await stopCloudflareTunnel(connection)
+      }
+      const status = await startCloudflareTunnelMobile(connection)
       setTunnel(status)
-      if (status.url) {
-        setDomain(status.url)
-        showStatus("Tunnel started — public URL updated.")
+      const tunnelUrl = status.mobilePublicUrl ?? status.url
+      if (tunnelUrl) {
+        setDomain(tunnelUrl)
+        showStatus("Tunnel started — mobile public URL updated.")
         await reload()
       }
     } catch (err) {
@@ -167,10 +178,18 @@ export function RemoteAccessInlinePanel({ enabled }: { enabled: boolean }) {
     }
   }
 
-  const activePublicUrl = (data?.publicUrl || domain || "").trim()
-  const activeLocalUrl = (localUrl || data?.localUrl || "").trim()
+  const activePublicUrl = (domain || (data ? mobileRemotePublicUrl(data) : "") || "").trim()
+  const activeLocalUrl =
+    (localUrl || mobileLanUrls(data ?? {})[0] || mobileAppWebOrigin() || "").trim()
   const usingPublic = connectionMode === "public" && Boolean(activePublicUrl)
-  const lanList = lanUrls.length > 0 ? lanUrls : activeLocalUrl ? [activeLocalUrl] : []
+  const lanList =
+    lanUrls.length > 0
+      ? lanUrls
+      : activeLocalUrl
+        ? [activeLocalUrl]
+        : mobileAppWebOrigin()
+          ? [mobileAppWebOrigin()]
+          : []
 
   async function savePatch(patch: Partial<RemoteAccessSettings>) {
     if (!connection) return
@@ -179,10 +198,12 @@ export function RemoteAccessInlinePanel({ enabled }: { enabled: boolean }) {
     clearStatus()
     try {
       const updated = await updateRemoteAccessSettings(connection, patch)
-      setDomain(updated.publicUrl ?? "")
-      setInitialDomain(updated.publicUrl ?? "")
-      setLocalUrl(updated.primaryLanUrl ?? updated.localUrl ?? updated.requestOrigin ?? null)
-      setLanUrls(updated.lanUrls ?? [])
+      const publicForMobile = mobileRemotePublicUrl(updated)
+      setDomain(publicForMobile)
+      setInitialDomain(publicForMobile)
+      const mobileLan = mobileLanUrls(updated)
+      setLocalUrl(mobileLan[0] ?? updated.requestOrigin ?? null)
+      setLanUrls(mobileLan)
       showStatus("Saved on server.")
       await reload()
     } catch (err) {
@@ -299,7 +320,7 @@ export function RemoteAccessInlinePanel({ enabled }: { enabled: boolean }) {
                   active={!usingPublic}
                   icon={Wifi}
                   title="On your network"
-                  subtitle="Same Wi‑Fi as the server"
+                  subtitle="Arciin Mobile on same Wi‑Fi"
                   urls={lanList}
                   actionLabel="Use LAN"
                   actionDisabled={reconnecting || lanList.length === 0}
@@ -316,7 +337,7 @@ export function RemoteAccessInlinePanel({ enabled }: { enabled: boolean }) {
                 active={usingPublic}
                 icon={Smartphone}
                 title="From anywhere"
-                subtitle="Public HTTPS"
+                subtitle="Public HTTPS for Arciin Mobile"
                 urls={activePublicUrl ? [activePublicUrl] : []}
                 actionLabel="Use public URL"
                 actionDisabled={reconnecting || !activePublicUrl}
@@ -338,7 +359,9 @@ export function RemoteAccessInlinePanel({ enabled }: { enabled: boolean }) {
                     <button
                       type="button"
                       disabled={saving || !connection || domain.trim() === initialDomain.trim()}
-                      onClick={() => void savePatch({ publicUrl: domain.trim() || null })}
+                      onClick={() =>
+                        void savePatch({ mobilePublicUrl: domain.trim() || null })
+                      }
                       className="h-9 w-full rounded-lg border border-[#e5e5e5] text-[12px] font-semibold text-[#222222] disabled:opacity-50"
                     >
                       {saving ? "Saving…" : "Save on server"}
@@ -357,7 +380,7 @@ export function RemoteAccessInlinePanel({ enabled }: { enabled: boolean }) {
                   <div className="border-b border-[#f0f0f0] px-3.5 py-2.5">
                     <p className="text-[13px] font-semibold text-[#222222]">Cloudflare tunnel</p>
                     <p className="text-[10px] text-[#a0a0a0]">
-                      Quick public HTTPS — same as desktop Settings → Domain
+                      Tunnels to this phone app (not desktop web on :3002)
                     </p>
                   </div>
                   <div className="space-y-2.5 px-3.5 py-3">

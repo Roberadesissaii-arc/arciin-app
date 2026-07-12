@@ -52,7 +52,7 @@ export function FilesAssetViewPage({ assetId }: { assetId: string }) {
         <button
           type="button"
           onClick={() => router.push("/files")}
-          className="mt-2 rounded-xl bg-[#ff4f12] px-4 py-2.5 text-[13px] font-semibold text-white"
+          className="mt-2 rounded-xl bg-accent px-4 py-2.5 text-[13px] font-semibold text-white"
         >
           Back to Files
         </button>

@@ -140,6 +140,15 @@ export function startCloudflareTunnel(connection: MobileConnection) {
   })
 }
 
+/** Tunnel to the mobile PWA port (not desktop web) — use from Profile → Remote access. */
+export function startCloudflareTunnelMobile(connection: MobileConnection) {
+  return fetchApi<CloudflareTunnelStatus>("/settings/cloudflare-tunnel/start-mobile", {
+    connection,
+    method: "POST",
+    body: {},
+  })
+}
+
 export function stopCloudflareTunnel(connection: MobileConnection) {
   return fetchApi<CloudflareTunnelStatus>("/settings/cloudflare-tunnel/stop", {
     connection,

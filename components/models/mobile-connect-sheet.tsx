@@ -12,6 +12,12 @@ import {
   updateModelProfile,
 } from "@/lib/api/models"
 import type { ProviderMeta } from "@/lib/models/provider-catalog"
+import {
+  DEFAULT_GEMINI_CHAT_MODEL,
+  DEFAULT_GEMINI_TTS_MODEL,
+  GEMINI_CHAT_MODELS,
+  GEMINI_TTS_MODELS,
+} from "@/lib/models/gemini-catalog"
 import { MobileOverlay } from "@/components/shell/mobile-bottom-sheet"
 import type { CreateModelProfileInput, ModelProfile, OllamaCloudModelProbe } from "@/lib/types/models"
 import { cn } from "@/lib/utils"
@@ -35,13 +41,19 @@ export function MobileConnectSheet({
   const isOllamaLocal = meta.id === "ollama-local"
   const isOllamaCloud = meta.id === "ollama-cloud"
   const isAnyOllama = isOllamaLocal || isOllamaCloud
+  const isGemini = meta.id === "gemini"
 
   const [apiKey, setApiKey] = useState("")
   const [baseUrl, setBaseUrl] = useState(
     () => profile?.baseUrl ?? (isOllamaLocal ? "http://localhost:11434" : meta.baseUrlPlaceholder ?? ""),
   )
   const [model, setModel] = useState(
-    () => profile?.defaultModel ?? (isAnyOllama ? "" : meta.suggestedModels[0] ?? ""),
+    () =>
+      profile?.defaultModel ??
+      (isAnyOllama ? "" : isGemini ? DEFAULT_GEMINI_CHAT_MODEL : meta.suggestedModels[0] ?? ""),
+  )
+  const [ttsModel, setTtsModel] = useState(
+    () => profile?.ttsModel ?? (isGemini ? DEFAULT_GEMINI_TTS_MODEL : ""),
   )
   const [scannedModels, setScannedModels] = useState<string[]>([])
   const [cloudProbes, setCloudProbes] = useState<OllamaCloudModelProbe[]>([])
@@ -54,7 +66,11 @@ export function MobileConnectSheet({
     if (!open) return
     setApiKey("")
     setBaseUrl(profile?.baseUrl ?? (isOllamaLocal ? "http://localhost:11434" : meta.baseUrlPlaceholder ?? ""))
-    setModel(profile?.defaultModel ?? (isAnyOllama ? "" : meta.suggestedModels[0] ?? ""))
+    setModel(
+      profile?.defaultModel ??
+        (isAnyOllama ? "" : isGemini ? DEFAULT_GEMINI_CHAT_MODEL : meta.suggestedModels[0] ?? ""),
+    )
+    setTtsModel(profile?.ttsModel ?? (isGemini ? DEFAULT_GEMINI_TTS_MODEL : ""))
     setScannedModels([])
     setCloudProbes([])
     setScanError(null)
@@ -130,6 +146,7 @@ export function MobileConnectSheet({
       baseUrl: resolvedBaseUrl,
       isEnabled: true,
     }
+    if (isGemini) input.ttsModel = ttsModel.trim() || DEFAULT_GEMINI_TTS_MODEL
     if (apiKey) input.apiKey = apiKey
 
     const needsKey = isOllamaCloud || (meta.requiresKey && !isEdit)
@@ -350,16 +367,67 @@ export function MobileConnectSheet({
                   />
                 </Field>
               ) : null}
-              <Field label="Default model" id="default-model">
+              <Field label={isGemini ? "Chat model" : "Default model"} id="default-model">
                 <input
                   id="default-model"
                   value={model}
                   onChange={(e) => setModel(e.target.value)}
-                  placeholder={meta.suggestedModels[0] ?? "model-id"}
+                  placeholder={isGemini ? DEFAULT_GEMINI_CHAT_MODEL : meta.suggestedModels[0] ?? "model-id"}
                   className="w-full rounded-xl bg-[#f7f7f7] px-4 py-3 font-mono text-[16px] outline-none"
                   style={{ border: "1px solid #e5e5e5" }}
                 />
+                {isGemini ? (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {GEMINI_CHAT_MODELS.slice(0, 4).map((entry) => (
+                      <button
+                        key={entry.id}
+                        type="button"
+                        onClick={() => setModel(entry.id)}
+                        className={cn(
+                          "rounded-lg px-2 py-1 font-mono text-[10px]",
+                          model === entry.id
+                            ? "accent-chip"
+                            : "border border-[#e5e5e5] bg-white text-[#717171]",
+                        )}
+                      >
+                        {entry.id}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
               </Field>
+              {isGemini ? (
+                <Field label="Read aloud model" id="tts-model">
+                  <input
+                    id="tts-model"
+                    value={ttsModel}
+                    onChange={(e) => setTtsModel(e.target.value)}
+                    placeholder={DEFAULT_GEMINI_TTS_MODEL}
+                    className="w-full rounded-xl bg-[#f7f7f7] px-4 py-3 font-mono text-[16px] outline-none"
+                    style={{ border: "1px solid #e5e5e5" }}
+                  />
+                  <p className="mt-1.5 text-[11px] leading-relaxed text-[#717171]">
+                    Same API key as chat. Powers Listen on assistant replies.
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {GEMINI_TTS_MODELS.map((entry) => (
+                      <button
+                        key={entry.id}
+                        type="button"
+                        onClick={() => setTtsModel(entry.id)}
+                        className={cn(
+                          "rounded-lg px-2 py-1 font-mono text-[10px]",
+                          ttsModel === entry.id
+                            ? "accent-chip"
+                            : "border border-[#e5e5e5] bg-white text-[#717171]",
+                        )}
+                      >
+                        {entry.id}
+                      </button>
+                    ))}
+                  </div>
+                </Field>
+              ) : null}
             </>
           ) : null}
 

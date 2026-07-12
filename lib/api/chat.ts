@@ -49,6 +49,13 @@ export type ChatInstanceContext = {
     librarySlug: string
     libraryName: string
   }[]
+  recentAssets?: {
+    id: string
+    filename: string
+    mediaType: string
+    librarySlug: string
+    createdAt: string
+  }[]
   storageGb: number
   lastUploadAt: string | null
   passwordVaultLine?: string | null

@@ -42,6 +42,8 @@ function resolveAllowedDevOrigins(): string[] {
 }
 
 const nextConfig: NextConfig = {
+  /** Gzip buffers SSE chunks — chat replies appear all at once without this. */
+  compress: false,
   allowedDevOrigins: resolveAllowedDevOrigins(),
   /** Hide Next.js 16 devtools chip — avoids dev-only pointer-capture console noise on touch devices. */
   devIndicators: false,

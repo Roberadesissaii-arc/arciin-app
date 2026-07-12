@@ -9,7 +9,9 @@ import {
 import { fetchAssetBlob } from "@/lib/api/asset-binary"
 import {
   beginDownloadAsset,
+  beginDownloadAssets,
   beginShareAsset,
+  beginShareAssets,
   downloadAssetFile,
   shareAssetFile,
 } from "@/lib/api/asset-share-download"
@@ -42,7 +44,9 @@ export {
   assetShareableMediaUrl,
   assetThumbnailUrl,
   beginDownloadAsset,
+  beginDownloadAssets,
   beginShareAsset,
+  beginShareAssets,
   downloadAssetFile,
   fetchAssetBlob,
   shareAssetFile,

@@ -2,11 +2,12 @@
 
 import { useEffect, useRef, useState } from "react"
 import { io, type Socket } from "socket.io-client"
-import { ChevronDown, ChevronRight, Pause, Play, Trash2, Wifi, WifiOff } from "lucide-react"
+import { ChevronDown, ChevronRight, Pause, Play, Radio, Trash2, Wifi, WifiOff } from "lucide-react"
 
 import { PageFetchErrorAlert } from "@/components/shell/page-fetch-error-alert"
 import { useConnection } from "@/components/providers/connection-provider"
 import { getMobileSocketUrl } from "@/lib/realtime/socket-url"
+import type { MobileConnection } from "@/lib/types/api"
 import { socketEventTypes, type SocketEventPayload } from "@/lib/types/events"
 import { cn } from "@/lib/utils"
 
@@ -14,26 +15,26 @@ const MAX_EVENTS = 300
 
 type LiveEvent = SocketEventPayload & { _rxAt: string; _uid: string }
 
-const CAT_STYLE: Record<string, string> = {
-  upload: "bg-blue-50 border-blue-200 text-blue-800",
-  asset: "bg-violet-50 border-violet-200 text-violet-800",
-  thumbnail: "bg-orange-50 border-orange-200 text-orange-800",
-  media: "bg-orange-50 border-orange-200 text-orange-800",
-  library: "bg-emerald-50 border-emerald-200 text-emerald-800",
-  job: "bg-amber-50 border-amber-200 text-amber-800",
-  activity: "bg-[#f7f7f7] border-[#e5e5e5] text-[#717171]",
-  plex: "bg-yellow-50 border-yellow-200 text-yellow-800",
+const ROW_STYLE: Record<string, string> = {
+  upload: "border-l-blue-500 bg-blue-50/50",
+  asset: "border-l-violet-500 bg-violet-50/40",
+  thumbnail: "border-l-[#ff4f12] bg-orange-50/40",
+  media: "border-l-[#ff4f12] bg-orange-50/40",
+  library: "border-l-emerald-500 bg-emerald-50/40",
+  job: "border-l-amber-500 bg-amber-50/40",
+  activity: "border-l-zinc-400 bg-zinc-50/80",
+  plex: "border-l-yellow-500 bg-yellow-50/40",
 }
 
-const DOT_STYLE: Record<string, string> = {
-  upload: "bg-blue-500",
-  asset: "bg-violet-500",
-  thumbnail: "bg-[#ff4f12]",
-  media: "bg-[#ff4f12]",
-  library: "bg-emerald-500",
-  job: "bg-amber-500",
-  activity: "bg-zinc-400",
-  plex: "bg-yellow-500",
+const BADGE_STYLE: Record<string, string> = {
+  upload: "border-blue-200/80 bg-blue-50 text-blue-800",
+  asset: "border-violet-200/80 bg-violet-50 text-violet-800",
+  thumbnail: "border-orange-200/80 bg-orange-50 text-orange-800",
+  media: "border-orange-200/80 bg-orange-50 text-orange-800",
+  library: "border-emerald-200/80 bg-emerald-50 text-emerald-800",
+  job: "border-amber-200/80 bg-amber-50 text-amber-900",
+  activity: "border-zinc-200/80 bg-zinc-100 text-zinc-700",
+  plex: "border-yellow-200/80 bg-yellow-50 text-yellow-900",
 }
 
 const CATEGORIES = ["all", "upload", "asset", "media", "library", "job", "activity", "plex"] as const
@@ -43,11 +44,13 @@ function cat(type: string) {
 }
 
 function catStyle(type: string) {
-  return CAT_STYLE[cat(type)] ?? "bg-[#f7f7f7] border-[#e5e5e5] text-[#717171]"
+  const category = cat(type)
+  return BADGE_STYLE[category] ?? "border-zinc-200/80 bg-zinc-100 text-zinc-700"
 }
 
-function dotStyle(type: string) {
-  return DOT_STYLE[cat(type)] ?? "bg-zinc-400"
+function rowStyle(type: string) {
+  const category = cat(type)
+  return ROW_STYLE[category] ?? "border-l-zinc-300 bg-white"
 }
 
 function relTime(iso: string) {
@@ -71,18 +74,19 @@ function EventCard({ event }: { event: LiveEvent }) {
 
   return (
     <div
-      className="overflow-hidden rounded-xl bg-white"
-      style={{ border: "1px solid #e5e5e5" }}
+      className={cn(
+        "overflow-hidden rounded-xl border border-[#e5e5e5] border-l-[3px] bg-white shadow-sm",
+        rowStyle(event.type),
+      )}
     >
       <button
         type="button"
         className="flex w-full items-center gap-2.5 px-3.5 py-3 text-left"
         onClick={() => hasExtra && setOpen((o) => !o)}
       >
-        <span className={cn("size-2 shrink-0 rounded-full", dotStyle(event.type))} />
         <span
           className={cn(
-            "shrink-0 rounded-lg border px-1.5 py-0.5 font-mono text-[10px] font-bold",
+            "shrink-0 rounded-md border px-2 py-0.5 font-mono text-[10px] font-bold",
             catStyle(event.type),
           )}
         >
@@ -92,11 +96,11 @@ function EventCard({ event }: { event: LiveEvent }) {
           {event.message ?? event.id ?? "–"}
         </span>
         {typeof event.progress === "number" ? (
-          <span className="shrink-0 rounded-full bg-[#f7f7f7] px-2 py-0.5 font-mono text-[10px] text-[#717171]">
+          <span className="shrink-0 rounded-full bg-[#f7f7f7] px-2 py-0.5 font-mono text-[10px] font-semibold text-[#717171]">
             {event.progress}%
           </span>
         ) : null}
-        <span className="shrink-0 text-[10px] text-[#a0a0a0]">{relTime(_rxAt)}</span>
+        <span className="shrink-0 text-[10px] tabular-nums text-[#a0a0a0]">{relTime(_rxAt)}</span>
         {hasExtra ? (
           <span className="shrink-0 text-[#c0c0c0]">
             {open ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
@@ -110,6 +114,163 @@ function EventCard({ event }: { event: LiveEvent }) {
           </pre>
         </div>
       ) : null}
+    </div>
+  )
+}
+
+type StreamConnectionState = "connecting" | "connected" | "disconnected" | "error"
+
+function connectionStatusLabel(state: StreamConnectionState, error: string | null) {
+  if (state === "connected") return "Connected · receiving live events"
+  if (state === "error") return error ? "Connection error" : "Could not connect"
+  if (state === "disconnected") return "Disconnected from realtime server"
+  return "Connecting to realtime server…"
+}
+
+function ConnectionStatusDot({ state }: { state: StreamConnectionState }) {
+  const label =
+    state === "connected"
+      ? "Connected"
+      : state === "connecting"
+        ? "Connecting"
+        : state === "error"
+          ? "Connection error"
+          : "Disconnected"
+
+  return (
+    <span
+      className={cn(
+        "absolute right-3.5 top-3.5 size-2.5 rounded-full ring-[2.5px] ring-white",
+        state === "connected" && "bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.22)]",
+        state === "connecting" && "animate-pulse bg-zinc-400 shadow-[0_0_0_3px_rgba(161,161,170,0.18)]",
+        (state === "disconnected" || state === "error") &&
+          "bg-red-500 shadow-[0_0_0_3px_rgba(239,68,68,0.2)]",
+      )}
+      role="status"
+      aria-label={label}
+      title={label}
+    />
+  )
+}
+
+function StreamControlPanel({
+  connectionState,
+  connection,
+  socketUrl,
+  error,
+  total,
+  paused,
+  bufferedCount,
+  onTogglePause,
+  onClear,
+}: {
+  connectionState: StreamConnectionState
+  connection: MobileConnection
+  socketUrl: string
+  error: string | null
+  total: number
+  paused: boolean
+  bufferedCount: number
+  onTogglePause: () => void
+  onClear: () => void
+}) {
+  const pageUrl = (connection.webUrl || connection.apiBaseUrl.replace(/\/api\/?$/i, "")).replace(
+    /\/+$/,
+    "",
+  )
+  const showSocketLine = socketUrl.replace(/\/+$/, "") !== pageUrl.replace(/\/+$/, "")
+
+  return (
+    <div
+      className="relative overflow-hidden rounded-2xl bg-white p-4"
+      style={{ border: "1px solid #e5e5e5", boxShadow: "0 1px 2px rgba(0,0,0,0.03)" }}
+    >
+      <ConnectionStatusDot state={connectionState} />
+
+      <div className="pr-5">
+        <p className="text-[13px] font-semibold text-[#222222]">Live stream</p>
+        <p className="mt-0.5 text-[11px] text-[#717171]">
+          {connectionStatusLabel(connectionState, error)}
+        </p>
+      </div>
+
+      <div className="mt-3 space-y-2">
+        <div
+          className="rounded-xl border border-[#ececec] bg-[#fafafa] px-3 py-2.5"
+        >
+          <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#a0a0a0]">
+            Instance URL
+          </p>
+          <p className="mt-1 break-all font-mono text-[11px] leading-relaxed text-[#222222]">
+            {pageUrl}
+          </p>
+        </div>
+
+        {showSocketLine ? (
+          <div className="rounded-xl border border-[#ececec] bg-white px-3 py-2.5">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#a0a0a0]">
+              Realtime endpoint
+            </p>
+            <p className="mt-1 break-all font-mono text-[11px] leading-relaxed text-[#717171]">
+              {socketUrl}
+              <span className="text-[#a0a0a0]">/socket.io</span>
+            </p>
+          </div>
+        ) : (
+          <p className="px-0.5 text-[10px] text-[#a0a0a0]">
+            Socket.IO on this origin · path{" "}
+            <span className="font-mono text-[#717171]">/socket.io</span>
+          </p>
+        )}
+      </div>
+
+      {error ? (
+        <div className="mt-3">
+          <PageFetchErrorAlert
+            error={error}
+            className="rounded-xl px-3 py-2 text-[11px] text-[#b91c1c]"
+          />
+        </div>
+      ) : null}
+
+      <div className="mt-3 flex items-center gap-2 border-t border-[#f0f0f0] pt-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-[12px] font-semibold tabular-nums text-[#222222]">
+            {total.toLocaleString()} received
+          </p>
+          {paused && bufferedCount > 0 ? (
+            <p className="mt-0.5 text-[10px] font-medium text-amber-700">
+              {bufferedCount} buffered while paused
+            </p>
+          ) : (
+            <p className="mt-0.5 text-[10px] text-[#a0a0a0]">
+              {connectionState === "connected" ? "Tap a row to expand payload" : "Waiting for connection"}
+            </p>
+          )}
+        </div>
+
+        <button
+          type="button"
+          onClick={onTogglePause}
+          className={cn(
+            "flex items-center gap-1.5 rounded-xl border px-3 py-2 text-[11px] font-semibold",
+            paused
+              ? "border-amber-200 bg-amber-50 text-amber-800"
+              : "border-[#e5e5e5] bg-[#f7f7f7] text-[#717171] active:bg-white",
+          )}
+        >
+          {paused ? <Play className="size-3.5" /> : <Pause className="size-3.5" />}
+          {paused ? "Resume" : "Pause"}
+        </button>
+        <button
+          type="button"
+          onClick={onClear}
+          className="flex items-center gap-1.5 rounded-xl border border-[#dc2626] bg-[#ef4444] px-3 py-2 text-[11px] font-semibold text-white active:opacity-90"
+        >
+          <Trash2 className="size-3.5" />
+          Clear
+        </button>
+      </div>
     </div>
   )
 }
@@ -130,7 +291,7 @@ function EmptyState({
       {connected ? (
         <>
           <span className="flex size-10 items-center justify-center rounded-full bg-[#fff4f0]">
-            <Wifi className="size-5 text-[#ff4f12]" />
+            <Wifi className="size-5 text-accent" />
           </span>
           <p className="text-[14px] font-medium text-[#222222]">Listening for events…</p>
           <p className="text-[12px] leading-relaxed text-[#717171]">
@@ -163,13 +324,15 @@ function EmptyState({
 
 export function MobileEventsMonitor() {
   const { connection, ready } = useConnection()
-  const [connected, setConnected] = useState(false)
+  const [connectionState, setConnectionState] = useState<StreamConnectionState>("connecting")
   const [events, setEvents] = useState<LiveEvent[]>([])
   const [paused, setPaused] = useState(false)
   const [filter, setFilter] = useState<string>("all")
   const [total, setTotal] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [bufferedCount, setBufferedCount] = useState(0)
+
+  const connected = connectionState === "connected"
 
   const pausedRef = useRef(false)
   const bufferRef = useRef<LiveEvent[]>([])
@@ -178,6 +341,9 @@ export function MobileEventsMonitor() {
 
   useEffect(() => {
     if (!ready || !connection?.sessionToken) return
+
+    setConnectionState("connecting")
+    setError(null)
 
     const resolvedUrl = getMobileSocketUrl(connection)
     const token = connection.sessionToken
@@ -190,13 +356,23 @@ export function MobileEventsMonitor() {
       },
     })
 
-    socket.on("connect", () => {
-      setConnected(true)
+    socket.io.on("reconnect_attempt", () => {
+      setConnectionState("connecting")
+    })
+    socket.io.on("reconnect", () => {
+      setConnectionState("connected")
       setError(null)
     })
-    socket.on("disconnect", () => setConnected(false))
+
+    socket.on("connect", () => {
+      setConnectionState("connected")
+      setError(null)
+    })
+    socket.on("disconnect", () => {
+      setConnectionState("disconnected")
+    })
     socket.on("connect_error", (err) => {
-      setConnected(false)
+      setConnectionState("error")
       const msg = err.message || "Could not connect to realtime server."
       setError(
         msg.includes("websocket") || msg.includes("xhr poll")
@@ -265,129 +441,106 @@ export function MobileEventsMonitor() {
 
   return (
     <div className="flex flex-col gap-4">
+      <StreamControlPanel
+        connectionState={connectionState}
+        connection={connection}
+        socketUrl={socketUrl}
+        error={error}
+        total={total}
+        paused={paused}
+        bufferedCount={bufferedCount}
+        onTogglePause={togglePause}
+        onClear={clear}
+      />
+
       <div
-        className="flex flex-col gap-2 rounded-2xl bg-white p-3.5"
+        className="overflow-hidden rounded-2xl bg-white shadow-sm"
         style={{ border: "1px solid #e5e5e5" }}
       >
-        <div className="flex flex-wrap items-center gap-2">
-          <div
-            className={cn(
-              "flex items-center gap-2 rounded-full border px-2.5 py-1 text-[11px] font-semibold",
-              connected
-                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                : "border-[#e5e5e5] bg-[#f7f7f7] text-[#717171]",
-            )}
-          >
-            <span
-              className={cn(
-                "size-2 rounded-full",
-                connected ? "animate-pulse bg-emerald-500" : "bg-[#c0c0c0]",
-              )}
-            />
-            {connected ? "Connected" : error ? "Error" : "Connecting…"}
-          </div>
-          <span className="min-w-0 flex-1 truncate font-mono text-[10px] text-[#a0a0a0]">
-            {socketUrl}
+        <div
+          className="flex flex-wrap items-center gap-2 border-b border-[#f0f0f0] px-4 py-3"
+          style={{ backgroundColor: "#fafafa" }}
+        >
+          <Radio className="text-accent size-4" />
+          <span className="text-[13px] font-semibold text-[#222222]">Event stream</span>
+          <span className="text-[11px] text-[#717171]">
+            {filtered.length} shown
+            {filter !== "all" ? ` · ${filter}.*` : ""}
           </span>
         </div>
 
-        <PageFetchErrorAlert
-          error={error}
-          className="rounded-lg px-2.5 py-1.5 text-[11px] text-[#b91c1c]"
-        />
+        <div className="border-b border-[#f0f0f0] px-4 py-3">
+          <div className="scrollbar-hide flex gap-1.5 overflow-x-auto pb-0.5">
+            {CATEGORIES.map((c) => {
+              const count = c === "all" ? events.length : events.filter((e) => cat(e.type) === c).length
+              const active = filter === c
+              return (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setFilter(c)}
+                  className={cn(
+                    "shrink-0 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold capitalize transition-colors",
+                    active
+                      ? "btn-accent-solid border-[#e04300] text-white shadow-sm"
+                      : "border-transparent bg-[#f0f0f0] text-[#717171] active:bg-[#e8e8e8]",
+                  )}
+                >
+                  {c}
+                  {count > 0 ? (
+                    <span
+                      className={cn(
+                        "ml-1 rounded px-1 text-[9px] tabular-nums",
+                        active ? "bg-white/20 text-white" : "bg-white text-[#717171]",
+                      )}
+                    >
+                      {count}
+                    </span>
+                  ) : null}
+                </button>
+              )
+            })}
+          </div>
+        </div>
 
-        <div className="flex items-center gap-2">
-          {paused && bufferedCount > 0 ? (
-            <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
-              {bufferedCount} buffered
-            </span>
+        <div className="space-y-2 p-4">
+          {paused ? (
+            <p
+              className="rounded-xl border border-[#fde68a] px-3 py-2 text-[11px] font-medium text-amber-800"
+              style={{ backgroundColor: "#fffbeb" }}
+            >
+              Stream paused — {bufferedCount} buffered. Tap Resume to show them.
+            </p>
           ) : null}
-          <span className="flex-1 text-[11px] tabular-nums text-[#a0a0a0]">{total} received</span>
-          <button
-            type="button"
-            onClick={togglePause}
-            className={cn(
-              "flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold",
-              paused
-                ? "border-amber-200 bg-amber-50 text-amber-700"
-                : "border-[#e5e5e5] bg-[#f7f7f7] text-[#717171]",
-            )}
-          >
-            {paused ? <Play className="size-3" /> : <Pause className="size-3" />}
-            {paused ? "Resume" : "Pause"}
-          </button>
-          <button
-            type="button"
-            onClick={clear}
-            className="flex items-center gap-1 rounded-lg border border-[#e5e5e5] bg-[#f7f7f7] px-2.5 py-1.5 text-[11px] font-semibold text-[#717171]"
-          >
-            <Trash2 className="size-3" />
-            Clear
-          </button>
+
+          {filtered.length === 0 ? (
+            <EmptyState connected={connected} filter={filter} error={error} />
+          ) : (
+            filtered.map((event) => <EventCard key={event._uid} event={event} />)
+          )}
         </div>
       </div>
 
-      <div className="scrollbar-hide flex gap-1.5 overflow-x-auto pb-0.5">
-        {CATEGORIES.map((c) => {
-          const count = c === "all" ? events.length : events.filter((e) => cat(e.type) === c).length
-          return (
-            <button
-              key={c}
-              type="button"
-              onClick={() => setFilter(c)}
-              className={cn(
-                "shrink-0 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold capitalize",
-                filter === c
-                  ? "border-[#ff4f12]/35 bg-[#fff4f0] text-[#ff4f12]"
-                  : "border-[#e5e5e5] bg-white text-[#717171]",
-              )}
-            >
-              {c}
-              {count > 0 ? (
-                <span
-                  className={cn(
-                    "ml-1 rounded px-1 text-[9px] tabular-nums",
-                    filter === c ? "bg-[#ff4f12]/15" : "bg-[#f7f7f7]",
-                  )}
-                >
-                  {count}
-                </span>
-              ) : null}
-            </button>
-          )
-        })}
-      </div>
-
-      {paused ? (
-        <p
-          className="rounded-xl px-3 py-2 text-[11px] font-medium text-amber-800"
-          style={{ backgroundColor: "#fffbeb", border: "1px solid #fde68a" }}
-        >
-          Stream paused — {bufferedCount} buffered. Tap Resume to show them.
-        </p>
-      ) : null}
-
-      <div className="flex flex-col gap-2">
-        {filtered.length === 0 ? (
-          <EmptyState connected={connected} filter={filter} error={error} />
-        ) : (
-          filtered.map((event) => <EventCard key={event._uid} event={event} />)
-        )}
-      </div>
-
-      <details className="overflow-hidden rounded-2xl bg-white" style={{ border: "1px solid #e5e5e5" }}>
-        <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3.5 [&::-webkit-details-marker]:hidden">
-          <span className="text-[13px] font-semibold text-[#222222]">Event type reference</span>
-          <ChevronDown className="size-4 text-[#a0a0a0]" />
+      <details className="group overflow-hidden rounded-2xl bg-white shadow-sm" style={{ border: "1px solid #e5e5e5" }}>
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5 active:bg-[#fafafa] [&::-webkit-details-marker]:hidden">
+          <div className="flex min-w-0 items-center gap-2">
+            <Radio className="text-accent size-4 shrink-0" />
+            <span className="text-[13px] font-semibold text-[#222222]">Event type reference</span>
+            <span className="rounded-md bg-[#f0f0f0] px-2 py-0.5 text-[10px] font-semibold text-[#717171]">
+              {socketEventTypes.length} types
+            </span>
+          </div>
+          <ChevronDown className="size-4 shrink-0 text-[#a0a0a0] transition-transform group-open:rotate-180" />
         </summary>
-        <div className="border-t border-[#f0f0f0] px-4 py-3">
-          <div className="flex flex-col gap-1.5">
+        <div className="border-t border-[#f0f0f0] px-4 py-3" style={{ backgroundColor: "#fafafa" }}>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {socketEventTypes.map((t) => (
               <div
                 key={t}
-                className="rounded-lg border border-[#e5e5e5] bg-[#f7f7f7] px-2.5 py-1.5 font-mono text-[11px] text-[#717171]"
+                className="flex items-center gap-2 rounded-xl border border-[#e5e5e5] bg-white px-3 py-2 shadow-sm"
               >
-                {t}
+                <span className="bg-accent/70 size-1.5 shrink-0 rounded-full" />
+                <span className="font-mono text-[11px] text-[#717171]">{t}</span>
               </div>
             ))}
           </div>

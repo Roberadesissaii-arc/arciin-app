@@ -10,6 +10,10 @@ import type { MobileConnection } from "@/lib/types/api"
 /** Sent to same-origin Next.js routes that proxy to the user’s Arciin instance. */
 export const ARCIIN_API_BASE_HEADER = "x-arciin-api-base"
 
+/** Identifies mobile PWA uploads so the desktop dashboard can show the right toast. */
+export const ARCIIN_CLIENT_CHANNEL_HEADER = "x-arciin-client"
+export const ARCIIN_MOBILE_CLIENT_CHANNEL = "mobile"
+
 function isCoLocatedApiHost(hostname: string): boolean {
   if (typeof window === "undefined") return false
   const pageHost = window.location.hostname.toLowerCase()

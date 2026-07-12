@@ -4,6 +4,7 @@ import { useEffect, type RefObject } from "react"
 
 const BODY_SHEET_CLASS = "arciin-mobile-sheet-open"
 const KEYBOARD_OPEN_THRESHOLD_PX = 20
+
 function keyboardOverlapPx(): number {
   if (typeof window === "undefined") return 0
   const vv = window.visualViewport
@@ -11,6 +12,20 @@ function keyboardOverlapPx(): number {
   const overlap = window.innerHeight - vv.height - vv.offsetTop
   if (overlap < KEYBOARD_OPEN_THRESHOLD_PX) return 0
   return Math.round(overlap)
+}
+
+function isTypingInField(): boolean {
+  const active = document.activeElement
+  return (
+    active instanceof HTMLElement &&
+    active.matches("input, textarea, select, [contenteditable='true']")
+  )
+}
+
+/** True only when a field is focused and the soft keyboard is actually open. */
+function isSoftKeyboardOpen(): boolean {
+  if (!isTypingInField()) return false
+  return keyboardOverlapPx() > 0
 }
 
 /** Keep the portaled bottom nav pinned to the real screen bottom after keyboard / sheets. */
@@ -26,9 +41,9 @@ export function useBottomNavViewport(navRef: RefObject<HTMLElement | null>, enab
       if (!nav) return
 
       const sheetOpen = document.body.classList.contains(BODY_SHEET_CLASS)
-      const overlap = keyboardOverlapPx()
+      const keyboardOpen = isSoftKeyboardOpen()
 
-      if (sheetOpen || overlap > 0) {
+      if (sheetOpen || keyboardOpen) {
         nav.style.visibility = "hidden"
         nav.style.pointerEvents = "none"
         return
@@ -42,7 +57,6 @@ export function useBottomNavViewport(navRef: RefObject<HTMLElement | null>, enab
 
     sync()
     vv.addEventListener("resize", sync)
-    vv.addEventListener("scroll", sync)
     window.addEventListener("focusin", sync, true)
     window.addEventListener("focusout", sync, true)
 
@@ -55,7 +69,6 @@ export function useBottomNavViewport(navRef: RefObject<HTMLElement | null>, enab
 
     return () => {
       vv.removeEventListener("resize", sync)
-      vv.removeEventListener("scroll", sync)
       window.removeEventListener("focusin", sync, true)
       window.removeEventListener("focusout", sync, true)
       window.removeEventListener("arciin:viewport-reset", onSheetClosed)

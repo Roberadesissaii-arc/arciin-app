@@ -136,7 +136,7 @@ export function MobileInstallPage() {
         <div className="mt-auto flex flex-col gap-3 pt-2">
           <button
             type="button"
-            onClick={() => router.push(installed ? "/sign-in" : "/setup")}
+            onClick={() => router.push(installed ? "/sign-in" : "/connect")}
             className="flex h-[52px] w-full items-center justify-center rounded-2xl bg-gradient-to-br from-[#ff6a30] to-[#cc2e00] text-[15px] font-semibold text-white shadow-[0_4px_18px_rgba(255,79,18,0.30)]"
           >
             {installed ? "Continue to sign in" : "Continue to setup"}

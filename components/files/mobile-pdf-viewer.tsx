@@ -119,7 +119,7 @@ function PdfPageCanvas({
           className="flex items-center justify-center rounded-sm bg-[#fafafa] text-[11px] text-[#a1a1aa] shadow-[0_4px_20px_rgba(0,0,0,0.25)]"
           style={{ width: cssWidth, minHeight: Math.round(cssWidth * 1.35) }}
         >
-          {rendering ? <Loader2 className="size-6 animate-spin text-[#ff4f12]" /> : `Page ${pageNumber}`}
+          {rendering ? <Loader2 className="size-6 animate-spin text-accent" /> : `Page ${pageNumber}`}
         </div>
       )}
     </div>
@@ -405,7 +405,7 @@ export function MobilePdfViewer({
       <div className="flex h-full w-full flex-col">
         <div className="flex flex-1 items-center justify-center bg-[#111113]">
           <div className="flex flex-col items-center gap-3">
-            <Loader2 className="size-9 animate-spin text-[#ff4f12]" />
+            <Loader2 className="size-9 animate-spin text-accent" />
             <p className="text-[12px] text-[#71717a]">Opening document…</p>
           </div>
         </div>

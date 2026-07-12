@@ -51,7 +51,7 @@ export function JobRow({ job }: { job: JobSummary }) {
           </span>
         </div>
 
-        <p className="mt-1 text-[12px] leading-relaxed text-[#717171]">
+        <p className="mt-1 truncate text-[12px] leading-relaxed text-[#717171]">
           {jobDescription(job)}
         </p>
 

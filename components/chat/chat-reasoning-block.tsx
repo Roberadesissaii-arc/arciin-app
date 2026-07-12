@@ -39,7 +39,7 @@ export function ChatReasoningBlock({ content, live }: { content: string; live: b
         className="flex w-full items-center gap-2 px-3 py-2.5 text-left"
       >
         {live ? (
-          <Loader2 className="size-3 shrink-0 animate-spin text-[#ff4f12]" />
+          <Loader2 className="size-3 shrink-0 animate-spin text-accent" />
         ) : (
           <Sparkles className="size-3 shrink-0 text-[#a0a0a0]" />
         )}

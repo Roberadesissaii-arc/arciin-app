@@ -14,6 +14,7 @@ import {
 } from "lucide-react"
 
 import { useConnection } from "@/components/providers/connection-provider"
+import { MobilePageIntro, MobilePageStickyHeader } from "@/components/shell/mobile-page-intro"
 import { MobileBottomSheet } from "@/components/shell/mobile-bottom-sheet"
 import {
   createAppDatabaseFolder,
@@ -363,46 +364,39 @@ export function AppDataDetailPage({ databaseId }: { databaseId: string }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div
-        className="sticky top-0 z-10 -mx-4 -mt-4 px-4 pb-2"
-        style={{ backgroundColor: "#f7f7f7", paddingTop: "max(1rem, env(safe-area-inset-top, 0px))" }}
-      >
-        <div className="page-intro-hero overflow-hidden rounded-3xl">
-          <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-5">
-            <div className="min-w-0 flex-1">
-              <p
-                className="truncate text-[22px] font-black leading-none tracking-tight text-white"
-                style={{ fontFamily: "var(--font-space-grotesk, sans-serif)" }}
-              >
-                {database?.name ?? "Database"}
-              </p>
-              <p className="mt-2 text-[12.5px] leading-relaxed" style={{ color: "rgba(255,255,255,0.72)" }}>
-                {database?.description ||
-                  "Each table is a namespace; each row is a JSON document stored in PostgreSQL."}
-              </p>
-              <p className="mt-2 text-[12px] font-semibold" style={{ color: "rgba(255,255,255,0.9)" }}>
-                {loading
-                  ? "Loading…"
-                  : `${folders.length} table${folders.length === 1 ? "" : "s"} · ${totalRecords.toLocaleString()} record${totalRecords === 1 ? "" : "s"}`}
-              </p>
-              {database?.slug ? (
-                <p className="mt-1 truncate font-mono text-[10px]" style={{ color: "rgba(255,255,255,0.55)" }}>
-                  {database.slug}
-                </p>
-              ) : null}
-            </div>
+      <MobilePageStickyHeader>
+        <MobilePageIntro
+          title={database?.name ?? "Database"}
+          subtitle={
+            database?.description ||
+            "Each table is a namespace; each row is a JSON document stored in PostgreSQL."
+          }
+          status={
+            loading
+              ? "Loading…"
+              : `${folders.length} table${folders.length === 1 ? "" : "s"} · ${totalRecords.toLocaleString()} record${totalRecords === 1 ? "" : "s"}`
+          }
+          cornerIcon={Table2}
+          statusIcon={Table2}
+          footerRight={
+            database?.slug ? (
+              <span className="max-w-[9rem] truncate rounded-full border border-[#e5e5e5] bg-white px-2.5 py-1 font-mono text-[10px] text-[#a0a0a0]">
+                {database.slug}
+              </span>
+            ) : undefined
+          }
+          action={
             <Link
               href="/database/app-data"
-              className="flex size-9 shrink-0 items-center justify-center rounded-xl active:opacity-70"
-              style={{ backgroundColor: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.3)" }}
+              className="flex size-8 shrink-0 items-center justify-center rounded-xl border border-[#e5e5e5] bg-white text-[#717171] active:bg-[#f7f7f7]"
               aria-label="Back to app data"
             >
-              <ArrowLeft className="size-4 text-white" />
+              <ArrowLeft className="size-4" />
             </Link>
-          </div>
-        </div>
+          }
+        />
 
-        <div className="mt-2 flex items-center gap-2">
+        <div className="mt-1.5 flex items-center gap-2">
           {canWrite ? (
             <button
               type="button"
@@ -424,7 +418,7 @@ export function AppDataDetailPage({ databaseId }: { databaseId: string }) {
             <RefreshCw className={`size-4 ${loading ? "animate-spin" : ""}`} />
           </button>
         </div>
-      </div>
+      </MobilePageStickyHeader>
 
       {error ? (
         <div

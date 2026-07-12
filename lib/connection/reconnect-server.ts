@@ -1,8 +1,15 @@
 import { getAuthMe } from "@/lib/api/auth"
 import { ApiError, isNetworkError } from "@/lib/api/errors"
 import { discoverServer } from "@/lib/api/mobile"
-import { isLoopbackApiBase } from "@/lib/connection/normalize-url"
-import { serverProfileFromDiscover } from "@/lib/connection/server-profile"
+import { mobileAppWebOrigin } from "@/lib/connection/mobile-access-urls"
+import { isSameOriginAsMobileApp } from "@/lib/connection/mobile-pwa-origin"
+import {
+  isLoopbackApiBase,
+  isPrivateLanHostname,
+  isTryCloudflareHostname,
+} from "@/lib/connection/normalize-url"
+import { serverProfileFromDiscover, serverProfileFromEndpoints } from "@/lib/connection/server-profile"
+import { isStandaloneApp } from "@/lib/standalone/config"
 import {
   clearSession,
   isConnectionExpired,
@@ -45,7 +52,47 @@ export async function reconnectToServer(serverInput: string): Promise<ReconnectR
     }
   }
 
-  const server = serverProfileFromDiscover(discovered.discover, apiBaseUrl)
+  let server = serverProfileFromDiscover(discovered.discover, apiBaseUrl)
+
+  // Discover via proxy loses the real Host — keep the address the user chose.
+  try {
+    const withScheme = /^https?:\/\//i.test(trimmed) ? trimmed : `http://${trimmed.split("/")[0]}`
+    const userUrl = new URL(withScheme)
+    const userOrigin = userUrl.origin.replace(/\/+$/, "")
+    const userPort = userUrl.port || (userUrl.protocol === "https:" ? "443" : "80")
+    const preserveOrigin =
+      userUrl.protocol === "https:" ||
+      isTryCloudflareHostname(userUrl.hostname) ||
+      (isPrivateLanHostname(userUrl.hostname) && userPort !== "4000" && userPort !== "4001")
+
+    if (preserveOrigin) {
+      server = serverProfileFromEndpoints(`${userOrigin}/api`, {
+        instanceName: discovered.discover.instanceName,
+        instanceId: discovered.discover.instanceId,
+        webUrl: userOrigin,
+        socketUrl: userOrigin,
+        canonicalPublicUrl: discovered.discover.canonicalPublicUrl ?? userOrigin,
+        lanUrls: discovered.discover.lanUrls,
+        requestOrigin: userOrigin,
+      })
+    }
+  } catch {
+    /* keep discover profile */
+  }
+
+  if (isStandaloneApp() && isSameOriginAsMobileApp(trimmed)) {
+    const origin = mobileAppWebOrigin()
+    server = serverProfileFromEndpoints(`${origin}/api`, {
+      instanceName: discovered.discover.instanceName,
+      instanceId: discovered.discover.instanceId,
+      webUrl: origin,
+      socketUrl: origin,
+      lanUrls: [origin],
+      requestOrigin: origin,
+      canonicalPublicUrl: discovered.discover.canonicalPublicUrl,
+    })
+  }
+
   saveServerProfile(server)
 
   const stored = loadConnection()

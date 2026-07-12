@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { Clapperboard, FileText, Files, Image as ImageIcon, Loader2, Music4 } from "lucide-react"
 
 import { usePdfThumbnail } from "@/hooks/use-pdf-thumbnail"
+import { AudioCardArtwork } from "@/components/files/audio-card-artwork"
 import {
   getCachedThumbnailUrl,
   hydrateThumbnailFromCache,
@@ -218,6 +219,11 @@ export function AssetThumbnail({
   /** When true, fetch even if not in viewport (viewer). */
   documentThumbnailsEnabled?: boolean
 }) {
+  // Audio has no real thumbnail — show generated cover art like desktop Music.
+  if (asset.mediaType === "AUDIO") {
+    return <AudioCardArtwork className={className} />
+  }
+
   if (documentThumbnailsEnabled && isPdfAsset(asset)) {
     return (
       <PdfAssetThumbnail

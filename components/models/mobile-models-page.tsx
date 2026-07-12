@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import Link from "next/link"
 import { MobileModelsListSkeleton } from "@/components/models/mobile-provider-card-skeleton"
 
 import { MobileAddProviderSheet } from "@/components/models/mobile-add-provider-sheet"
@@ -14,6 +15,7 @@ import { suppressFetchErrorWhenOffline } from "@/lib/connection/offline-ui"
 import { getChatSelection, setChatSelection } from "@/lib/api/chat"
 import { writeLocalChatSelection } from "@/lib/chat/chat-selection-storage"
 import { formatApiError } from "@/lib/api/errors"
+import { getLicenseStatus } from "@/lib/api/license"
 import { getModelProfiles, setDefaultModelProfile } from "@/lib/api/models"
 import type { ModelsFilterId } from "@/lib/models/filter-config"
 import {
@@ -26,6 +28,18 @@ import { MODEL_PROVIDERS, type ProviderMeta } from "@/lib/models/provider-catalo
 import { usePanelStatusMessage } from "@/lib/hooks/use-panel-status-message"
 import type { ModelProfile } from "@/lib/types/models"
 
+/** Providers usable without a paid plan — must match the desktop Models page. */
+const FREE_PROVIDER_IDS = new Set(["ollama-local", "ollama-cloud"])
+
+const MODELS_STALE_MS = 60_000
+type ModelsCacheEntry = {
+  models: ModelProfile[]
+  multiProvider: boolean
+  activeProfileId: string | null
+  fetchedAt: number
+}
+const modelsCache = new Map<string, ModelsCacheEntry>()
+
 export function MobileModelsPage() {
   const { connection, ready, serverReachable } = useConnection()
   const serverOnline = serverReachable !== false
@@ -33,10 +47,17 @@ export function MobileModelsPage() {
   const connectionRef = useRef(connection)
   connectionRef.current = connection
 
-  const [models, setModels] = useState<ModelProfile[]>([])
-  const [activeProfileId, setActiveProfileId] = useState<string | null>(null)
+  const sessionKey = connection?.sessionToken ?? null
+  const cached = sessionKey ? modelsCache.get(sessionKey) : undefined
+
+  const [models, setModels] = useState<ModelProfile[]>(() => cached?.models ?? [])
+  const [multiProvider, setMultiProvider] = useState(() => cached?.multiProvider ?? false)
+  const [activeProfileId, setActiveProfileId] = useState<string | null>(
+    () => cached?.activeProfileId ?? null,
+  )
   const [filter, setFilter] = useState<ModelsFilterId>("all")
-  const [loading, setLoading] = useState(true)
+  // Skip the skeleton on revisit — render cached data instantly and revalidate quietly.
+  const [loading, setLoading] = useState(() => !cached)
   const [refreshing, setRefreshing] = useState(false)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -44,25 +65,39 @@ export function MobileModelsPage() {
   const [sheetMeta, setSheetMeta] = useState<ProviderMeta | null>(null)
   const [showAddSheet, setShowAddSheet] = useState(false)
 
-  const sessionKey = connection?.sessionToken ?? null
-
-  const load = useCallback(async (opts?: { refresh?: boolean }) => {
+  const load = useCallback(async (opts?: { refresh?: boolean; background?: boolean }) => {
     const conn = connectionRef.current
     if (!conn) return
     if (opts?.refresh) setRefreshing(true)
-    else setLoading(true)
+    else if (!opts?.background) setLoading(true)
     setError(null)
     try {
-      const [list, selection] = await Promise.all([
+      const [list, selection, license] = await Promise.all([
         getModelProfiles(conn),
         getChatSelection(conn).catch(() => null),
+        // Deny premium providers until the server confirms the plan — same as desktop.
+        getLicenseStatus(conn).catch(() => null),
       ])
+      const nextMultiProvider = Boolean(
+        license?.features.some((f) => f.id === "ai.multi_provider"),
+      )
       setModels(list)
+      setMultiProvider(nextMultiProvider)
+      let nextActiveProfileId: string | null = null
       if (selection) {
-        setActiveProfileId(selection.profileId)
+        nextActiveProfileId = selection.profileId
       } else {
         const def = list.find((m) => m.isDefault) ?? list[0]
-        if (def) setActiveProfileId(def.id)
+        nextActiveProfileId = def?.id ?? null
+      }
+      if (nextActiveProfileId) setActiveProfileId(nextActiveProfileId)
+      if (conn.sessionToken) {
+        modelsCache.set(conn.sessionToken, {
+          models: list,
+          multiProvider: nextMultiProvider,
+          activeProfileId: nextActiveProfileId,
+          fetchedAt: Date.now(),
+        })
       }
     } catch (err) {
       setError(suppressFetchErrorWhenOffline(serverReachable, formatApiError(err)))
@@ -80,7 +115,10 @@ export function MobileModelsPage() {
       setError(null)
       return
     }
-    void load()
+    const fresh = cached != null && Date.now() - cached.fetchedAt <= MODELS_STALE_MS
+    if (fresh) return
+    void load({ background: cached != null })
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- cached is a read of a module map, not reactive state
   }, [ready, sessionKey, serverOnline, load])
 
   useEffect(() => {
@@ -90,10 +128,13 @@ export function MobileModelsPage() {
   const connectedCount = useMemo(
     () =>
       MODEL_PROVIDERS.filter((meta) => {
+        // Locked premium providers do not count as connected on Free —
+        // a profile saved on a paid plan must not read as usable.
+        if (!multiProvider && !FREE_PROVIDER_IDS.has(meta.id)) return false
         const profile = profileForProvider(models, meta.id)
         return isProviderConnected(profile, meta)
       }).length,
-    [models],
+    [models, multiProvider],
   )
 
   const visibleProviders = useMemo(() => {
@@ -184,8 +225,15 @@ export function MobileModelsPage() {
     }
   }
 
+  function isProviderLocked(providerId: string) {
+    if (multiProvider) return false
+    // Free / basic BYOK: Ollama Local + Ollama Cloud only — matches desktop.
+    return !FREE_PROVIDER_IDS.has(providerId)
+  }
+
   function openConnect(meta: ProviderMeta) {
     if (!serverOnline) return
+    if (isProviderLocked(meta.id)) return
     setSheetMeta(meta)
   }
 
@@ -212,6 +260,24 @@ export function MobileModelsPage() {
       <div className="flex flex-col gap-4 pb-6 pt-0">
         <PageFetchErrorAlert error={error} onRetry={() => void load({ refresh: true })} />
         <PanelStatusBanner message={message} />
+
+        {!loading && serverOnline && !multiProvider ? (
+          <div
+            className="rounded-2xl bg-white px-4 py-3 text-[12px] leading-relaxed text-[#717171]"
+            style={{ border: "1px solid #e5e5e5" }}
+          >
+            <span className="font-semibold text-[#222222]">Free plan: </span>
+            You can connect and test one{" "}
+            <span className="font-medium text-[#222222]">Ollama Local</span> or{" "}
+            <span className="font-medium text-[#222222]">Ollama Cloud</span> model. Full AI
+            Chat, Ask AI on files, PDF Q&amp;A, image understanding, and multiple providers are
+            available on{" "}
+            <Link href="/profile" className="text-accent font-semibold">
+              Pro
+            </Link>
+            .
+          </div>
+        ) : null}
 
         {!serverOnline && !loading ? (
           <div
@@ -249,6 +315,8 @@ export function MobileModelsPage() {
                   profile={profile}
                   isActive={Boolean(connected && profile?.id === activeProfileId)}
                   isBusy={profile ? busyId === profile.id : false}
+                  locked={isProviderLocked(meta.id)}
+                  testable={FREE_PROVIDER_IDS.has(meta.id)}
                   onUse={() => profile && void pickForChat(profile)}
                   serverOnline={serverOnline}
                   onConnect={() => openConnect(meta)}

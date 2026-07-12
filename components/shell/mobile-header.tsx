@@ -11,6 +11,7 @@ import {
   fetchRecentActivity,
   getNotificationsLastSeen,
 } from "@/lib/api/notifications"
+import { subscribeActivityCreated } from "@/lib/notifications/activity-created"
 import { subscribePublicUrlChanged } from "@/lib/notifications/public-url-changed"
 import { useConnection } from "@/components/providers/connection-provider"
 import { isServerConnected } from "@/lib/connection/offline-ui"
@@ -62,9 +63,13 @@ export function MobileHeader() {
         }
       })()
     }
-    const unsub = subscribePublicUrlChanged(reloadBadge)
+    const unsubUrl = subscribePublicUrlChanged(reloadBadge)
+    const unsubActivity = subscribeActivityCreated(() => {
+      reloadBadge()
+    })
     return () => {
-      unsub()
+      unsubUrl()
+      unsubActivity()
       controller?.abort()
     }
   }, [ready, connection, serverReachable])

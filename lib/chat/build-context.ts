@@ -88,6 +88,18 @@ export function buildContextBlock(ctx: ChatInstanceContext, apiBaseUrl: string):
           ),
         ].join("\n")
 
+  const recentAssets = ctx.recentAssets ?? []
+  const recentBlock =
+    recentAssets.length === 0
+      ? "Recent uploads: none yet"
+      : [
+          "Recent uploads (MOST RECENT FIRST — line 1 is the newest; use this exact order to answer \"what did I upload recently\" / \"latest file\" — do NOT list the whole library):",
+          ...recentAssets.map((a, i) => {
+            const when = a.createdAt ? new Date(a.createdAt).toLocaleString() : ""
+            return `  ${i + 1}. ${a.filename} (${a.mediaType.toLowerCase()}, ${a.librarySlug})${when ? ` — ${when}` : ""}`
+          }),
+        ].join("\n")
+
   return [
     "--- Current Instance Data ---",
     `REST API base (use this exact prefix in examples): ${restBase}`,
@@ -98,6 +110,7 @@ export function buildContextBlock(ctx: ChatInstanceContext, apiBaseUrl: string):
     appDbBlock,
     codeBlock,
     documentBlock,
+    recentBlock,
     `Total assets: ${total} (${byType || "none"})`,
     `Storage used: ${storageStr}`,
     lastUpload,

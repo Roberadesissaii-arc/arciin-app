@@ -60,6 +60,17 @@ export function buildApiBaseCandidates(input: string): string[] {
         return [...new Set(candidates.filter(Boolean))]
       }
 
+      // Mobile PWA on a dedicated port (e.g. :3003) — probe /api on that origin first.
+      if (
+        isLan &&
+        port !== "4000" &&
+        port !== "3000" &&
+        port !== "80" &&
+        port !== "443"
+      ) {
+        candidates.push(...proxiedApiCandidates(url.origin, url.pathname))
+      }
+
       if (port === "4000" || url.pathname.startsWith("/api")) {
         candidates.push(stripApiSuffix(url.origin + url.pathname))
       }
@@ -96,7 +107,18 @@ export function buildApiBaseCandidates(input: string): string[] {
     return []
   }
 
-  return [...new Set(candidates.map(normalizeApiBase).filter(Boolean))]
+  return [...new Set(candidates.map(normalizeApiBase).filter(Boolean))].sort((a, b) => {
+    try {
+      const inputUrl = /^https?:\/\//i.test(raw) ? new URL(raw) : null
+      if (!inputUrl || inputUrl.port === "4000" || inputUrl.port === "3000") return 0
+      const preferred = normalizeApiBase(`${inputUrl.origin}/api`)
+      if (a === preferred) return -1
+      if (b === preferred) return 1
+    } catch {
+      /* keep order */
+    }
+    return 0
+  })
 }
 
 function stripApiSuffix(base: string): string {

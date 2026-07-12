@@ -18,6 +18,14 @@ export type AssetSummary = {
   mediaType: MediaType
   sizeBytes: number
   status: string
+  /** Media codec (e.g. h264, vp9, av1) — used to warn when iOS can't decode it. */
+  codec?: string | null
+  /** Video/audio length in seconds — shown as a duration badge on thumbnails. */
+  durationSeconds?: number | null
+  /** Original link this asset was imported from — drives the source badge. */
+  importSourceUrl?: string | null
+  /** Device the upload came from ("web" | "mobile") — Computer/Phone badge fallback. */
+  uploadClient?: string | null
   createdAt: string
   updatedAt: string
 }

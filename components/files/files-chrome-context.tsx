@@ -22,9 +22,11 @@ export type FilesChromeModel = {
   uploading: boolean
   canUpload: boolean
   canCreateFolder: boolean
+  canImportLink: boolean
   onRefresh: () => void
   onUpload: () => void
   onCreateFolder: () => void
+  onImportLink: () => void
   onChangeFilter: (id: FilesFilterId) => void
   onGoToLibraryRoot: () => void
   onCloseAllFolders?: () => void

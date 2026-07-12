@@ -90,10 +90,10 @@ function SchemaTableCard({ table }: { table: AdminTable }) {
     >
       <div className="flex items-start gap-3 p-4 pb-2">
         <div
-          className="page-intro-hero flex size-12 shrink-0 items-center justify-center rounded-2xl"
-          style={{ boxShadow: "0 4px 14px var(--arciin-accent-ring, rgba(255, 79, 18, 0.28))" }}
+          className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-[#f7f7f7]"
+          style={{ border: "1px solid #e8e8e8" }}
         >
-          <Icon className="size-5 text-white" strokeWidth={2} aria-hidden />
+          <Icon className="text-accent size-5" strokeWidth={2} aria-hidden />
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
@@ -103,7 +103,7 @@ function SchemaTableCard({ table }: { table: AdminTable }) {
             >
               {table.label}
             </p>
-            <ChevronRight className="text-accent mt-0.5 size-4 shrink-0 opacity-40 transition-all group-active:translate-x-0.5 group-active:opacity-100" />
+            <ChevronRight className="mt-0.5 size-4 shrink-0 text-[#c0c0c0] transition-all group-active:translate-x-0.5 group-active:text-[#717171]" />
           </div>
           <p className="mt-0.5 truncate font-mono text-[10px] text-[#a0a0a0]">{table.name}</p>
         </div>
@@ -113,14 +113,14 @@ function SchemaTableCard({ table }: { table: AdminTable }) {
         {table.description}
       </p>
 
-      <div className="page-intro-hero flex items-center justify-between px-4 py-2.5">
-        <span
-          className="text-[10px] font-semibold uppercase tracking-wider"
-          style={{ color: "rgba(255,255,255,0.72)" }}
-        >
+      <div
+        className="flex items-center justify-between bg-[#fafafa] px-4 py-2.5"
+        style={{ borderTop: "1px solid #f0f0f0" }}
+      >
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-[#a0a0a0]">
           Rows
         </span>
-        <span className="text-[14px] font-bold tabular-nums text-white">
+        <span className="text-[14px] font-bold tabular-nums text-[#222222]">
           {table.count.toLocaleString()}
         </span>
       </div>
@@ -128,21 +128,33 @@ function SchemaTableCard({ table }: { table: AdminTable }) {
   )
 }
 
+const DATABASE_STALE_MS = 60_000
+type DatabaseCacheEntry = {
+  health: HealthStatus
+  tables: AdminTable[]
+  appDbCount: number
+  fetchedAt: number
+}
+const databaseCache = new Map<string, DatabaseCacheEntry>()
+
 export function DatabasePage() {
   const { connection, ready } = useConnection()
-  const [health, setHealth] = useState<HealthStatus | null>(null)
-  const [tables, setTables] = useState<AdminTable[]>([])
-  const [appDbCount, setAppDbCount] = useState<number | null>(null)
-  const [loading, setLoading] = useState(true)
+  const sessionKey = connection?.sessionToken ?? null
+  const cached = sessionKey ? databaseCache.get(sessionKey) : undefined
+
+  const [health, setHealth] = useState<HealthStatus | null>(() => cached?.health ?? null)
+  const [tables, setTables] = useState<AdminTable[]>(() => cached?.tables ?? [])
+  const [appDbCount, setAppDbCount] = useState<number | null>(() => cached?.appDbCount ?? null)
+  const [loading, setLoading] = useState(() => !cached)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [adminDenied, setAdminDenied] = useState(false)
 
   const load = useCallback(
-    async (signal?: AbortSignal, isRefresh = false) => {
+    async (signal?: AbortSignal, isRefresh = false, background = false) => {
       if (!connection) return
       if (isRefresh) setRefreshing(true)
-      else setLoading(true)
+      else if (!background) setLoading(true)
       setError(null)
       if (!isRefresh) setAdminDenied(false)
 
@@ -155,8 +167,9 @@ export function DatabasePage() {
         setHealth(healthResult)
         setAppDbCount(appDbs.length)
 
+        let tableList: AdminTable[] = []
         try {
-          const tableList = await fetchAdminTables(connection, signal)
+          tableList = await fetchAdminTables(connection, signal)
           if (!signal?.aborted) setTables(tableList)
         } catch (err) {
           if (signal?.aborted) return
@@ -167,6 +180,14 @@ export function DatabasePage() {
           } else {
             throw err
           }
+        }
+        if (!signal?.aborted && connection.sessionToken) {
+          databaseCache.set(connection.sessionToken, {
+            health: healthResult,
+            tables: tableList,
+            appDbCount: appDbs.length,
+            fetchedAt: Date.now(),
+          })
         }
       } catch (err) {
         if (!signal?.aborted) setError(formatApiError(err))
@@ -182,9 +203,12 @@ export function DatabasePage() {
 
   useEffect(() => {
     if (!ready || !connection) return
+    const fresh = cached != null && Date.now() - cached.fetchedAt <= DATABASE_STALE_MS
+    if (fresh) return
     const controller = new AbortController()
-    void load(controller.signal)
+    void load(controller.signal, false, cached != null)
     return () => controller.abort()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- cached is a read of a module map, not reactive state
   }, [ready, connection, load])
 
   const dbOnline = health?.database === "online"

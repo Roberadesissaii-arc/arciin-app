@@ -22,6 +22,8 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
     "Arcinema-main/**",
+    // CommonJS process-manager config — require() is correct here, not app source.
+    "ecosystem.config.cjs",
   ]),
 ]);
 

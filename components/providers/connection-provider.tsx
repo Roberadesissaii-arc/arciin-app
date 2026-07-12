@@ -33,6 +33,9 @@ import {
 } from "@/lib/connection/resolve-reachable-server"
 import { serverProfileFromAuth } from "@/lib/connection/server-profile"
 import { notifyIfPublicWebUrlChanged } from "@/lib/connection/notify-url-change"
+import { notifyMobileActivityCreated } from "@/lib/notifications/activity-created"
+import { mobileToast } from "@/lib/notifications/mobile-toast"
+import { shouldSuppressMobileUploadNotice } from "@/lib/uploads/mobile-upload-batch"
 import { syncServerUrls, type SyncServerUrlsResult } from "@/lib/connection/sync-server-url"
 import { io, type Socket } from "socket.io-client"
 import type { SocketEventPayload } from "@/lib/types/events"
@@ -635,7 +638,70 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
         setSocketGeneration((n) => n + 1)
       }
 
+      const onActivityCreated = (event: SocketEventPayload) => {
+        const data = event.data as
+          | {
+              type?: string
+              title?: string
+              message?: string
+              sentiment?: string
+              client?: string
+              fileName?: string
+              destination?: string
+            }
+          | undefined
+        const type = data?.type
+        if (!type) return
+
+        const isUploadEvent = type === "upload.completed" || type === "upload.failed"
+        if (shouldSuppressMobileUploadNotice() && isUploadEvent) {
+          return
+        }
+
+        const title = String(data?.title || event.message || "New activity")
+        const message =
+          data?.message != null
+            ? String(data.message)
+            : event.message
+              ? String(event.message)
+              : undefined
+
+        notifyMobileActivityCreated({
+          type,
+          title,
+          message,
+          sentiment: data?.sentiment != null ? String(data.sentiment) : undefined,
+        })
+
+        // Visible toast — dispatchActivityCreatedEvent above only refreshes the
+        // badge count. Without this, uploads from another device (or the
+        // desktop app) never surface here until the user opens Notifications.
+        if (isUploadEvent) {
+          const fromOtherDevice = data?.client && data.client !== "mobile"
+          const fileName = data?.fileName?.trim()
+          if (type === "upload.completed") {
+            mobileToast.success(
+              fileName ? `${fileName} uploaded` : "Upload complete",
+              data?.destination
+                ? `Saved in ${data.destination}${fromOtherDevice ? " from another device" : ""}.`
+                : fromOtherDevice
+                  ? "Uploaded from another device."
+                  : undefined,
+            )
+          } else {
+            mobileToast.error(fileName ? `${fileName} failed to upload` : "Upload failed", message)
+          }
+        } else if (
+          type.startsWith("security.") ||
+          type.startsWith("auth.") ||
+          type === "remote.public_url_changed"
+        ) {
+          mobileToast.warning(title, message)
+        }
+      }
+
       socket.on("instance.urls.updated", onUrlsUpdated)
+      socket.on("activity.created", onActivityCreated)
       socket.on("disconnect", scheduleSync)
       socket.io.on("reconnect_failed", scheduleSync)
     })()
@@ -645,6 +711,7 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
       if (syncTimer !== null) window.clearTimeout(syncTimer)
       if (socket) {
         socket.off("disconnect")
+        socket.off("activity.created")
         socket.io.off("reconnect_failed")
         socket.disconnect()
       }

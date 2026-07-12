@@ -1,5 +1,7 @@
 /** Provider catalogue — mirrors desktop Models page (logos, copy, suggested models). */
 
+import { GEMINI_CHAT_MODEL_IDS } from "@/lib/models/gemini-catalog"
+
 export type ProviderMeta = {
   id: string
   name: string
@@ -41,10 +43,10 @@ export const MODEL_PROVIDERS: ProviderMeta[] = [
     id: "gemini",
     name: "Google Gemini",
     logo: "/assets/icons/models/gemini-color.svg",
-    description: "Gemini Flash and Pro through Google AI Studio.",
+    description: "One Google AI Studio key for chat and Read aloud.",
     requiresKey: true,
     requiresBaseUrl: false,
-    suggestedModels: ["gemini-2.0-flash", "gemini-1.5-pro", "gemini-1.5-flash"],
+    suggestedModels: GEMINI_CHAT_MODEL_IDS,
     docsUrl: "https://aistudio.google.com/app/apikey",
   },
   {
@@ -113,7 +115,14 @@ export const MODEL_PROVIDERS: ProviderMeta[] = [
     requiresKey: true,
     requiresBaseUrl: false,
     badge: "Cloud",
-    suggestedModels: [],
+    suggestedModels: [
+      "gpt-oss:120b",
+      "deepseek-v4-flash",
+      "qwen3.5",
+      "gemma4:31b",
+      "kimi-k2.6",
+      "minimax-m3",
+    ],
     docsUrl: "https://ollama.com/settings/api-keys",
   },
   {

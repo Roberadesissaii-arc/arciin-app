@@ -4,9 +4,8 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 
 import { useConnection } from "@/components/providers/connection-provider"
-import { isFirstRunSetupContext } from "@/lib/standalone/first-run"
+import { hasStoredServer } from "@/lib/connection/storage"
 import { loadStandaloneInstanceGate } from "@/lib/standalone/instance-gate"
-import { getStandaloneApiBaseUrl } from "@/lib/standalone/api-origin"
 
 export function AuthRedirect() {
   const router = useRouter()
@@ -18,21 +17,37 @@ export function AuthRedirect() {
 
     let cancelled = false
     void (async () => {
-      const gate = await loadStandaloneInstanceGate()
-      if (cancelled) return
-
-      if (!gate.instanceReady || isFirstRunSetupContext(gate)) {
-        router.replace("/setup")
-        return
-      }
-
       if (connection) {
         const ok = await refresh()
         if (cancelled) return
-        router.replace(ok ? "/home" : "/sign-in")
+        router.replace(ok ? "/home" : hasStoredServer() ? "/sign-in" : "/connect")
         return
       }
-      router.replace("/sign-in")
+
+      if (hasStoredServer()) {
+        router.replace("/sign-in")
+        return
+      }
+
+      // No stored server yet. If this device is co-located with an Arciin server
+      // that hasn't been claimed, let the user do first-run setup right here.
+      try {
+        const gate = await loadStandaloneInstanceGate({ refresh: true })
+        if (cancelled) return
+        if (gate.status && !gate.instanceReady) {
+          router.replace("/setup")
+          return
+        }
+        if (gate.instanceReady) {
+          router.replace("/sign-in")
+          return
+        }
+      } catch {
+        /* co-located API unreachable — fall back to manual connect */
+      }
+      if (cancelled) return
+
+      router.replace("/connect")
     })()
 
     return () => {
@@ -44,7 +59,7 @@ export function AuthRedirect() {
     if (!ready) {
       const t = window.setTimeout(() => {
         setError(
-          "App is taking too long to start. Check that the Arciin API is running (port 4000) and restart the mobile dev server.",
+          "App is taking too long to start. Enter your Arciin server address on the connect screen.",
         )
       }, 12_000)
       return () => window.clearTimeout(t)
@@ -55,13 +70,12 @@ export function AuthRedirect() {
     return (
       <div className="flex min-h-[100dvh] flex-col items-center justify-center gap-4 px-6 text-center">
         <p className="text-[14px] leading-relaxed text-[#717171]">{error}</p>
-        <p className="font-mono text-[11px] text-[#a0a0a0]">{getStandaloneApiBaseUrl()}</p>
         <button
           type="button"
-          onClick={() => router.replace("/setup")}
+          onClick={() => router.replace("/connect")}
           className="rounded-2xl bg-gradient-to-br from-[#ff6a30] to-[#cc2e00] px-6 py-3 text-[14px] font-semibold text-white"
         >
-          Open setup
+          Connect to server
         </button>
       </div>
     )

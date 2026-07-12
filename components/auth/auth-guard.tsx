@@ -4,8 +4,7 @@ import { useEffect } from "react"
 import { usePathname, useRouter } from "next/navigation"
 
 import { useConnection } from "@/components/providers/connection-provider"
-import { isFirstRunSetupContext } from "@/lib/standalone/first-run"
-import { loadStandaloneInstanceGate } from "@/lib/standalone/instance-gate"
+import { hasStoredServer } from "@/lib/connection/storage"
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter()
@@ -16,20 +15,12 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     if (!ready) return
     if (connection) return
 
-    let cancelled = false
-    void (async () => {
-      const gate = await loadStandaloneInstanceGate()
-      if (cancelled) return
-      if (!gate.instanceReady || isFirstRunSetupContext(gate)) {
-        router.replace("/setup")
-        return
-      }
+    if (hasStoredServer()) {
       router.replace(`/sign-in?next=${encodeURIComponent(pathname)}`)
-    })()
-
-    return () => {
-      cancelled = true
+      return
     }
+
+    router.replace("/connect")
   }, [ready, connection, pathname, router])
 
   useEffect(() => {

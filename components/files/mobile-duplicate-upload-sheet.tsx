@@ -144,7 +144,7 @@ export function MobileDuplicateUploadSheet({
           onClick={onCancel}
           className="flex h-11 flex-1 items-center justify-center rounded-xl border border-[#e5e5e5] bg-white text-[14px] font-semibold text-[#444444]"
         >
-          Cancel all
+          Skip duplicates
         </button>
         <button
           type="button"

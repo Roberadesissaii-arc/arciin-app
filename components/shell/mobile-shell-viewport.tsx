@@ -22,7 +22,7 @@ export function MobileShellViewport({ children }: { children: React.ReactNode })
       <main
         className={cn(
           "mobile-app-main flex-1 scrollbar-hide",
-          isChat ? "px-0 pt-0 pb-0" : "px-4 pt-4 pb-nav-safe",
+          isChat ? "px-0 pt-0 pb-0" : "px-4 pt-3 pb-nav-safe",
         )}
       >
         <div

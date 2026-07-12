@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils"
 
 const BODY_SHEET_CLASS = "arciin-mobile-sheet-open"
 const KEYBOARD_OPEN_THRESHOLD_PX = 20
+const KEYBOARD_SAFETY_PAD_PX = 16
 
 function keyboardOverlapPx(): number {
   if (typeof window === "undefined") return 0
@@ -20,53 +21,18 @@ function keyboardOverlapPx(): number {
   return Math.round(overlap)
 }
 
-/** Pin the sheet portal to the visible viewport (iOS keyboard-safe). */
-/** Shrink the overlay to the visible viewport only while the soft keyboard is open. */
-function useVisualViewportFrame(open: boolean, frameRef: React.RefObject<HTMLElement | null>) {
-  useEffect(() => {
-    if (!open || typeof window === "undefined") return
-
-    const vv = window.visualViewport
-    if (!vv) return
-
-    const sync = () => {
-      const frame = frameRef.current
-      if (!frame) return
-
-      const overlap = keyboardOverlapPx()
-      if (overlap > 0) {
-        frame.style.top = `${vv.offsetTop}px`
-        frame.style.height = `${vv.height}px`
-        frame.style.bottom = "auto"
-      } else {
-        frame.style.removeProperty("top")
-        frame.style.removeProperty("height")
-        frame.style.removeProperty("bottom")
-      }
-    }
-
-    sync()
-    vv.addEventListener("resize", sync)
-    vv.addEventListener("scroll", sync)
-
-    return () => {
-      vv.removeEventListener("resize", sync)
-      vv.removeEventListener("scroll", sync)
-      const frame = frameRef.current
-      frame?.style.removeProperty("top")
-      frame?.style.removeProperty("height")
-      frame?.style.removeProperty("bottom")
-    }
-  }, [open, frameRef])
-}
-
 function clearSheetKeyboardLift(shell: HTMLElement) {
-  shell.style.removeProperty("transform")
-  shell.style.removeProperty("transition")
   shell.style.removeProperty("--sheet-kb-fill")
 }
 
-/** Lift sheet + white filler above the soft keyboard (no gap showing page behind). */
+/**
+ * Raise the sheet above the soft keyboard by GROWING a white filler at the
+ * bottom of the shell — never by transforming the shell up. The shell stays
+ * anchored to the viewport bottom, so the filler (bg-white) always reaches
+ * from the panel's bottom edge down through the keyboard area with no gap.
+ * (A transform would lift the shell's bottom edge above the keyboard and
+ * expose the page background in between — the old bug.)
+ */
 function useSheetKeyboardLift(open: boolean, shellRef: React.RefObject<HTMLElement | null>) {
   useEffect(() => {
     if (!open || typeof window === "undefined") return
@@ -91,9 +57,10 @@ function useSheetKeyboardLift(open: boolean, shellRef: React.RefObject<HTMLEleme
 
       const overlap = keyboardOverlapPx()
       if (overlap > 0) {
-        shell.style.transition = "transform 120ms ease-out"
-        shell.style.transform = `translateY(-${overlap}px)`
-        shell.style.setProperty("--sheet-kb-fill", `${overlap}px`)
+        // Pad slightly so the iOS predictive-text bar (sometimes excluded from
+        // visualViewport) is also cleared. The pad region is part of the white
+        // filler, so it never shows the page behind it.
+        shell.style.setProperty("--sheet-kb-fill", `${overlap + KEYBOARD_SAFETY_PAD_PX}px`)
       } else {
         clearSheetKeyboardLift(shell)
       }
@@ -158,7 +125,6 @@ export function MobileOverlay({ open, onClose, children }: MobileOverlayProps) {
   }, [])
 
   useBodySheetLock(open)
-  useVisualViewportFrame(open, frameRef)
   useSheetKeyboardLift(open, shellRef)
 
   useEffect(() => {
@@ -227,7 +193,6 @@ export function MobileBottomSheet({
   }, [])
 
   useBodySheetLock(open)
-  useVisualViewportFrame(open, frameRef)
   useSheetKeyboardLift(open, shellRef)
 
   useEffect(() => {
@@ -242,12 +207,41 @@ export function MobileBottomSheet({
   const handleClose = () => {
     const shell = shellRef.current
     const active = document.activeElement
-    if (shell && active instanceof HTMLElement && shell.contains(active)) {
-      active.blur()
+    const wasTyping =
+      shell &&
+      active instanceof HTMLElement &&
+      shell.contains(active) &&
+      active.matches("input, textarea, select")
+
+    if (!wasTyping) {
+      onClose()
+      forceResetMobileViewport()
+      notifyViewportReset()
+      return
     }
-    forceResetMobileViewport()
-    notifyViewportReset()
-    onClose()
+
+    // Keyboard is open. Blur to dismiss it, then let the sheet ride DOWN with
+    // the keyboard (useSheetKeyboardLift shrinks the fill as visualViewport
+    // grows back) and only unmount once the keyboard has fully animated away.
+    // Unmounting mid-animation is what caused the shake/glitch.
+    active.blur()
+    const vv = window.visualViewport
+    let done = false
+    const finish = () => {
+      if (done) return
+      done = true
+      vv?.removeEventListener("resize", onResize)
+      window.clearTimeout(timer)
+      onClose()
+      forceResetMobileViewport()
+      notifyViewportReset()
+    }
+    const onResize = () => {
+      // < 40px overlap ≈ keyboard gone (allow for the iOS predictive bar).
+      if (!vv || window.innerHeight - vv.height < 40) finish()
+    }
+    vv?.addEventListener("resize", onResize)
+    const timer = window.setTimeout(finish, 350)
   }
 
   if (!mounted || !open) return null

@@ -22,21 +22,21 @@ function StatCardSkeleton() {
 function StorageCardSkeleton() {
   return (
     <div
-      className="flex flex-col gap-3 rounded-2xl bg-white p-4"
-      style={{ border: "1px solid #e5e5e5" }}
+      className="flex flex-col gap-3 rounded-2xl p-4"
+      style={{ backgroundColor: "#0c0c0e", border: "1px solid rgba(255,255,255,0.08)" }}
       aria-hidden
     >
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <Skeleton className="size-7 shrink-0 rounded-xl" />
-          <Skeleton className="h-3.5 w-14 rounded-md" />
+          <Skeleton className="size-7 shrink-0 rounded-xl bg-white/10" />
+          <Skeleton className="h-3.5 w-14 rounded-md bg-white/10" />
         </div>
-        <Skeleton className="h-3 w-24 max-w-[55%] rounded-md" />
+        <Skeleton className="h-3 w-24 max-w-[55%] rounded-md bg-white/10" />
       </div>
-      <Skeleton className="h-2 w-full rounded-full" />
+      <Skeleton className="h-2 w-full rounded-full bg-white/10" />
       <div className="flex items-center justify-between">
-        <Skeleton className="h-2.5 w-16 rounded-md" />
-        <Skeleton className="h-2.5 w-12 rounded-md" />
+        <Skeleton className="h-2.5 w-16 rounded-md bg-white/10" />
+        <Skeleton className="h-2.5 w-12 rounded-md bg-white/10" />
       </div>
     </div>
   )
@@ -90,6 +90,25 @@ export function HomePageSkeleton({ greeting = null }: { greeting?: string | null
       </div>
 
       <StorageCardSkeleton />
+
+      <div>
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Skeleton className="size-4 rounded-md" />
+            <Skeleton className="h-3.5 w-28 rounded-md" />
+          </div>
+          <Skeleton className="h-3 w-14 rounded-md" />
+        </div>
+        <div className="grid grid-cols-2 gap-2" aria-hidden>
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div
+              key={i}
+              className="aspect-square animate-pulse rounded-xl bg-[#ececec]"
+              style={{ border: "1px solid #e5e5e5" }}
+            />
+          ))}
+        </div>
+      </div>
 
       <div>
         <div className="mb-3 flex items-center gap-2">

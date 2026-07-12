@@ -5,6 +5,7 @@ import type {
   ModelProfile,
   OllamaAvailableModelsResult,
   OllamaCloudModelsResult,
+  OllamaModelCapabilitiesResult,
   UpdateModelProfileInput,
 } from "@/lib/types/models"
 
@@ -35,6 +36,21 @@ export function setDefaultModelProfile(connection: MobileConnection, id: string)
   })
 }
 
+export type ModelTestResult = { model: string; reply: string }
+
+/** Free-tier Ollama connection test — one short prompt, one short reply. */
+export function testModelProfile(
+  connection: MobileConnection,
+  id: string,
+  input?: { prompt?: string; model?: string },
+) {
+  return fetchApi<ModelTestResult>(`/models/${id}/test`, {
+    connection,
+    method: "POST",
+    body: input ?? {},
+  })
+}
+
 export function getAvailableModels(
   connection: MobileConnection,
   profileId: string,
@@ -58,5 +74,20 @@ export function getOllamaCloudModels(
     connection,
     method: "GET",
     signal: opts?.signal,
+  })
+}
+
+/** Batch Ollama /api/show — vision / thinking per model tag (cached server-side). */
+export function getOllamaModelCapabilities(
+  connection: MobileConnection,
+  profileId: string,
+  body: { models: string[] },
+  signal?: AbortSignal,
+) {
+  return fetchApi<OllamaModelCapabilitiesResult>(`/models/${profileId}/model-capabilities`, {
+    connection,
+    method: "POST",
+    body,
+    signal,
   })
 }

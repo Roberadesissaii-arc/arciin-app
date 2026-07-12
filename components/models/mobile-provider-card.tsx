@@ -1,8 +1,10 @@
 "use client"
 
 import Image from "next/image"
-import { Check, CheckCircle2, Loader2, Settings2, Star } from "lucide-react"
+import Link from "next/link"
+import { Check, CheckCircle2, Loader2, Lock, Settings2, Star } from "lucide-react"
 
+import { MobileModelTestSection } from "@/components/models/mobile-model-test-section"
 import type { ProviderMeta } from "@/lib/models/provider-catalog"
 import { isProviderConnected } from "@/lib/models/model-helpers"
 import type { ModelProfile } from "@/lib/types/models"
@@ -17,39 +19,53 @@ export function MobileProviderCard({
   onConnect,
   onConfigure,
   serverOnline = true,
+  locked = false,
+  testable = false,
 }: {
   meta: ProviderMeta
   profile: ModelProfile | undefined
   isActive: boolean
   isBusy: boolean
   serverOnline?: boolean
+  /** Plan-gated (Free includes Ollama only) — mirrors the desktop Models page. */
+  locked?: boolean
+  /** Ollama providers — show the free connection-test section when connected. */
+  testable?: boolean
   onUse: () => void
   onConnect: () => void
   onConfigure: () => void
 }) {
   const connected = isProviderConnected(profile, meta)
+  // A profile connected on a paid plan must not read as usable after dropping
+  // to Free — no green dot, checkmark, default star, or active ring.
+  const showConnected = connected && !locked
+  const showActive = isActive && !locked
 
   return (
     <div
       className="flex w-full flex-col overflow-hidden rounded-2xl bg-white text-left"
       style={{
-        border: isActive
+        border: showActive
           ? "2px solid var(--arciin-accent, #ff4f12)"
           : "1px solid #e5e5e5",
-        boxShadow: isActive
+        boxShadow: showActive
           ? "0 4px 20px var(--arciin-accent-ring, rgba(255, 79, 18, 0.12))"
           : undefined,
       }}
     >
       <button
         type="button"
-        disabled={Boolean(isBusy) || (!connected && !serverOnline)}
+        disabled={Boolean(isBusy) || locked || (!connected && !serverOnline)}
         onClick={() => {
+          if (locked) return
           if (!connected && !serverOnline) return
           if (connected) onUse()
           else onConnect()
         }}
-        className="flex flex-col text-left active:opacity-95 disabled:opacity-70"
+        className={cn(
+          "flex flex-col text-left active:opacity-95 disabled:opacity-70",
+          locked && "opacity-95",
+        )}
       >
         <div className="flex items-start justify-between gap-3 p-4 pb-2">
           <div className="flex items-center gap-3">
@@ -76,7 +92,7 @@ export function MobileProviderCard({
                     {meta.badge}
                   </span>
                 ) : null}
-                {profile?.isDefault ? (
+                {profile?.isDefault && !locked ? (
                   <Star className="text-accent size-3.5 fill-current" />
                 ) : null}
               </div>
@@ -84,21 +100,25 @@ export function MobileProviderCard({
                 <span
                   className="size-1.5 shrink-0 rounded-full"
                   style={{
-                    background: connected ? "#22c55e" : "#d4d4d8",
-                    boxShadow: connected ? "0 0 5px #22c55e80" : undefined,
+                    background: showConnected ? "#22c55e" : "#d4d4d8",
+                    boxShadow: showConnected ? "0 0 5px #22c55e80" : undefined,
                   }}
                 />
                 <p className="truncate text-[11px] text-[#717171]">
-                  {connected ? profile?.defaultModel ?? "Connected" : "Not connected"}
+                  {showConnected
+                    ? profile?.defaultModel ?? "Connected"
+                    : locked && connected
+                      ? "Locked on Free"
+                      : "Not connected"}
                 </p>
               </div>
             </div>
           </div>
           {isBusy ? (
             <Loader2 className="text-accent size-5 shrink-0 animate-spin" />
-          ) : isActive ? (
+          ) : showActive ? (
             <Check className="text-accent size-5 shrink-0" />
-          ) : connected ? (
+          ) : showConnected ? (
             <CheckCircle2 className="size-4 shrink-0 text-emerald-500" />
           ) : null}
         </div>
@@ -121,7 +141,20 @@ export function MobileProviderCard({
       </button>
 
       <div className="flex items-center gap-2 border-t border-[#f0f0f0] px-4 py-2.5">
-        {connected ? (
+        {locked ? (
+          <>
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[#717171]">
+              <Lock className="size-3.5 text-[#a0a0a0]" strokeWidth={1.75} />
+              Free includes Ollama only
+            </span>
+            <Link
+              href="/profile"
+              className="btn-accent-solid ml-auto rounded-xl px-3 py-1.5 text-[12px] font-semibold active:opacity-90"
+            >
+              Unlock Pro
+            </Link>
+          </>
+        ) : showConnected ? (
           <>
             <button
               type="button"
@@ -129,10 +162,10 @@ export function MobileProviderCard({
               disabled={isBusy || !serverOnline}
               className={cn(
                 "flex-1 rounded-xl py-2 text-[12px] font-semibold text-white disabled:opacity-50",
-                isActive ? "btn-accent-solid" : "bg-[#222222]",
+                showActive ? "btn-accent-solid" : "bg-[#222222]",
               )}
             >
-              {isActive ? "Active for chat" : "Use for chat"}
+              {showActive ? "Active for chat" : "Use for chat"}
             </button>
             <button
               type="button"
@@ -159,6 +192,13 @@ export function MobileProviderCard({
           </button>
         )}
       </div>
+
+      {/* Free-tier connection test — Ollama only, available on every plan (core.basic_ai) */}
+      {showConnected && testable && profile ? (
+        <div className="border-t border-[#f0f0f0] px-4 py-2.5">
+          <MobileModelTestSection profileId={profile.id} />
+        </div>
+      ) : null}
     </div>
   )
 }

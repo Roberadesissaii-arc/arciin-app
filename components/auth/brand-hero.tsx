@@ -13,9 +13,9 @@ export const SIGN_IN_BRAND_PAGES = [
       "Arciin on mobile — upload photos and files, browse libraries, chat with your instance, and manage everything from one app.",
   },
   {
-    brandSub: "First-run setup.",
+    brandSub: "Connect to your server.",
     brandDesc:
-      "Create your account, pick storage on the server, and start using Arciin. No pairing codes or desktop connection required.",
+      "Arciin Mobile is a client — enter your server address, sign in, and manage files. Setup and storage live on your Arciin server, not on this phone.",
   },
 ] as const
 

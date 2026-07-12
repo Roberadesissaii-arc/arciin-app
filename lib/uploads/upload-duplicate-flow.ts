@@ -73,34 +73,52 @@ export async function findUploadDuplicates(
   libraries: LibrarySummary[],
   folderId: string | null,
 ): Promise<{ clean: File[]; conflicts: DuplicateUploadConflict[] }> {
-  const byTarget = new Map<string, { target: UploadTarget; files: File[] }>()
+  const dupeByName = await fetchRemoteDuplicateMap(connection, files, filter, libraries, folderId)
+  return partitionUploadDuplicates(files, filter, libraries, folderId, dupeByName)
+}
 
-  for (const file of files) {
-    const target = resolveUploadTarget(filter, libraries, file, folderId)
-    const key = targetKey(target)
-    const entry = byTarget.get(key) ?? { target, files: [] }
-    entry.files.push(file)
-    byTarget.set(key, entry)
-  }
+function assetDupeKey(target: UploadTarget, filename: string): string {
+  return `${targetKey(target)}:${filename}`
+}
 
-  const dupeByName = new Map<string, string>()
-  for (const { target, files: groupFiles } of byTarget.values()) {
-    const names = [...new Set(groupFiles.map((f) => f.name))]
-    const { duplicates } = await checkDuplicates(connection, names, {
-      libraryId: target.libraryId,
-      folderId: target.folderId,
-    })
-    for (const hit of duplicates) {
-      dupeByName.set(`${targetKey(target)}:${hit.filename}`, hit.assetId)
+function buildAssetDupeMap(
+  assets: Array<{ id: string; originalFilename: string; libraryId?: string | null; folderId?: string | null }>,
+): Map<string, string> {
+  const map = new Map<string, string>()
+  for (const asset of assets) {
+    const target: UploadTarget = {
+      libraryId: asset.libraryId ?? undefined,
+      folderId: asset.folderId ?? null,
     }
+    map.set(assetDupeKey(target, asset.originalFilename), asset.id)
   }
+  return map
+}
 
+/** Instant duplicate check using assets already loaded in the Files view (no network wait). */
+export function findUploadDuplicatesFromAssets(
+  files: File[],
+  filter: FilesFilterId,
+  libraries: LibrarySummary[],
+  folderId: string | null,
+  assets: Array<{ id: string; originalFilename: string; libraryId?: string | null; folderId?: string | null }>,
+): { clean: File[]; conflicts: DuplicateUploadConflict[] } {
+  return partitionUploadDuplicates(files, filter, libraries, folderId, buildAssetDupeMap(assets))
+}
+
+function partitionUploadDuplicates(
+  files: File[],
+  filter: FilesFilterId,
+  libraries: LibrarySummary[],
+  folderId: string | null,
+  dupeByName: Map<string, string>,
+): { clean: File[]; conflicts: DuplicateUploadConflict[] } {
   const clean: File[] = []
   const conflicts: DuplicateUploadConflict[] = []
 
   for (const file of files) {
     const target = resolveUploadTarget(filter, libraries, file, folderId)
-    const assetId = dupeByName.get(`${targetKey(target)}:${file.name}`)
+    const assetId = dupeByName.get(assetDupeKey(target, file.name))
     if (assetId) {
       conflicts.push({
         file,
@@ -114,6 +132,38 @@ export async function findUploadDuplicates(
   }
 
   return { clean, conflicts }
+}
+
+async function fetchRemoteDuplicateMap(
+  connection: MobileConnection,
+  files: File[],
+  filter: FilesFilterId,
+  libraries: LibrarySummary[],
+  folderId: string | null,
+): Promise<Map<string, string>> {
+  const dupeByName = new Map<string, string>()
+  const byTarget = new Map<string, { target: UploadTarget; files: File[] }>()
+
+  for (const file of files) {
+    const target = resolveUploadTarget(filter, libraries, file, folderId)
+    const key = targetKey(target)
+    const entry = byTarget.get(key) ?? { target, files: [] }
+    entry.files.push(file)
+    byTarget.set(key, entry)
+  }
+
+  for (const { target, files: groupFiles } of byTarget.values()) {
+    const names = [...new Set(groupFiles.map((f) => f.name))]
+    const { duplicates } = await checkDuplicates(connection, names, {
+      libraryId: target.libraryId,
+      folderId: target.folderId,
+    })
+    for (const hit of duplicates) {
+      dupeByName.set(assetDupeKey(target, hit.filename), hit.assetId)
+    }
+  }
+
+  return dupeByName
 }
 
 export async function applyDuplicateResolutions(

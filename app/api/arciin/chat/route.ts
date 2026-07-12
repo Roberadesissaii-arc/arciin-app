@@ -99,7 +99,24 @@ export async function POST(request: Request) {
     )
   }
 
-  return new Response(res.body, {
+  const stream = new ReadableStream({
+    async start(controller) {
+      const reader = res.body!.getReader()
+      try {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          if (value?.byteLength) controller.enqueue(value)
+        }
+      } catch {
+        controller.error(new Error("Chat stream interrupted."))
+        return
+      }
+      controller.close()
+    },
+  })
+
+  return new Response(stream, {
     status: 200,
     headers: {
       "Content-Type": res.headers.get("content-type") ?? "text/event-stream",

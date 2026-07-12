@@ -2,6 +2,8 @@ import { getBrowserApiUrl } from "@/lib/api/browser-api-origin"
 import { ApiError, parseApiError } from "@/lib/api/errors"
 import {
   ARCIIN_API_BASE_HEADER,
+  ARCIIN_CLIENT_CHANNEL_HEADER,
+  ARCIIN_MOBILE_CLIENT_CHANNEL,
   needsArciinSameOriginProxy,
   resolveCoLocatedApiBase,
 } from "@/lib/api/arciin-proxy"
@@ -21,22 +23,27 @@ type UploadOptions = {
 function buildUploadRequest(connection: MobileConnection, params: URLSearchParams) {
   const query = params.size ? `?${params.toString()}` : ""
   const authHeader = { Authorization: `Bearer ${connection.sessionToken}` }
+  const clientHeader = { [ARCIIN_CLIENT_CHANNEL_HEADER]: ARCIIN_MOBILE_CLIENT_CHANNEL }
 
   if (typeof window !== "undefined" && isStandaloneApp()) {
-    return { url: getBrowserApiUrl(`/uploads${query}`), headers: authHeader }
+    return {
+      url: getBrowserApiUrl(`/uploads${query}`),
+      headers: { ...authHeader, ...clientHeader },
+    }
   }
 
   const apiBase = resolveCoLocatedApiBase(connection.apiBaseUrl)
   const directUrl = `${apiBase.replace(/\/+$/, "")}/uploads${query}`
 
   if (typeof window === "undefined" || !needsArciinSameOriginProxy(apiBase)) {
-    return { url: directUrl, headers: authHeader }
+    return { url: directUrl, headers: { ...authHeader, ...clientHeader } }
   }
 
   return {
     url: `/api/arciin/uploads${query}`,
     headers: {
       ...authHeader,
+      ...clientHeader,
       [ARCIIN_API_BASE_HEADER]: normalizeApiBase(connection.apiBaseUrl).replace(/\/+$/, ""),
     },
   }

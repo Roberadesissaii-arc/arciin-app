@@ -1,16 +1,21 @@
 "use client"
 
+import { useCallback } from "react"
 import Link from "next/link"
 import {
   Activity,
   BriefcaseBusiness,
-  CloudUpload,
+  Database,
   FingerprintPattern,
   GalleryVerticalEnd,
   HardDrive,
 } from "lucide-react"
 
 import { HomePageSkeleton } from "@/components/home/home-page-skeleton"
+import { RecentUploadsSection } from "@/components/home/recent-uploads-grid"
+import { PlanBadge } from "@/components/shell/plan-badge"
+import { getLicenseStatus } from "@/lib/api/license"
+import { useStablePanelLoad } from "@/lib/hooks/use-stable-panel-load"
 import { useCachedHomeOverview } from "@/lib/hooks/use-cached-home-overview"
 import { PageFetchErrorAlert } from "@/components/shell/page-fetch-error-alert"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -21,7 +26,6 @@ import {
   activityTypeLabel,
   Clock3,
 } from "@/lib/activity/icons"
-import { JobRow } from "@/components/jobs/job-row"
 import type { HomeOverview } from "@/lib/types/models"
 import { formatBytes } from "@/lib/utils/format-bytes"
 import { formatRelativeDate } from "@/lib/utils/format-date"
@@ -31,13 +35,18 @@ function StatCard({
   value,
   sub,
   icon: Icon,
+  iconColor,
   href,
+  locked,
 }: {
   label: string
-  value: string
+  value?: string
   sub?: string
   icon: React.ElementType
+  iconColor: string
   href?: string
+  /** Plan-gated (e.g. vault on Free) — show an upgrade badge instead of a dash. */
+  locked?: boolean
 }) {
   const body = (
     <>
@@ -47,15 +56,25 @@ function StatCard({
           className="flex size-7 items-center justify-center rounded-xl bg-[#f7f7f7]"
           style={{ border: "1px solid #e5e5e5" }}
         >
-          <Icon className="size-[14px] text-[#717171]" />
+          <Icon className="size-[14px]" style={{ color: iconColor }} strokeWidth={2} />
         </div>
       </div>
-      <div>
-        <p className="text-[22px] font-bold leading-none tracking-tight text-[#222222]">
-          {value}
-        </p>
-        {sub ? <p className="mt-1 text-[11px] text-[#a0a0a0]">{sub}</p> : null}
-      </div>
+      {locked ? (
+        <div>
+          <div className="flex items-center gap-1.5">
+            <PlanBadge plan="pro" />
+            <span className="text-[11px] text-[#a0a0a0]">to unlock</span>
+          </div>
+          <p className="mt-1 text-[11px] text-[#a0a0a0]">Unavailable</p>
+        </div>
+      ) : (
+        <div>
+          <p className="text-[22px] font-bold leading-none tracking-tight text-[#222222]">
+            {value}
+          </p>
+          {sub ? <p className="mt-1 text-[11px] text-[#a0a0a0]">{sub}</p> : null}
+        </div>
+      )}
     </>
   )
 
@@ -97,6 +116,17 @@ export function HomePage() {
   const { data, error, reload } = useCachedHomeOverview()
   const greeting = homeGreeting(connection, serverReachable, ready)
 
+  const licenseLoader = useCallback(
+    (conn: Parameters<typeof getLicenseStatus>[0], signal: AbortSignal) =>
+      getLicenseStatus(conn, signal),
+    [],
+  )
+  const { data: licenseStatus } = useStablePanelLoad(true, licenseLoader, {
+    cacheKey: "license-status",
+    staleTimeMs: 60_000,
+  })
+  const currentPlan = licenseStatus?.plan ?? null
+
   const storage = data?.storage
   const storagePct = storage ? storagePercent(storage) : null
   const storageLabel =
@@ -106,17 +136,26 @@ export function HomePage() {
         ? `${formatBytes(storage.usageBytes)} used`
         : "—"
 
-  const passwordsValue =
-    data?.passwordVaultCount != null ? String(data.passwordVaultCount) : "—"
+  // Vault fetch 403s on Free (vault.password is Pro+) — treat "unknown count" as locked.
+  const passwordsLocked = data?.passwordVaultCount == null
 
-  const passwordsSub =
-    data?.passwordVaultCount == null
-      ? "unavailable"
-      : data.passwordVaultLocked
-        ? "vault locked"
-        : data.passwordVaultCount === 1
-          ? "saved entry"
-          : "saved entries"
+  const passwordsValue = data?.passwordVaultCount != null ? String(data.passwordVaultCount) : ""
+
+  const passwordsSub = data?.passwordVaultLocked
+    ? "vault locked"
+    : data?.passwordVaultCount === 1
+      ? "saved entry"
+      : "saved entries"
+
+  // App databases 403 on Free (developer.app_databases is Pro+) — treat "unknown count" as locked.
+  const databaseLocked = data?.appDataCount == null
+  const databaseValue = data?.appDataCount != null ? String(data.appDataCount) : ""
+  const databaseSub =
+    data?.appDataCount === 0
+      ? "none yet"
+      : data?.appDataCount === 1
+        ? "app database"
+        : "app databases"
 
   if (!data) {
     return (
@@ -130,12 +169,15 @@ export function HomePage() {
     <div className="flex flex-col gap-5">
       <div>
         {greeting ? (
-          <h2
-            className="text-[22px] font-bold tracking-tight text-[#222222]"
-            style={{ fontFamily: "var(--font-space-grotesk, sans-serif)" }}
-          >
-            {greeting}
-          </h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2
+              className="text-[22px] font-bold tracking-tight text-[#222222]"
+              style={{ fontFamily: "var(--font-space-grotesk, sans-serif)" }}
+            >
+              {greeting}
+            </h2>
+            {currentPlan ? <PlanBadge plan={currentPlan} /> : null}
+          </div>
         ) : (
           <Skeleton
             className="h-7 w-40 max-w-full rounded-lg"
@@ -161,102 +203,83 @@ export function HomePage() {
                 : "none yet"
           }
           icon={BriefcaseBusiness}
+          iconColor="var(--arciin-accent, #ff4f12)"
           href="/jobs"
         />
         <StatCard
-          label="Uploads"
-          value={String(data.uploadInProgress)}
-          sub={
-            data.uploadInProgress > 0
-              ? "in progress"
-              : `${data.uploadCount} recent`
-          }
-          icon={CloudUpload}
-          href="/files"
+          label="Database"
+          value={databaseValue}
+          sub={databaseSub}
+          icon={Database}
+          iconColor="var(--arciin-accent, #ff4f12)"
+          href="/database"
+          locked={databaseLocked}
         />
         <StatCard
           label="Passwords"
           value={passwordsValue}
           sub={passwordsSub}
           icon={FingerprintPattern}
+          iconColor="var(--arciin-accent, #ff4f12)"
           href="/profile/passwords"
+          locked={passwordsLocked}
         />
         <StatCard
           label="Events"
           value="Live"
           sub="Socket.IO monitor"
           icon={GalleryVerticalEnd}
+          iconColor="var(--arciin-accent, #ff4f12)"
           href="/events"
         />
       </div>
 
       <div
-        className="flex flex-col gap-3 rounded-2xl bg-white p-4"
-        style={{ border: "1px solid #e5e5e5" }}
+        className="flex flex-col gap-3 rounded-2xl p-4"
+        style={{ backgroundColor: "#0c0c0e", border: "1px solid rgba(255,255,255,0.08)" }}
       >
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <div
-              className="flex size-7 items-center justify-center rounded-xl bg-[#f7f7f7]"
-              style={{ border: "1px solid #e5e5e5" }}
+              className="flex size-7 items-center justify-center rounded-xl"
+              style={{
+                backgroundColor: "rgba(255,255,255,0.08)",
+                border: "1px solid rgba(255,255,255,0.12)",
+              }}
             >
-              <HardDrive className="size-[14px] text-[#717171]" />
+              <HardDrive className="size-[14px]" style={{ color: "var(--arciin-accent, #ff4f12)" }} />
             </div>
-            <span className="text-[13px] font-semibold text-[#222222]">Storage</span>
+            <span className="text-[13px] font-semibold text-white">Storage</span>
           </div>
-          <span className="max-w-[55%] truncate text-right text-[12px] font-medium text-[#a0a0a0]">
+          <span className="max-w-[55%] truncate text-right text-[12px] font-semibold text-white/80">
             {storageLabel}
           </span>
         </div>
 
-        <div className="h-2 w-full overflow-hidden rounded-full bg-[#f0f0f0]">
+        <div
+          className="h-2 w-full overflow-hidden rounded-full"
+          style={{ backgroundColor: "rgba(255,255,255,0.12)" }}
+        >
           <div
             className="h-full rounded-full transition-all"
             style={{
-              width: storagePct != null ? `${Math.max(storagePct, storage?.usageBytes ? 2 : 0)}%` : "0%",
               backgroundColor: "var(--arciin-accent, #ff4f12)",
+              width: storagePct != null ? `${Math.max(storagePct, storage?.usageBytes ? 2 : 0)}%` : "0%",
             }}
           />
         </div>
 
-        <div className="flex items-center justify-between text-[11px]">
-          <span className="text-[#a0a0a0]">
+        <div className="flex items-center justify-between text-[11px] text-white/60">
+          <span>
             {storage ? `${formatBytes(storage.usageBytes)} used` : "Unavailable"}
           </span>
-          <span className="font-medium text-[#717171]">
+          <span className="font-semibold" style={{ color: "var(--arciin-accent, #ff4f12)" }}>
             {storagePct != null ? `${storagePct}% full` : storage ? "—" : ""}
           </span>
         </div>
       </div>
 
-      <div>
-        <div className="mb-3 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <BriefcaseBusiness className="size-4 text-[#a0a0a0]" />
-            <span className="text-[13px] font-semibold text-[#222222]">Recent jobs</span>
-          </div>
-          <Link href="/jobs" className="text-accent text-[12px] font-semibold active:opacity-70">
-            View all
-          </Link>
-        </div>
-        <div
-          className="overflow-hidden rounded-2xl bg-white"
-          style={{ border: "1px solid #e5e5e5" }}
-        >
-          {data.recentJobs.length ? (
-            data.recentJobs.map((job, i) => (
-              <div key={job.id}>
-                {i > 0 ? <div className="mx-4 h-px bg-[#f5f5f5]" /> : null}
-                <JobRow job={job} />
-              </div>
-            ))
-          ) : (
-            <p className="py-10 text-center text-[13px] text-[#a0a0a0]">
-              No background jobs yet
-            </p>
-          )}
-        </div>
-      </div>
+      <RecentUploadsSection />
 
       <div>
         <div className="mb-3 flex items-center justify-between gap-2">

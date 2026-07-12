@@ -8,6 +8,7 @@ import {
   ExternalLink,
   FingerprintPattern,
   Loader2,
+  Lock,
   Plus,
   RefreshCw,
   Search,
@@ -20,11 +21,22 @@ import {
   PasswordVaultChooserSheet,
   PasswordVaultImportSheet,
 } from "@/components/profile/password-vault-action-sheets"
+import { PasswordVaultIntroCard } from "@/components/profile/password-vault-intro-card"
 import { PasswordVaultEntryListSkeleton } from "@/components/profile/password-vault-entry-skeleton"
-import { PasswordVaultIntroSkeleton } from "@/components/profile/password-vault-intro-skeleton"
+import {
+  PasswordVaultIntroSkeleton,
+  PasswordVaultSearchRowSkeleton,
+} from "@/components/profile/password-vault-intro-skeleton"
+import { VaultBrandMark } from "@/components/profile/vault-brand-mark"
+import {
+  MobilePageIntro,
+  MobilePageIntroStatusPill,
+  MobilePageStickyHeader,
+} from "@/components/shell/mobile-page-intro"
 import { MobileBottomSheet } from "@/components/shell/mobile-bottom-sheet"
-import { Skeleton } from "@/components/ui/skeleton"
-import { formatApiError } from "@/lib/api/errors"
+import { PlanGateCard } from "@/components/shell/plan-gate-card"
+import { formatApiError, isLicenseRequiredError, licenseRequiredPlan } from "@/lib/api/errors"
+import type { MobileConnection } from "@/lib/types/api"
 import {
   getPasswordVault,
   lockPasswordVault,
@@ -34,6 +46,8 @@ import {
   type PasswordVaultList,
   type VaultUnlockInput,
 } from "@/lib/api/password-vault"
+import { resolveVaultBrand } from "@/lib/password-vault/vault-brand"
+import { resolveDesktopWebBaseForAssets } from "@/lib/password-vault/desktop-web-base"
 
 function entryHasPassword(entry: PasswordVaultEntry) {
   return Boolean(entry.hasPassword ?? entry.passwordLength ?? entry.password)
@@ -122,6 +136,8 @@ function entryPlainPassword(
 
 function EntryRow({
   entry,
+  webBase,
+  connection,
   maskStyle,
   secretsVisible,
   ephemeralPasswords,
@@ -130,6 +146,8 @@ function EntryRow({
   onCopy,
 }: {
   entry: PasswordVaultEntry
+  webBase?: string | null
+  connection?: MobileConnection | null
   maskStyle: "dots" | "asterisk" | "block"
   secretsVisible: boolean
   ephemeralPasswords: Record<string, string>
@@ -141,31 +159,40 @@ function EntryRow({
   const plain = entryPlainPassword(entry, ephemeralPasswords)
   const visible = Boolean(plain && revealed)
   const displayPassword = visible && plain ? plain : maskPassword(entry, maskStyle)
+  const brand = resolveVaultBrand(entry)
 
   return (
     <li
       className="rounded-2xl bg-white p-4"
       style={{ border: "1px solid #e5e5e5", boxShadow: "0 1px 0 rgba(0,0,0,0.03)" }}
     >
-      <div className="flex items-start justify-between gap-2">
+      <div className="flex items-start gap-3">
+        <VaultBrandMark entry={entry} webBase={webBase} connection={connection} size="md" />
         <div className="min-w-0 flex-1">
-          <p className="text-[14px] font-semibold text-[#222222]">{entry.name}</p>
-          {entry.username ? (
-            <p className="mt-0.5 truncate text-[12px] text-[#717171]">{entry.username}</p>
-          ) : null}
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0 flex-1">
+              <p className="text-[14px] font-semibold text-[#222222]">{entry.name}</p>
+              {brand ? (
+                <p className="mt-0.5 text-[11px] font-medium text-[#a0a0a0]">{brand.label}</p>
+              ) : null}
+              {entry.username ? (
+                <p className="mt-0.5 truncate text-[12px] text-[#717171]">{entry.username}</p>
+              ) : null}
+            </div>
+            {entry.url ? (
+              <a
+                href={entry.url.startsWith("http") ? entry.url : `https://${entry.url}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-[#f7f7f7] text-[#717171]"
+                style={{ border: "1px solid #e8e8e8" }}
+                aria-label="Open URL"
+              >
+                <ExternalLink className="size-3.5" />
+              </a>
+            ) : null}
+          </div>
         </div>
-        {entry.url ? (
-          <a
-            href={entry.url.startsWith("http") ? entry.url : `https://${entry.url}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-[#f7f7f7] text-[#717171]"
-            style={{ border: "1px solid #e8e8e8" }}
-            aria-label="Open URL"
-          >
-            <ExternalLink className="size-3.5" />
-          </a>
-        ) : null}
       </div>
 
       {hasPassword ? (
@@ -211,12 +238,22 @@ function EntryRow({
   )
 }
 
+// Memory-only, short-lived — never persisted to disk. Avoids re-showing a full
+// skeleton on every revisit while still re-validating quickly against the
+// server's own 15-minute unlock window (see getPasswordVault / lockRequired).
+const VAULT_STALE_MS = 15_000
+const vaultCache = new Map<string, { vault: PasswordVaultList; fetchedAt: number }>()
+
 export function PasswordsPage() {
   const { connection, ready } = useConnection()
-  const [vault, setVault] = useState<PasswordVaultList | null>(null)
-  const [loading, setLoading] = useState(true)
+  const sessionKey = connection?.sessionToken ?? null
+  const cachedVault = sessionKey ? vaultCache.get(sessionKey) : undefined
+
+  const [vault, setVault] = useState<PasswordVaultList | null>(() => cachedVault?.vault ?? null)
+  const [loading, setLoading] = useState(() => !cachedVault)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [planGate, setPlanGate] = useState<string | null>(null)
   const [unlockOpen, setUnlockOpen] = useState(false)
   const [pendingVaultUnlock, setPendingVaultUnlock] = useState(false)
   const [pendingRevealId, setPendingRevealId] = useState<string | null>(null)
@@ -229,11 +266,12 @@ export function PasswordsPage() {
   const [importOpen, setImportOpen] = useState(false)
 
   const load = useCallback(
-    async (signal?: AbortSignal, isRefresh = false) => {
+    async (signal?: AbortSignal, isRefresh = false, background = false) => {
       if (!connection) return
       if (isRefresh) setRefreshing(true)
-      else setLoading(true)
+      else if (!background) setLoading(true)
       setError(null)
+      setPlanGate(null)
       try {
         const data = await getPasswordVault(connection, signal)
         if (!signal?.aborted) {
@@ -241,9 +279,19 @@ export function PasswordsPage() {
           if (data.lockRequired && !data.secretsVisible) {
             setRevealed({})
           }
+          if (connection.sessionToken) {
+            vaultCache.set(connection.sessionToken, { vault: data, fetchedAt: Date.now() })
+          }
         }
       } catch (err) {
-        if (!signal?.aborted) setError(formatApiError(err, connection.webUrl ?? connection.apiBaseUrl))
+        if (!signal?.aborted) {
+          if (isLicenseRequiredError(err)) {
+            // Plan gate, not a permissions problem — show the upgrade card, not an error.
+            setPlanGate(licenseRequiredPlan(err) ?? "pro")
+          } else {
+            setError(formatApiError(err, connection.webUrl ?? connection.apiBaseUrl))
+          }
+        }
       } finally {
         if (!signal?.aborted) {
           setLoading(false)
@@ -256,9 +304,12 @@ export function PasswordsPage() {
 
   useEffect(() => {
     if (!ready || !connection) return
+    const fresh = cachedVault != null && Date.now() - cachedVault.fetchedAt <= VAULT_STALE_MS
+    if (fresh) return
     const controller = new AbortController()
-    void load(controller.signal)
+    void load(controller.signal, false, cachedVault != null)
     return () => controller.abort()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- cachedVault is a read of a module map, not reactive state
   }, [ready, connection, load])
 
   const secretsVisible = vault?.secretsVisible ?? false
@@ -268,6 +319,9 @@ export function PasswordsPage() {
   const entries = vault?.entries ?? []
   const filteredEntries = entries.filter((entry) => entryMatchesQuery(entry, searchQuery))
   const maskStyle = vault?.display?.maskStyle ?? "dots"
+  const assetWebBase = connection
+    ? resolveDesktopWebBaseForAssets(connection)
+    : null
 
   function openVaultUnlock() {
     setPendingVaultUnlock(true)
@@ -369,47 +423,27 @@ export function PasswordsPage() {
       ? "View this password only. The vault stays locked for other entries."
       : "View this password only. The vault stays locked for other entries."
 
-  return (
-    <div className="flex flex-col gap-5">
-      <div className="flex items-center justify-between gap-2">
-        <div className="min-w-0 flex-1">
-          <h2
-            className="text-[20px] font-bold text-[#222222]"
-            style={{ fontFamily: "var(--font-space-grotesk, sans-serif)" }}
-          >
-            Password vault
-          </h2>
-          {statsLoading ? (
-            <Skeleton className="mt-1.5 h-3 w-36 max-w-full rounded-md" />
-          ) : (
-            <p className="text-[12px] text-[#717171]">
-              {vault?.total ?? 0} saved · instance vault
-            </p>
-          )}
-        </div>
-        <div className="flex shrink-0 gap-2">
-          <button
-            type="button"
-            onClick={() => void load(undefined, true)}
-            disabled={loading}
-            className="flex size-9 items-center justify-center rounded-xl bg-white text-[#717171] active:opacity-70 disabled:opacity-40"
-            style={{ border: "1px solid #e5e5e5" }}
-            aria-label="Refresh"
-          >
-            <RefreshCw className={`size-4 ${refreshing ? "animate-spin" : ""}`} />
-          </button>
-          <button
-            type="button"
-            onClick={() => setChooserOpen(true)}
-            disabled={!connection}
-            className="btn-accent-solid flex size-9 items-center justify-center rounded-xl active:opacity-80 disabled:opacity-50"
-            aria-label="Add password"
-          >
-            <Plus className="size-4" />
-          </button>
-        </div>
+  if (planGate) {
+    return (
+      <div className="flex flex-col gap-4">
+        <MobilePageStickyHeader>
+          <MobilePageIntro
+            title="Passwords"
+            subtitle="Encrypted vault · instance credentials on your server."
+            description="Saved credentials stay encrypted on your server's disk. The vault unlocks with a paid Arciin plan."
+            cornerIcon={FingerprintPattern}
+            footer={
+              <MobilePageIntroStatusPill icon={Lock}>Locked</MobilePageIntroStatusPill>
+            }
+          />
+        </MobilePageStickyHeader>
+        <PlanGateCard featureLabel="Password vault" plan={planGate} />
       </div>
+    )
+  }
 
+  return (
+    <div className="flex flex-col gap-4">
       {copyMsg ? (
         <p className="rounded-xl bg-[#f0fdf4] px-3 py-2 text-center text-[12px] font-medium text-[#15803d]">
           {copyMsg}
@@ -425,69 +459,74 @@ export function PasswordsPage() {
         </div>
       ) : null}
 
-      {statsLoading ? (
-        <PasswordVaultIntroSkeleton />
-      ) : (
-        <div className="accent-link-card flex items-center gap-3 rounded-2xl p-4">
-          <div className="accent-icon-tile flex size-10 items-center justify-center rounded-xl">
-            <FingerprintPattern className="text-accent size-5" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-[13px] font-semibold text-[#222222]">Password vault</p>
-            <p className="text-[11px] text-[#717171]">
-              {lockRequired && !secretsVisible
-                ? "Locked — unlock once to use the eye on entries"
-                : "Unlocked — tap the eye to show or hide each password"}
-            </p>
-          </div>
-          {lockRequired ? (
-            secretsVisible ? (
+      <MobilePageStickyHeader>
+        {statsLoading ? (
+          <>
+            <PasswordVaultIntroSkeleton />
+            <div className="mt-1.5">
+              <PasswordVaultSearchRowSkeleton />
+            </div>
+          </>
+        ) : (
+          <>
+            <PasswordVaultIntroCard
+              entryCount={vault?.total ?? 0}
+              loading={loading}
+              lockRequired={lockRequired}
+              secretsVisible={secretsVisible}
+              pinConfigured={pinConfigured}
+              onUnlock={openVaultUnlock}
+              onLock={() => void handleLock()}
+            />
+            <div className="mt-1.5 flex items-center gap-2">
+              <div
+                className="flex flex-1 items-center gap-2 rounded-2xl bg-white px-3.5 py-2.5"
+                style={{ border: "1px solid #e5e5e5" }}
+              >
+                <Search className="size-4 shrink-0 text-[#c0c0c0]" />
+                <input
+                  type="search"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search passwords…"
+                  className="min-w-0 flex-1 bg-transparent text-[13px] text-[#222222] outline-none placeholder:text-[#c0c0c0]"
+                  autoComplete="off"
+                  aria-label="Search saved passwords"
+                />
+                {searchQuery ? (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery("")}
+                    className="shrink-0 text-[#c0c0c0] active:text-[#717171]"
+                    aria-label="Clear search"
+                  >
+                    <X className="size-3.5" />
+                  </button>
+                ) : null}
+              </div>
               <button
                 type="button"
-                onClick={() => void handleLock()}
-                className="shrink-0 rounded-xl px-3 py-1.5 text-[12px] font-semibold text-[#717171]"
-                style={{ border: "1px solid #e5e5e5", background: "#fff" }}
+                onClick={() => void load(undefined, true)}
+                disabled={loading}
+                className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-white text-[#717171] disabled:opacity-50 active:bg-[#f7f7f7]"
+                style={{ border: "1px solid #e5e5e5" }}
+                aria-label="Refresh"
               >
-                Lock
+                <RefreshCw className={`size-4 ${refreshing ? "animate-spin" : ""}`} />
               </button>
-            ) : (
               <button
                 type="button"
-                onClick={() => openVaultUnlock()}
-                className="btn-accent-solid shrink-0 rounded-xl px-3 py-1.5 text-[12px] font-semibold"
+                onClick={() => setChooserOpen(true)}
+                disabled={!connection}
+                className="btn-accent-solid flex size-10 shrink-0 items-center justify-center rounded-2xl active:opacity-80 disabled:opacity-50"
+                aria-label="Add password"
               >
-                Unlock
+                <Plus className="size-4" />
               </button>
-            )
-          ) : null}
-        </div>
-      )}
-
-      {!statsLoading && entries.length > 0 ? (
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-[#a0a0a0]" />
-          <input
-            type="search"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search by name, username, URL, or keyword…"
-            className="w-full rounded-2xl border border-[#e5e5e5] bg-white py-3 pl-10 pr-10 text-[16px] text-[#222222] outline-none placeholder:text-[#a0a0a0] focus:border-[var(--arciin-accent,#ff4f12)]"
-            autoComplete="off"
-            aria-label="Search saved passwords"
-          />
-          {searchQuery ? (
-            <button
-              type="button"
-              onClick={() => setSearchQuery("")}
-              className="absolute right-2 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-lg text-[#717171] active:bg-[#f7f7f7]"
-              aria-label="Clear search"
-            >
-              <X className="size-4" />
-            </button>
-          ) : null}
-        </div>
-      ) : null}
-
+            </div>
+          </>
+        )}
+      </MobilePageStickyHeader>
 
       {statsLoading ? (
         <PasswordVaultEntryListSkeleton count={3} />
@@ -527,6 +566,8 @@ export function PasswordsPage() {
             <EntryRow
               key={entry.id}
               entry={entry}
+              webBase={assetWebBase}
+              connection={connection}
               maskStyle={maskStyle}
               secretsVisible={secretsVisible}
               ephemeralPasswords={ephemeralPasswords}

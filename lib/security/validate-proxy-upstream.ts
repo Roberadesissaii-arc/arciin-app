@@ -1,3 +1,5 @@
+import { getStandaloneApiBaseUrl } from "@/lib/standalone/api-origin"
+import { isStandaloneApp } from "@/lib/standalone/config"
 import { isPrivateLanHostname } from "@/lib/connection/normalize-url"
 
 const BLOCKED_PROTOCOLS = /^(javascript|data|file|ftp|gopher):/i
@@ -134,6 +136,43 @@ export function isCoLocatedProxyTarget(apiBase: string): boolean {
   } catch {
     return false
   }
+}
+
+/**
+ * Co-located standalone mobile: browser sends the PWA origin (/api on :3002) but the
+ * real Fastify API is ARCIIN_API_URL (:4000). Chat already resolves this server-side;
+ * apply the same rule for /api/arciin/* JSON proxies (e.g. read-aloud TTS).
+ */
+export function resolveProxyUpstreamApiBase(
+  suppliedApiBase: string | null | undefined,
+  requestUrl: string,
+): string | null {
+  const trimmed = suppliedApiBase?.trim().replace(/\/+$/, "") ?? ""
+
+  if (isStandaloneApp()) {
+    const serverBase = getStandaloneApiBaseUrl().replace(/\/+$/, "")
+    if (!trimmed) return serverBase
+
+    try {
+      const req = new URL(requestUrl)
+      const supplied = new URL(trimmed)
+      const sameHost = supplied.hostname.toLowerCase() === req.hostname.toLowerCase()
+      const loopback =
+        isLoopbackHostname(supplied.hostname) && isLoopbackHostname(req.hostname)
+      const lanColocated =
+        isPrivateLanHostname(supplied.hostname) &&
+        isPrivateLanHostname(req.hostname) &&
+        supplied.hostname.toLowerCase() === req.hostname.toLowerCase()
+
+      if (sameHost || loopback || lanColocated) {
+        return serverBase
+      }
+    } catch {
+      return serverBase
+    }
+  }
+
+  return trimmed || null
 }
 
 /** Remove proxy-only credentials from the upstream query string. */

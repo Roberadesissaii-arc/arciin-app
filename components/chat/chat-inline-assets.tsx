@@ -187,7 +187,7 @@ function LoadingBlock({ label }: { label: string }) {
       className="my-2 flex items-center gap-2 rounded-xl px-4 py-3 text-[12px] text-[#717171]"
       style={{ border: "1px solid #e5e5e5", backgroundColor: "#fafafa" }}
     >
-      <Loader2 className="size-3.5 animate-spin text-[#ff4f12]" />
+      <Loader2 className="size-3.5 animate-spin text-accent" />
       Loading {label}…
     </div>
   )

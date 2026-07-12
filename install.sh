@@ -16,7 +16,7 @@ mobile_install_ui
 
 DEFAULT_NODE_MAJOR=24
 DEFAULT_PNPM_VERSION=10.32.1
-DEFAULT_MOBILE_PORT=3002
+DEFAULT_MOBILE_PORT=3001
 DEFAULT_API_PORT=4000
 ARCIIN_SERVER_DIR="${ARCIIN_SERVER_DIR:-${ROOT_DIR}/../arciin}"
 
@@ -38,7 +38,7 @@ for _arg in "$@"; do
       echo "  --skip-pm2   Build production bundle but do not start PM2"
       echo ""
       echo "Environment:"
-      echo "  ARCIIN_MOBILE_PORT=3002                    PWA listen port (alias for PORT / ARCIIN_WEB_PORT)"
+      echo "  ARCIIN_MOBILE_PORT=3001                    PWA listen port (desktop web + 1; auto if busy)"
       echo "  ARCIIN_SERVER_DIR=../arciin                Sync .env keys from desktop install"
       echo "  ARCIIN_MOBILE_SKIP_SYSTEM_PACKAGES=1       Skip apt packages"
       echo "  ARCIIN_MOBILE_SKIP_FIREWALL=1              Skip UFW"
@@ -78,7 +78,7 @@ echo ""
 if [[ -t 0 ]] && [[ "${ARCIIN_MOBILE_SKIP_INSTALL_CHOICE:-0}" != "1" ]]; then
   echo -e "  ${BOLD}${WHITE}What are you setting up?${RESET}"
   echo ""
-  echo -e "    ${BOLD}1)${RESET} Mobile app only ${DIM}(this repo — PWA on port ${DEFAULT_MOBILE_PORT})${RESET}"
+  echo -e "    ${BOLD}1)${RESET} Mobile app only ${DIM}(PWA — port follows desktop: web+1, e.g. 3001 or 3003)${RESET}"
   echo -e "    ${BOLD}2)${RESET} Mobile + Arciin server ${DIM}(install ../arciin first, then point mobile at its API)${RESET}"
   echo ""
   read -r -p "  Choice [1]: " _mobile_choice
@@ -188,7 +188,8 @@ ensure_mobile_env_defaults "${ENV_FILE}"
 ensure_mobile_session_secret "${ENV_FILE}"
 ensure_mobile_setup_token "${ENV_FILE}"
 ensure_mobile_production_secrets "${ENV_FILE}"
-configure_mobile_ports "${ENV_FILE}" "${DEFAULT_MOBILE_PORT}" "${DEFAULT_API_PORT}"
+configure_mobile_ports "${ENV_FILE}" "${DEFAULT_MOBILE_PORT}" "${DEFAULT_API_PORT}" "${ARCIIN_SERVER_DIR}"
+sync_mobile_ports_to_server "${ENV_FILE}" "${ARCIIN_SERVER_DIR}" "$(_detect_lan_ip)" "$(mobile_env_web_port "${ENV_FILE}" "${DEFAULT_MOBILE_PORT}")"
 purge_legacy_mobile_env_keys "${ENV_FILE}"
 chmod 600 "$ENV_FILE" 2>/dev/null && ok ".env.local readable only by you (chmod 600)" || true
 
@@ -265,9 +266,10 @@ else
     ok "PM2 $(pm2 --version 2>/dev/null | head -1) already installed"
   fi
 
-  finalize_mobile_ports_before_launch "${ENV_FILE}" "${DEFAULT_MOBILE_PORT}" "${DEFAULT_API_PORT}"
+  finalize_mobile_ports_before_launch "${ENV_FILE}" "${DEFAULT_MOBILE_PORT}" "${DEFAULT_API_PORT}" "${ARCIIN_SERVER_DIR}"
   ARCIIN_MOBILE_PORT="$(mobile_env_web_port "${ENV_FILE}" "${DEFAULT_MOBILE_PORT}")"
   MOBILE_PUBLIC_URL="$(grep '^ARCIIN_PUBLIC_URL=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || echo "http://${LAN_IP}:${ARCIIN_MOBILE_PORT}")"
+  sync_mobile_ports_to_server "${ENV_FILE}" "${ARCIIN_SERVER_DIR}" "$(_detect_lan_ip)" "${ARCIIN_MOBILE_PORT}"
 
   spin_ok "Starting Arciin Mobile (PM2)..." "PM2 process started" \
     bash -c "cd \"${ROOT_DIR}\" && pm2 start ecosystem.config.cjs && pm2 save"
@@ -322,10 +324,7 @@ LOCAL_URL="http://localhost:${ARCIIN_MOBILE_PORT}"
 API_URL="$(grep '^ARCIIN_API_URL=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || echo "http://127.0.0.1:${DEFAULT_API_PORT}")"
 API_HEALTH="${API_URL%/}/api/health"
 INSTALL_URL="${MOBILE_URL}/install"
-SETUP_URL="${MOBILE_URL}/setup"
-if [[ -n "$SETUP_TOKEN" ]]; then
-  SETUP_URL="${MOBILE_URL}/setup?token=${SETUP_TOKEN}"
-fi
+CONNECT_URL="${MOBILE_URL}/connect"
 SIGNIN_URL="${MOBILE_URL}/sign-in"
 
 if ! curl -sf "${API_HEALTH}" >/dev/null 2>&1; then
@@ -351,12 +350,13 @@ echo ""
 echo -e "    ${BGREEN}1.${RESET}  Same Wi‑Fi → open ${BOLD}${MOBILE_URL}${RESET}"
 echo -e "    ${BGREEN}2.${RESET}  Tap ${BOLD}Install Arciin Mobile${RESET} or use ${BOLD}${INSTALL_URL}${RESET}"
 echo -e "    ${BGREEN}3.${RESET}  Add to Home Screen (Safari Share / Chrome Install app)"
-echo -e "    ${BGREEN}4.${RESET}  First-run setup: ${BOLD}${SETUP_URL}${RESET}"
-echo -e "    ${BGREEN}5.${RESET}  After setup, sign in at ${BOLD}${SIGNIN_URL}${RESET}"
+echo -e "    ${BGREEN}4.${RESET}  Connect to your Arciin server: ${BOLD}${CONNECT_URL}${RESET}"
+echo -e "    ${BGREEN}5.${RESET}  Sign in at ${BOLD}${SIGNIN_URL}${RESET}"
 echo ""
 if [[ -n "$SETUP_TOKEN" ]]; then
-  echo -e "  ${BOLD}${WHITE}Setup token${RESET} ${DIM}(same as Arciin server .env)${RESET}"
-  echo -e "    ${SETUP_TOKEN}"
+  echo -e "  ${BOLD}${WHITE}Server not claimed yet?${RESET}"
+  echo -e "    Complete first-run setup in the ${BOLD}Arciin web app${RESET} on your server (not this mobile client)."
+  echo -e "    Setup token from server .env: ${SETUP_TOKEN}"
   echo ""
 fi
 if [[ "$_api_warn" == "1" ]]; then

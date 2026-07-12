@@ -1,4 +1,4 @@
-const CACHE = 'arciin-v1'
+const CACHE = 'arciin-v3'
 
 self.addEventListener('install', () => {
   self.skipWaiting()

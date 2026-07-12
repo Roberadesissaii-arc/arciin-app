@@ -61,11 +61,15 @@ function pushAccentVars(target: HTMLElement, resolved: string) {
   target.style.setProperty("--arciin-accent", resolved)
   target.style.setProperty(
     "--arciin-accent-intro-from",
-    `color-mix(in srgb, ${resolved} 78%, white)`,
+    resolved,
   )
   target.style.setProperty(
     "--arciin-accent-intro-to",
-    `color-mix(in srgb, ${resolved} 58%, black)`,
+    `color-mix(in srgb, ${resolved} 88%, black)`,
+  )
+  target.style.setProperty(
+    "--arciin-accent-hero-border",
+    `color-mix(in srgb, ${resolved} 72%, black)`,
   )
   target.style.setProperty("--arciin-accent-hover", `color-mix(in srgb, ${resolved} 88%, white)`)
   target.style.setProperty("--arciin-accent-muted", `color-mix(in srgb, ${resolved} 12%, transparent)`)

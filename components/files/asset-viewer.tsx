@@ -225,6 +225,16 @@ export function AssetViewer({
         if (result === "copied") {
           setShareMsg("Link copied")
           setTimeout(() => setShareMsg(null), 2500)
+          return
+        }
+        if (result === "opened_tab") {
+          setShareMsg("Opened in a new tab — use Share there to save or send")
+          setTimeout(() => setShareMsg(null), 4000)
+          return
+        }
+        if (result === "shared_file" || result === "shared_link") {
+          setShareMsg("Shared")
+          setTimeout(() => setShareMsg(null), 2500)
         }
       })
       .catch((err) => {
@@ -379,11 +389,15 @@ export function AssetViewer({
               className="max-h-full max-w-full object-contain"
               onError={() => {
                 const ext = asset.originalFilename.toLowerCase().split(".").pop() ?? ""
-                const iosUnsupported = new Set(["mkv", "avi", "wmv", "flv"])
+                const codec = (asset.codec ?? "").toLowerCase()
+                const iosUnsupportedExt = new Set(["mkv", "avi", "wmv", "flv", "webm"])
+                const iosUnsupportedCodec = codec === "vp9" || codec === "vp8" || codec === "av1"
                 setMediaPreviewError(
-                  iosUnsupported.has(ext)
-                    ? "This video format can't play in the browser on iPhone. Use Download to open it in another app."
-                    : "Couldn't play this video. Try Download, or check your connection.",
+                  iosUnsupportedCodec
+                    ? `This video uses the ${codec.toUpperCase()} codec, which iPhone can't play in the browser. Tap Download to watch it in another app. (New link imports now download in iPhone-compatible H.264.)`
+                    : iosUnsupportedExt.has(ext)
+                      ? "This video format can't play in the browser on iPhone. Use Download to open it in another app."
+                      : "Couldn't play this video. Try Download, or check your connection.",
                 )
               }}
             />
@@ -433,7 +447,7 @@ export function AssetViewer({
                   height: 6,
                   borderRadius: 99,
                   transition: "width 0.2s, background-color 0.2s",
-                  backgroundColor: i === currentIndex ? "#ff4f12" : "rgba(255,255,255,0.3)",
+                  backgroundColor: i === currentIndex ? "var(--arciin-accent, #ff4f12)" : "rgba(255,255,255,0.3)",
                 }}
               />
             ))}

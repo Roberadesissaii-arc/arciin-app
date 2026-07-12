@@ -75,6 +75,18 @@ export function isNetworkError(err: unknown): boolean {
   return false
 }
 
+/** Plan-gated feature (vault, AI automation, …) — the server's plan does not include it. */
+export function isLicenseRequiredError(err: unknown): boolean {
+  return err instanceof ApiError && err.code === "LICENSE_REQUIRED"
+}
+
+/** First plan that unlocks the gated feature (e.g. "pro"), from LICENSE_REQUIRED details. */
+export function licenseRequiredPlan(err: unknown): string | null {
+  if (!isLicenseRequiredError(err)) return null
+  const details = (err as ApiError).details as { requiredPlans?: string[] } | undefined
+  return details?.requiredPlans?.[0] ?? null
+}
+
 /** User-facing copy for chat stream / provider failures (Ollama, model missing, etc.). */
 export function formatChatProviderError(message: string): string {
   const trimmed = message.trim()
@@ -118,6 +130,10 @@ export function formatApiError(err: unknown, serverAddress?: string | null): str
     if (isTransientUpstreamStatus(err.status)) {
       return networkErrorMessage(serverAddress)
     }
+    if (err.code === "LICENSE_REQUIRED") {
+      // Plan gate, not a permissions problem — surface the server's upgrade message.
+      return err.message
+    }
     if (err.code === "FORBIDDEN" || err.status === 403) {
       return "You do not have permission for this action. API keys require an Owner or Admin account."
     }
@@ -133,17 +149,24 @@ export function formatApiError(err: unknown, serverAddress?: string | null): str
 }
 
 export async function parseApiError(response: Response): Promise<ApiError> {
+  const raw = await response.text()
   let body: ApiErrorBody | null = null
   try {
-    body = (await response.json()) as ApiErrorBody
+    body = raw ? (JSON.parse(raw) as ApiErrorBody) : null
   } catch {
-    /* ignore */
+    /* non-JSON — often a Next.js HTML error page when /api rewrite misses */
   }
   const code = body?.error?.code ?? "REQUEST_FAILED"
-  const message =
-    body?.error?.message ??
-    (response.status === 0 || isTransientUpstreamStatus(response.status)
-      ? networkErrorMessage()
-      : `Request failed (${response.status}).`)
+  let message = body?.error?.message
+  if (!message) {
+    if (response.status === 0 || isTransientUpstreamStatus(response.status)) {
+      message = networkErrorMessage()
+    } else if (response.status === 404 && /could not be found|not found/i.test(raw)) {
+      message =
+        "Setup API route not found. Confirm Arciin Mobile is running (pm2 status arciin-mobile) and the API is online — not the desktop web app on the same port."
+    } else {
+      message = `Request failed (${response.status}).`
+    }
+  }
   return new ApiError(response.status, code, message, body?.error?.details)
 }

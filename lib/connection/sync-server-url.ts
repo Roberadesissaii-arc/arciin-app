@@ -1,4 +1,6 @@
 import { getMobileServerEndpoints } from "@/lib/api/mobile"
+import { mobileAppWebOrigin } from "@/lib/connection/mobile-access-urls"
+import { normalizeApiBase } from "@/lib/connection/normalize-url"
 import { fetchApi } from "@/lib/api/client"
 import { ApiError, isNetworkError, isTransientUpstreamStatus } from "@/lib/api/errors"
 import { isLoopbackApiBase } from "@/lib/connection/normalize-url"
@@ -73,15 +75,24 @@ export async function syncServerUrls(
   if (healthOk) {
     try {
       const endpoints = await getMobileServerEndpoints(connection, signal)
-      const server = serverProfileFromEndpoints(endpoints.apiBaseUrl, {
-        instanceName: endpoints.instanceName,
-        instanceId: endpoints.instanceId,
-        webUrl: endpoints.webUrl,
-        socketUrl: endpoints.socketUrl,
-        lanUrls: endpoints.lanUrls,
-        requestOrigin: endpoints.requestOrigin,
-        canonicalPublicUrl: endpoints.webUrl,
-      })
+      const mobileOrigin = mobileAppWebOrigin()
+      const server = serverProfileFromEndpoints(
+        isStandaloneApp() && mobileOrigin
+          ? normalizeApiBase(`${mobileOrigin}/api`)
+          : endpoints.apiBaseUrl,
+        {
+          instanceName: endpoints.instanceName,
+          instanceId: endpoints.instanceId,
+          webUrl: isStandaloneApp() && mobileOrigin ? mobileOrigin : endpoints.webUrl,
+          socketUrl: isStandaloneApp() && mobileOrigin ? mobileOrigin : endpoints.socketUrl,
+          lanUrls:
+            isStandaloneApp() && mobileOrigin
+              ? [mobileOrigin, ...(endpoints.lanUrls ?? [])]
+              : endpoints.lanUrls,
+          requestOrigin: isStandaloneApp() && mobileOrigin ? mobileOrigin : endpoints.requestOrigin,
+          canonicalPublicUrl: endpoints.webUrl,
+        },
+      )
       const nextConnection = applyServerEndpointsToConnection(connection, server)
       const nextServer = isStandaloneApp()
         ? repairStandaloneServerProfile(server) ?? server

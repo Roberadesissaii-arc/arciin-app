@@ -12,6 +12,7 @@ const SEMANTIC_BADGE: Record<string, { bg: string; color: string }> = {
   library: { bg: "#f5f3ff", color: "#7c3aed" },
   "api-key": { bg: "#fffbeb", color: "#d97706" },
   remote: ACCENT_BADGE,
+  share: ACCENT_BADGE,
 }
 
 export function activityBadgeStyle(event: ActivitySummary) {

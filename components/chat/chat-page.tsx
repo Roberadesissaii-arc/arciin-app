@@ -6,6 +6,7 @@ import { flushSync } from "react-dom"
 import {
   Copy,
   Loader2,
+  Lock as LockIcon,
   MessageSquare,
   Plus,
   RotateCcw,
@@ -16,6 +17,7 @@ import {
   ThumbsUp,
   Trash2,
   User,
+  Volume2,
   X,
 } from "lucide-react"
 
@@ -24,6 +26,7 @@ import {
   syncChatKeyboardOffset,
   useChatKeyboard,
 } from "@/hooks/use-chat-keyboard"
+import { useChatTextToSpeech } from "@/hooks/use-chat-text-to-speech"
 import { ChatMarkdownContent } from "@/components/chat/chat-markdown-content"
 import { ChatModelBar } from "@/components/chat/chat-model-bar"
 import { ChatReasoningBlock } from "@/components/chat/chat-reasoning-block"
@@ -68,7 +71,15 @@ import {
 import { getAiSettings } from "@/lib/api/settings"
 import { plainTextFromMessage } from "@/lib/chat/plain-text-from-message"
 import { ARCIIN_MOBILE_SYSTEM_INSTRUCTION } from "@/lib/chat/system-prompt"
-import { formatApiError, formatChatProviderError, isNetworkError } from "@/lib/api/errors"
+import { normalizeAssistantDisplayText } from "@/lib/chat/strip-stream-markup"
+import {
+  formatApiError,
+  formatChatProviderError,
+  isLicenseRequiredError,
+  isNetworkError,
+  licenseRequiredPlan,
+} from "@/lib/api/errors"
+import { PlanBadge } from "@/components/shell/plan-badge"
 import type { MobileConnection } from "@/lib/types/api"
 import type {
   ChatConversationSummary,
@@ -319,12 +330,12 @@ function HistoryDrawer({
                     >
                       <div className="flex items-start gap-2.5">
                         {loadingId === convo.id ? (
-                          <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin text-[#ff4f12]" />
+                          <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin text-accent" />
                         ) : (
                           <MessageSquare
                             className={cn(
                               "mt-0.5 size-4 shrink-0",
-                              active ? "text-[#ff4f12]" : "text-[#a0a0a0]",
+                              active ? "text-accent" : "text-[#a0a0a0]",
                             )}
                           />
                         )}
@@ -332,7 +343,7 @@ function HistoryDrawer({
                           <span
                             className={cn(
                               "line-clamp-1 text-[13px] font-semibold",
-                              active ? "text-[#ff4f12]" : "text-[#222222]",
+                              active ? "text-accent" : "text-[#222222]",
                             )}
                           >
                             {convo.title}
@@ -385,17 +396,23 @@ function MessageActions({
   canRegenerate,
   onRegenerate,
   onFeedback,
+  connection,
+  profileId,
 }: {
   content: string
   feedback?: ChatMessageFeedbackRating | null
   canRegenerate: boolean
   onRegenerate?: () => void
   onFeedback?: (rating: ChatMessageFeedbackRating | null) => void
+  connection: MobileConnection | null
+  profileId?: string | null
 }) {
   const btn =
     "flex size-8 items-center justify-center rounded-lg text-[#717171] active:bg-[#f7f7f7]"
   const [copied, setCopied] = useState(false)
   const plain = plainTextFromMessage(content)
+  const { speaking, loading: ttsLoading, lastError: ttsError, speak, stop: stopSpeech } =
+    useChatTextToSpeech(connection, profileId)
 
   async function handleCopy() {
     try {
@@ -407,9 +424,19 @@ function MessageActions({
     }
   }
 
+  async function handleListen() {
+    if (!plain) return
+    if (speaking) {
+      stopSpeech()
+      return
+    }
+    await speak(plain)
+  }
+
   return (
-    <div className="mt-1.5 flex items-center gap-0.5">
-      {onFeedback ? (
+    <div className="mt-1.5 flex flex-col gap-0.5">
+      <div className="flex items-center gap-0.5">
+        {onFeedback ? (
         <>
           <button
             type="button"
@@ -441,6 +468,26 @@ function MessageActions({
           <Copy className="size-3.5" />
         )}
       </button>
+      <button
+        type="button"
+        className={cn(btn, (speaking || ttsLoading) && "text-accent")}
+        aria-label={speaking ? "Stop read aloud" : "Listen to response"}
+        title={speaking ? "Stop" : "Listen"}
+        disabled={!plain || ttsLoading}
+        onClick={() => void handleListen()}
+      >
+        {ttsLoading ? (
+          <Loader2 className="size-3.5 animate-spin" />
+        ) : speaking ? (
+          <Square className="size-3.5 fill-current" />
+        ) : (
+          <Volume2 className="size-3.5" />
+        )}
+      </button>
+      </div>
+      {ttsError ? (
+        <p className="max-w-[16rem] text-[10px] leading-snug text-[#b91c1c]">{ttsError}</p>
+      ) : null}
     </div>
   )
 }
@@ -452,6 +499,8 @@ function MessageBubble({
   reasoningUiEnabled = true,
   onRegenerate,
   onFeedback,
+  connection,
+  profileId,
 }: {
   msg: ChatMessage
   isStreaming?: boolean
@@ -459,6 +508,8 @@ function MessageBubble({
   reasoningUiEnabled?: boolean
   onRegenerate?: () => void
   onFeedback?: (rating: ChatMessageFeedbackRating | null) => void
+  connection: MobileConnection | null
+  profileId?: string | null
 }) {
   const isUser = msg.role === "user"
   const hasAnswer = hasVisibleAssistantAnswer(msg.content)
@@ -511,7 +562,7 @@ function MessageBubble({
           >
             {showWorking ? (
               <span className="flex items-center gap-2 text-[#717171]">
-                <Loader2 className="size-3.5 animate-spin text-[#ff4f12]" />
+                <Loader2 className="size-3.5 animate-spin text-accent" />
                 Working…
               </span>
             ) : isUser ? (
@@ -521,7 +572,7 @@ function MessageBubble({
                 <ChatMarkdownContent content={msg.content} />
                 {isStreaming && hasAnswer ? (
                   <span
-                    className="ml-0.5 inline-block h-[1em] w-0.5 translate-y-px animate-pulse bg-[#ff4f12]/80 align-middle"
+                    className="ml-0.5 inline-block h-[1em] w-0.5 translate-y-px animate-pulse bg-accent opacity-80 align-middle"
                     aria-hidden
                   />
                 ) : null}
@@ -537,6 +588,8 @@ function MessageBubble({
             canRegenerate={canRegenerate}
             onRegenerate={onRegenerate}
             onFeedback={onFeedback}
+            connection={connection}
+            profileId={profileId}
           />
         ) : null}
       </div>
@@ -586,6 +639,7 @@ export function ChatPage() {
   const [error, setError] = useState<string | null>(null)
   const [historyError, setHistoryError] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [planGate, setPlanGate] = useState<string | null>(null)
 
   const [chatContext, setChatContext] = useState<ChatInstanceContext | null>(null)
   const [showThinking, setShowThinking] = useState(true)
@@ -675,10 +729,13 @@ export function ChatPage() {
 
   useLayoutEffect(() => {
     if (wasStreamingRef.current && !streaming) {
-      stickToBottomRef.current = true
-      const el = scrollRef.current
-      if (el) {
-        el.scrollTo({ top: el.scrollHeight, behavior: "smooth" })
+      // Only snap to bottom if the user was already there — never FORCE it, or
+      // scrolling up right after a reply yanks them back down. Use "auto" (not
+      // "smooth"): on iOS a programmatic smooth scroll swallows touch events
+      // for its whole animation, which reads as "can't scroll up".
+      if (stickToBottomRef.current) {
+        const el = scrollRef.current
+        if (el) el.scrollTo({ top: el.scrollHeight, behavior: "auto" })
       }
     }
     wasStreamingRef.current = streaming
@@ -762,6 +819,11 @@ export function ChatPage() {
         setStatusNote("")
         setError(null)
       } catch (err) {
+        if (isLicenseRequiredError(err)) {
+          setPlanGate(licenseRequiredPlan(err) ?? "pro")
+          setStatusNote("")
+          return
+        }
         const msg = formatApiError(err, serverHint(connection))
         setError(suppressFetchErrorWhenOffline(serverReachable, msg))
         setStatusNote("")
@@ -779,6 +841,10 @@ export function ChatPage() {
       const list = await getChatConversations(connection)
       setConversations(list)
     } catch (err) {
+      if (isLicenseRequiredError(err)) {
+        setPlanGate(licenseRequiredPlan(err) ?? "pro")
+        return
+      }
       const msg = formatApiError(err, serverHint(connection))
       setError(suppressFetchErrorWhenOffline(serverReachable, msg))
     } finally {
@@ -1020,9 +1086,7 @@ export function ChatPage() {
           showThinking,
         )
         const mergedAnswer = mergeAssetTagsFromThinking(derived.answer, derived.thinking)
-        const displayContent = finalizeAssistantContent(mergedAnswer, userText, priorMessages, {
-          documentFiles: contextForSend?.documentFiles,
-        })
+        const displayContent = normalizeAssistantDisplayText(mergedAnswer)
         const thinkingRaw = displayThinkingDuringStream(reasoningUiEnabled, derived)
         const thinking = thinkingRaw
           ? stripAssetTagsFromText(thinkingRaw) || (derived.inReasoningBlock ? "" : undefined)
@@ -1141,7 +1205,7 @@ export function ChatPage() {
 
   async function sendMessage() {
     const text = input.trim()
-    if (!text || streaming || !connection || !selectedProfile || !serverOnline) return
+    if (!text || streaming || !connection || !selectedProfile || !serverOnline || planGate) return
 
     const modelToSend =
       selectedModel.trim() || selectedProfile.defaultModel?.trim() || ""
@@ -1344,7 +1408,31 @@ export function ChatPage() {
         onScroll={handleMessagesScroll}
         className="chat-page-messages flex flex-1 flex-col gap-3 scrollbar-hide"
       >
-        {showWelcome ? (
+        {planGate ? (
+          <div className="flex flex-1 flex-col items-center justify-center gap-1.5 px-6 text-center">
+            <LockIcon
+              className="mb-1.5 size-8"
+              style={{ color: "color-mix(in srgb, var(--arciin-accent, #ff4f12) 45%, transparent)" }}
+              aria-hidden
+            />
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <p className="text-[13px] font-medium text-[#222222]">
+                Full AI Chat is available on Pro
+              </p>
+              <PlanBadge plan={planGate} />
+            </div>
+            <p className="max-w-[38ch] text-[12px] leading-relaxed text-[#a0a0a0]">
+              Free lets you connect and test one Ollama model from the Models page. Upgrade to
+              Pro to chat with files, analyze PDFs and images, and use multiple AI providers.
+            </p>
+            <Link
+              href="/models"
+              className="btn-accent-solid mt-2 rounded-xl px-4 py-2 text-[12px] font-semibold active:opacity-90"
+            >
+              Test Ollama model
+            </Link>
+          </div>
+        ) : showWelcome ? (
           <ChatWelcomePanel
             ready={ready}
             connection={connection}
@@ -1379,6 +1467,8 @@ export function ChatPage() {
                       ? (rating) => void handleMessageFeedback(msg, rating)
                       : undefined
                   }
+                  connection={connection}
+                  profileId={selectedProfile?.id}
                 />
               ))
             })()}
@@ -1422,6 +1512,11 @@ export function ChatPage() {
                 scrollToBottom()
               })
             }}
+            onBlur={() => {
+              window.setTimeout(() => {
+                forceResetChatKeyboard(pageRef.current, composerRef.current)
+              }, 120)
+            }}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault()
@@ -1431,7 +1526,7 @@ export function ChatPage() {
             }}
             placeholder={composerPlaceholder}
             disabled={profilesLoading || !hasModel || !serverOnline}
-            className="max-h-[120px] min-h-[24px] min-w-0 flex-1 resize-none bg-transparent py-1 text-[16px] leading-snug text-[#222222] outline-none placeholder:text-[#a0a0a0] disabled:opacity-50"
+            className="chat-composer-input max-h-[120px] min-h-[24px] min-w-0 flex-1 resize-none bg-transparent py-1 text-[#222222] outline-none placeholder:text-[#a0a0a0] disabled:opacity-50"
           />
           {canStop ? (
             <button
@@ -1454,7 +1549,7 @@ export function ChatPage() {
             </button>
           )}
         </div>
-        <p className="mt-1.5 text-center text-[10px] text-[#a0a0a0]">
+        <p className="mt-1.5 text-center text-[11px] leading-snug text-[#a0a0a0]">
           {streaming && statusNote ? (
             <span className="inline-flex items-center gap-1">
               <Loader2 className="size-2.5 animate-spin" />

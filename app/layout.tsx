@@ -4,6 +4,7 @@ import { Geist, Geist_Mono, Space_Grotesk } from "next/font/google"
 import { ConnectionProvider } from "@/components/providers/connection-provider"
 import { UserPreferencesProvider } from "@/components/providers/user-preferences-provider"
 import { SwRegister } from "@/components/providers/sw-register"
+import { MobileToastHost } from "@/components/shell/mobile-toast-host"
 import "./globals.css"
 
 const geistSans = Geist({
@@ -95,6 +96,7 @@ export default function RootLayout({
         <ConnectionProvider>
           <UserPreferencesProvider>{children}</UserPreferencesProvider>
         </ConnectionProvider>
+        <MobileToastHost />
       </body>
     </html>
   )
