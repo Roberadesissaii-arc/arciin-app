@@ -11,7 +11,7 @@ import {
   type ReactNode,
 } from "react"
 
-import { getAuthMe } from "@/lib/api/auth"
+import { getAuthMe, logoutMobile } from "@/lib/api/auth"
 import { clearCachedUserAvatar } from "@/lib/utils/user-avatar-cache"
 import { ApiError, isNetworkError } from "@/lib/api/errors"
 import {
@@ -384,17 +384,27 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const signOut = useCallback(() => {
+    const current = connection
     clearSession()
     setConnection(null)
     setServerReachable(null)
-  }, [])
+    if (current) {
+      // Best-effort — revokes the server-side session so a leaked/stale token
+      // can't outlive the user tapping "Sign out." Local state is already cleared.
+      void logoutMobile(current).catch(() => {})
+    }
+  }, [connection])
 
   const forgetServer = useCallback(() => {
+    const current = connection
     clearSession()
     setConnection(null)
     setServerReachable(null)
     setAccountsTick((n) => n + 1)
-  }, [])
+    if (current) {
+      void logoutMobile(current).catch(() => {})
+    }
+  }, [connection])
 
   const deleteServer = useCallback(
     (accountId: string) => {

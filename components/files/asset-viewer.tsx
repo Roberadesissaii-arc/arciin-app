@@ -15,7 +15,7 @@ import { DeleteAssetDialog } from "@/components/files/delete-asset-dialog"
 import { MobilePdfViewer } from "@/components/files/mobile-pdf-viewer"
 import { MobileMoveFolderSheet } from "@/components/files/mobile-move-folder-sheet"
 import { isPdfAsset } from "@/lib/files/pdf-thumbnail"
-import { prefetchAssetBlob } from "@/lib/api/asset-blob-cache"
+import { getAssetBlob, prefetchAssetBlob } from "@/lib/api/asset-blob-cache"
 import {
   assetShareableMediaUrl,
   beginDownloadAsset,
@@ -70,6 +70,7 @@ export function AssetViewer({
   const [pdfPage, setPdfPage] = useState(1)
   const [pdfTotal, setPdfTotal] = useState(0)
   const pointerStart = useRef<{ x: number; y: number } | null>(null)
+  const previewObjectUrlRef = useRef<string | null>(null)
 
   const asset = assets[currentIndex] ?? assets[0]!
   const hasPrev = currentIndex > 0
@@ -103,8 +104,22 @@ export function AssetViewer({
     setCurrentIndex(initialIndex)
   }, [initialIndex])
 
+  // Revoke the last blob: URL on unmount so we don't leak memory.
+  useEffect(() => {
+    return () => {
+      if (previewObjectUrlRef.current) {
+        URL.revokeObjectURL(previewObjectUrlRef.current)
+        previewObjectUrlRef.current = null
+      }
+    }
+  }, [])
+
   // reset preview when asset changes
   useEffect(() => {
+    if (previewObjectUrlRef.current) {
+      URL.revokeObjectURL(previewObjectUrlRef.current)
+      previewObjectUrlRef.current = null
+    }
     setPreviewSrc(null)
     setTextPreview(null)
     setTextPreviewError(null)
@@ -124,6 +139,11 @@ export function AssetViewer({
     }
 
     if (streamsInline) {
+      // Video/audio keep the query-token URL (not a blob: URL) so the browser can
+      // range-request and start playback immediately instead of buffering the
+      // whole file into memory — files here can be many GB. This does mean a
+      // native long-press "copy link" on these elements can leak a live session
+      // token; images avoid that below by using an authenticated blob instead.
       setPreviewSrc(assetShareableMediaUrl(connection, asset.id))
       setPreviewLoading(false)
       setMediaPreviewError(null)
@@ -160,9 +180,31 @@ export function AssetViewer({
     }
 
     if (loadsMediaBlob) {
-      setPreviewSrc(assetShareableMediaUrl(connection, asset.id))
-      setPreviewLoading(false)
-      return
+      // Images load as a blob: URL (authenticated fetch, no token in the DOM) so a
+      // native long-press "copy link"/"share" on the <img> can't hand out the
+      // account's live session token — see assetShareableMediaUrl's doc comment.
+      let cancelled = false
+      setPreviewLoading(true)
+      setMediaPreviewError(null)
+
+      void getAssetBlob(connection, asset.id)
+        .then((blob) => {
+          if (cancelled) return
+          const url = URL.createObjectURL(blob)
+          if (previewObjectUrlRef.current) URL.revokeObjectURL(previewObjectUrlRef.current)
+          previewObjectUrlRef.current = url
+          setPreviewSrc(url)
+          setPreviewLoading(false)
+        })
+        .catch(() => {
+          if (cancelled) return
+          setMediaPreviewError("Could not load preview.")
+          setPreviewLoading(false)
+        })
+
+      return () => {
+        cancelled = true
+      }
     }
 
     void loadThumbnail(connection, asset.id).then((url) => {

@@ -78,3 +78,11 @@ export function revokeSession(connection: MobileConnection, id: string) {
     method: "POST",
   })
 }
+
+/** Revokes the session on the server so a leaked token can't outlive sign-out. */
+export function logoutMobile(connection: MobileConnection) {
+  return fetchApi<{ success: true }>("/auth/logout", {
+    connection,
+    method: "POST",
+  })
+}
