@@ -51,7 +51,7 @@ export function listAppDatabaseFolders(
   databaseId: string,
   signal?: AbortSignal,
 ) {
-  return fetchApi<AppDatabaseFolderSummary[]>(`/app-databases/${databaseId}/folders`, {
+  return fetchApi<AppDatabaseFolderSummary[]>(`/app-databases/${databaseId}/tables`, {
     connection,
     signal,
   })
@@ -63,7 +63,7 @@ export function createAppDatabaseFolder(
   body: { name: string; parentFolderId?: string },
   signal?: AbortSignal,
 ) {
-  return fetchApi<AppDatabaseFolderSummary>(`/app-databases/${databaseId}/folders`, {
+  return fetchApi<AppDatabaseFolderSummary>(`/app-databases/${databaseId}/tables`, {
     connection,
     method: "POST",
     body,
@@ -76,7 +76,7 @@ export function listFolderRecords(
   folderId: string,
   signal?: AbortSignal,
 ) {
-  return fetchApi<AppDatabaseRecordSummary[]>(`/app-database-folders/${folderId}/records`, {
+  return fetchApi<AppDatabaseRecordSummary[]>(`/app-database-tables/${folderId}/rows`, {
     connection,
     signal,
   })
@@ -88,7 +88,7 @@ export function createFolderRecord(
   body: { name: string; payload: Record<string, unknown> },
   signal?: AbortSignal,
 ) {
-  return fetchApi<AppDatabaseRecordSummary>(`/app-database-folders/${folderId}/records`, {
+  return fetchApi<AppDatabaseRecordSummary>(`/app-database-tables/${folderId}/rows`, {
     connection,
     method: "POST",
     body,
@@ -101,7 +101,7 @@ export function deleteFolderRecord(
   recordId: string,
   signal?: AbortSignal,
 ) {
-  return fetchApi<{ success: true }>(`/app-database-records/${recordId}`, {
+  return fetchApi<{ success: true }>(`/app-database-rows/${recordId}`, {
     connection,
     method: "DELETE",
     signal,
