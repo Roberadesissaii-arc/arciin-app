@@ -17,6 +17,7 @@ import {
   rotateApiKey,
 } from "@/lib/api/settings"
 import type { ApiKeySummary } from "@/lib/types/models"
+import { copyTextWithFallback } from "@/lib/utils/clipboard"
 import { generateApiKeyName } from "@/lib/utils/generate-api-key-name"
 import { formatRelativeDate } from "@/lib/utils/format-date"
 
@@ -381,11 +382,7 @@ function ApiKeysPanelContent({
   }
 
   async function copyText(text: string) {
-    try {
-      await navigator.clipboard.writeText(text)
-    } catch {
-      /* ignore */
-    }
+    await copyTextWithFallback(text)
   }
 
   if (keys === null && loading) {

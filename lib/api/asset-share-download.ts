@@ -5,6 +5,7 @@ import {
 } from "@/lib/api/asset-blob-cache"
 import { assetFilesViewUrl } from "@/lib/api/asset-media-urls"
 import { createShareLink, shareResultUrl } from "@/lib/api/shares"
+import { copyTextWithFallback } from "@/lib/utils/clipboard"
 import type { MobileConnection } from "@/lib/types/api"
 import type { AssetSummary } from "@/lib/types/assets"
 
@@ -162,16 +163,14 @@ async function shareFileAfterFetch(
     return canShareFiles([file]) ? "shared_file" : "shared_link"
   }
 
-  try {
-    await navigator.clipboard.writeText(viewUrl)
+  if (await copyTextWithFallback(viewUrl)) {
     return "copied"
-  } catch {
-    if (isIosLikeDevice()) {
-      openBlobForManualSave(blob)
-      return "opened_tab" as ShareAssetResult
-    }
-    throw new Error("Could not share this file on this device.")
   }
+  if (isIosLikeDevice()) {
+    openBlobForManualSave(blob)
+    return "opened_tab" as ShareAssetResult
+  }
+  throw new Error("Could not share this file on this device.")
 }
 
 /**
@@ -309,13 +308,11 @@ async function collectAssetFiles(
  * prompt so the user can still copy it by hand instead of hitting a dead end.
  */
 async function copyLinkOrPrompt(url: string): Promise<ShareAssetResult> {
-  try {
-    await navigator.clipboard.writeText(url)
-    return "copied"
-  } catch {
-    window.prompt("Copy this link to share:", url)
+  if (await copyTextWithFallback(url)) {
     return "copied"
   }
+  window.prompt("Copy this link to share:", url)
+  return "copied"
 }
 
 /**

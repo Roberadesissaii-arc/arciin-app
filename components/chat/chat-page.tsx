@@ -27,6 +27,7 @@ import {
   useChatKeyboard,
 } from "@/hooks/use-chat-keyboard"
 import { useChatTextToSpeech } from "@/hooks/use-chat-text-to-speech"
+import { copyTextWithFallback } from "@/lib/utils/clipboard"
 import { ChatMarkdownContent } from "@/components/chat/chat-markdown-content"
 import { ChatModelBar } from "@/components/chat/chat-model-bar"
 import { ChatReasoningBlock } from "@/components/chat/chat-reasoning-block"
@@ -415,12 +416,10 @@ function MessageActions({
     useChatTextToSpeech(connection, profileId)
 
   async function handleCopy() {
-    try {
-      await navigator.clipboard.writeText(plain || content)
+    const ok = await copyTextWithFallback(plain || content)
+    if (ok) {
       setCopied(true)
       window.setTimeout(() => setCopied(false), 1500)
-    } catch {
-      /* clipboard denied */
     }
   }
 

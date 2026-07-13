@@ -36,6 +36,7 @@ import {
 import { MobileBottomSheet } from "@/components/shell/mobile-bottom-sheet"
 import { PlanGateCard } from "@/components/shell/plan-gate-card"
 import { formatApiError, isLicenseRequiredError, licenseRequiredPlan } from "@/lib/api/errors"
+import { copyTextWithFallback } from "@/lib/utils/clipboard"
 import type { MobileConnection } from "@/lib/types/api"
 import {
   getPasswordVault,
@@ -401,13 +402,9 @@ export function PasswordsPage() {
   }
 
   async function copyText(text: string, label: string) {
-    try {
-      await navigator.clipboard.writeText(text)
-      setCopyMsg(`${label} copied`)
-      setTimeout(() => setCopyMsg(null), 2000)
-    } catch {
-      setCopyMsg("Could not copy")
-    }
+    const ok = await copyTextWithFallback(text)
+    setCopyMsg(ok ? `${label} copied` : "Could not copy")
+    setTimeout(() => setCopyMsg(null), 2000)
   }
 
   const unlockTitle = pendingVaultUnlock
