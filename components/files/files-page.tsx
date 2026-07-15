@@ -14,12 +14,12 @@ import { MobileDuplicateUploadSheet } from "@/components/files/mobile-duplicate-
 import { MobileImportLinkSheet } from "@/components/files/mobile-import-link-sheet"
 import { MobileMoveFolderSheet } from "@/components/files/mobile-move-folder-sheet"
 import { MobileUploadProgressBar } from "@/components/files/mobile-upload-progress-bar"
+import { ShareOptionsSheet } from "@/components/files/share-options-sheet"
 import { PageFetchErrorAlert } from "@/components/shell/page-fetch-error-alert"
 import { MobilePageIntro } from "@/components/shell/mobile-page-intro"
 import { useConnection } from "@/components/providers/connection-provider"
 import {
   getAssets,
-  beginShareAssets,
   beginDownloadAssets,
   deleteAsset,
   moveAsset,
@@ -194,6 +194,7 @@ export function FilesPage() {
   const [selectedAssetIds, setSelectedAssetIds] = useState<Set<string>>(() => new Set())
   const [moveAssets, setMoveAssets] = useState<AssetSummary[]>([])
   const [deleteTargets, setDeleteTargets] = useState<AssetSummary[]>([])
+  const [shareAssets, setShareAssets] = useState<AssetSummary[]>([])
   const [assetActionBusy, setAssetActionBusy] = useState(false)
   const [assetActionMessage, setAssetActionMessage] = useState<string | null>(null)
 
@@ -735,26 +736,8 @@ export function FilesPage() {
   }
 
   function handleShareAssets(targets: AssetSummary[]) {
-    if (!connection || targets.length === 0) return
-    setAssetActionBusy(true)
-    void beginShareAssets(connection, targets)
-      .then((result) => {
-        if (result === "cancelled") return
-        if (result === "opened_tab") {
-          setAssetActionMessage("Opened in new tab — use Share there to save or send")
-        } else if (result === "copied") {
-          setAssetActionMessage("Links copied")
-        } else {
-          setAssetActionMessage("Shared")
-        }
-        setTimeout(() => setAssetActionMessage(null), 2500)
-      })
-      .catch((err) => {
-        setUploadIssue(assetActionIssue(err, "share"))
-      })
-      .finally(() => {
-        setAssetActionBusy(false)
-      })
+    if (targets.length === 0) return
+    setShareAssets(targets)
   }
 
   function handleDownloadAssets(targets: AssetSummary[]) {
@@ -1271,6 +1254,15 @@ export function FilesPage() {
         }}
         onConfirm={() => void handleDeleteAssets(deleteTargets)}
       />
+
+      {connection && shareAssets.length > 0 ? (
+        <ShareOptionsSheet
+          open
+          onClose={() => setShareAssets([])}
+          connection={connection}
+          assets={shareAssets}
+        />
+      ) : null}
 
       {assetActionMessage ? (
         <p className="fixed inset-x-0 bottom-[calc(var(--mobile-bottom-nav-height,4.5rem)+5.5rem)] z-[130] px-4 text-center text-[12px] font-medium text-[#16a34a]">
