@@ -1,14 +1,26 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import Link from "next/link"
 import { Check, Copy, Link2, Loader2, Share2 } from "lucide-react"
 
 import { MobileBottomSheet } from "@/components/shell/mobile-bottom-sheet"
 import { MobilePillSwitch } from "@/components/settings/mobile-toggle-row"
 import { createShareLink, shareResultUrl } from "@/lib/api/shares"
+import { getRemoteAccessSettings } from "@/lib/api/settings"
 import { copyTextWithFallback } from "@/lib/utils/clipboard"
 import type { MobileConnection } from "@/lib/types/api"
 import type { AssetSummary } from "@/lib/types/assets"
+
+/** navigator.share needs a secure context (https://) — silently unavailable over plain HTTP/LAN IP. */
+function nativeShareSupported(): boolean {
+  return (
+    typeof navigator !== "undefined" &&
+    typeof navigator.share === "function" &&
+    typeof window !== "undefined" &&
+    window.isSecureContext
+  )
+}
 
 type ExpiryOption = "1" | "7" | "30" | "never"
 
@@ -42,8 +54,24 @@ export function ShareOptionsSheet({
   const [error, setError] = useState<string | null>(null)
   const [createdUrl, setCreatedUrl] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  const [secureUrlHint, setSecureUrlHint] = useState<string | null>(null)
 
   const defaultLabel = assets.length === 1 ? assets[0]!.originalFilename : `${assets.length} files`
+  const canNativeShare = nativeShareSupported()
+
+  useEffect(() => {
+    if (!createdUrl || canNativeShare) return
+    let cancelled = false
+    void getRemoteAccessSettings(connection)
+      .then((settings) => {
+        if (!cancelled) setSecureUrlHint(settings.mobilePublicUrl ?? null)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [createdUrl])
 
   function reset() {
     setNote("")
@@ -53,6 +81,7 @@ export function ShareOptionsSheet({
     setError(null)
     setCreatedUrl(null)
     setCopied(false)
+    setSecureUrlHint(null)
   }
 
   function handleClose() {
@@ -91,16 +120,12 @@ export function ShareOptionsSheet({
   }
 
   async function handleNativeShare() {
-    if (!createdUrl) return
-    if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
-      try {
-        await navigator.share({ title: note.trim() || defaultLabel, url: createdUrl })
-        return
-      } catch {
-        // user cancelled, or unsupported — fall through to copy
-      }
+    if (!createdUrl || !canNativeShare) return
+    try {
+      await navigator.share({ title: note.trim() || defaultLabel, url: createdUrl })
+    } catch {
+      // user cancelled — nothing to do
     }
-    void handleCopy()
   }
 
   return (
@@ -125,21 +150,50 @@ export function ShareOptionsSheet({
             <button
               type="button"
               onClick={() => void handleCopy()}
-              className="flex h-11 flex-1 items-center justify-center gap-2 rounded-xl text-[13px] font-semibold text-[#222222] active:bg-[#f0f0f0]"
-              style={{ border: "1px solid #e5e5e5" }}
+              className={
+                canNativeShare
+                  ? "flex h-11 flex-1 items-center justify-center gap-2 rounded-xl text-[13px] font-semibold text-[#222222] active:bg-[#f0f0f0]"
+                  : "btn-accent-solid flex h-11 flex-1 items-center justify-center gap-2 rounded-xl text-[13px] font-semibold active:opacity-90"
+              }
+              style={canNativeShare ? { border: "1px solid #e5e5e5" } : undefined}
             >
-              {copied ? <Check className="text-accent size-4" /> : <Copy className="size-4" />}
+              {copied ? <Check className={canNativeShare ? "text-accent size-4" : "size-4"} /> : <Copy className="size-4" />}
               {copied ? "Copied" : "Copy link"}
             </button>
-            <button
-              type="button"
-              onClick={() => void handleNativeShare()}
-              className="btn-accent-solid flex h-11 flex-1 items-center justify-center gap-2 rounded-xl text-[13px] font-semibold active:opacity-90"
-            >
-              <Share2 className="size-4" />
-              Share
-            </button>
+            {canNativeShare ? (
+              <button
+                type="button"
+                onClick={() => void handleNativeShare()}
+                className="btn-accent-solid flex h-11 flex-1 items-center justify-center gap-2 rounded-xl text-[13px] font-semibold active:opacity-90"
+              >
+                <Share2 className="size-4" />
+                Share
+              </button>
+            ) : null}
           </div>
+          {!canNativeShare ? (
+            <p className="text-[11px] leading-relaxed text-[#a0a0a0]">
+              The share-sheet button needs a secure (https://) connection, which this address
+              doesn&apos;t have.
+              {secureUrlHint ? (
+                <>
+                  {" "}Open Arciin at{" "}
+                  <a href={secureUrlHint} className="text-accent font-medium">
+                    {secureUrlHint}
+                  </a>{" "}
+                  to enable it — for now, use Copy link.
+                </>
+              ) : (
+                <>
+                  {" "}Turn on remote access in{" "}
+                  <Link href="/profile/remote-access" className="text-accent font-medium">
+                    Settings
+                  </Link>{" "}
+                  for an https:// link that supports it — for now, use Copy link.
+                </>
+              )}
+            </p>
+          ) : null}
           <p className="text-[11px] leading-relaxed text-[#a0a0a0]">
             Anyone with this link can view what you shared. They cannot browse your Arciin
             libraries or sign in as you.
