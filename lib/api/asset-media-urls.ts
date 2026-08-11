@@ -12,16 +12,18 @@ function resolvedApiBase(connection: MobileConnection): string {
 /**
  * Auth carried in the query string, because media elements cannot send headers.
  *
- * `mediaToken` is scoped to one asset and expires in minutes. Passing the
- * session token instead is the legacy path: the API accepts `?access_token=` on
- * every authenticated route, so a shared media URL is a full credential. It is
- * still the fallback so a failed mint degrades to working playback rather than
- * a broken player.
+ * Only ever a media token: scoped to one asset, expires in minutes. The session
+ * token used to be the fallback here, but the API no longer accepts it in a
+ * query string at all — it authenticated on every route, so a shared media URL
+ * was a full credential.
+ *
+ * With no token the URL is left unauthenticated and the request 401s, which the
+ * player turns into one re-mint and retry. That is better than emitting a
+ * credential that would work if it ever leaked.
  */
 function assetMediaQueryAuth(connection: MobileConnection, mediaToken?: string | null) {
-  const params = mediaToken
-    ? new URLSearchParams({ media_token: mediaToken })
-    : new URLSearchParams({ access_token: connection.sessionToken })
+  const params = new URLSearchParams()
+  if (mediaToken) params.set("media_token", mediaToken)
   if (shouldUseArciinProxy(connection)) {
     const apiBase = connection.apiBaseUrl.replace(/\/+$/, "")
     params.set("api_base", btoa(apiBase))
