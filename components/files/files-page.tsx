@@ -366,9 +366,11 @@ export function FilesPage() {
 
   // Warm the blob cache for selected assets so bulk Share/Save can call
   // navigator.share synchronously inside the tap (required by iOS Safari).
+  // Skip video/audio — those stream by range request; full prefetch fights playback.
   useEffect(() => {
     if (!selectionMode || !connection) return
     for (const asset of selectedAssets) {
+      if (asset.mediaType === "VIDEO" || asset.mediaType === "AUDIO") continue
       prefetchAssetBlob(connection, asset.id, asset.sizeBytes)
     }
   }, [selectionMode, selectedAssets, connection])

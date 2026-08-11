@@ -14,6 +14,7 @@ import {
 import { DeleteAssetDialog } from "@/components/files/delete-asset-dialog"
 import { MobilePdfViewer } from "@/components/files/mobile-pdf-viewer"
 import { MobileMoveFolderSheet } from "@/components/files/mobile-move-folder-sheet"
+import { MobileVideoPlayer } from "@/components/files/mobile-video-player"
 import { isPdfAsset } from "@/lib/files/pdf-thumbnail"
 import { getAssetBlob, prefetchAssetBlob } from "@/lib/api/asset-blob-cache"
 import {
@@ -27,7 +28,17 @@ import {
 import { formatApiError } from "@/lib/api/errors"
 import { isTextPreviewableAsset } from "@/lib/files/is-text-previewable"
 import { isAudioAsset, isInlineStreamableAsset, isVideoAsset } from "@/lib/files/streamable-asset"
-import { loadThumbnail } from "@/lib/files/thumbnail-cache"
+import {
+  getCachedThumbnailUrl,
+  hydrateThumbnailFromCache,
+  loadThumbnail,
+} from "@/lib/files/thumbnail-cache"
+import {
+  getCachedVideoUrl,
+  getMemoryCachedVideoUrl,
+  VIDEO_CACHE_MAX_BYTES,
+  warmVideoCache,
+} from "@/lib/files/video-stream-cache"
 import type { MobileConnection } from "@/lib/types/api"
 import type { AssetSummary, LibrarySummary } from "@/lib/types/assets"
 import { lockBodyScroll } from "@/lib/ui/scroll-lock"
@@ -67,10 +78,13 @@ export function AssetViewer({
   )
   const [textPreviewError, setTextPreviewError] = useState<string | null>(null)
   const [mediaPreviewError, setMediaPreviewError] = useState<string | null>(null)
+  const [videoPoster, setVideoPoster] = useState<string | null>(null)
+  const [videoFromCache, setVideoFromCache] = useState(false)
   const [pdfPage, setPdfPage] = useState(1)
   const [pdfTotal, setPdfTotal] = useState(0)
   const pointerStart = useRef<{ x: number; y: number } | null>(null)
   const previewObjectUrlRef = useRef<string | null>(null)
+  const videoWarmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const asset = assets[currentIndex] ?? assets[0]!
   const hasPrev = currentIndex > 0
@@ -124,10 +138,16 @@ export function AssetViewer({
     setTextPreview(null)
     setTextPreviewError(null)
     setMediaPreviewError(null)
+    setVideoPoster(null)
+    setVideoFromCache(false)
     setPdfPage(1)
     setPdfTotal(0)
     setPreviewLoading(isPdf ? false : loadsMediaBlob || loadsTextPreview)
-    prefetchAssetBlob(connection, asset.id, asset.sizeBytes)
+    // Do NOT full-download video/audio into the blob cache while the player is
+    // streaming the same file — that doubles bandwidth and freezes the spinner.
+    if (!isVideoAsset(asset) && !isAudioAsset(asset)) {
+      prefetchAssetBlob(connection, asset.id, asset.sizeBytes)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [asset.id])
 
@@ -139,14 +159,70 @@ export function AssetViewer({
     }
 
     if (streamsInline) {
-      // Video/audio keep the query-token URL (not a blob: URL) so the browser can
-      // range-request and start playback immediately instead of buffering the
-      // whole file into memory — files here can be many GB. This does mean a
-      // native long-press "copy link" on these elements can leak a live session
-      // token; images avoid that below by using an authenticated blob instead.
-      setPreviewSrc(assetShareableMediaUrl(connection, asset.id))
+      let cancelled = false
       setPreviewLoading(false)
       setMediaPreviewError(null)
+
+      // Video: poster from thumbnail cache (instant) + device video cache if we
+      // already opened this clip before. Large files still stream by range.
+      if (isVideo) {
+        const mem = getMemoryCachedVideoUrl(asset.id)
+        if (mem) {
+          setPreviewSrc(mem)
+          setVideoFromCache(true)
+        } else {
+          setPreviewSrc(assetShareableMediaUrl(connection, asset.id))
+          setVideoFromCache(false)
+        }
+
+        const thumbMem = getCachedThumbnailUrl(asset.id)
+        if (thumbMem) setVideoPoster(thumbMem)
+
+        void (async () => {
+          const [cachedVideo, thumb] = await Promise.all([
+            mem ? Promise.resolve(mem) : getCachedVideoUrl(asset.id),
+            thumbMem
+              ? Promise.resolve(thumbMem)
+              : hydrateThumbnailFromCache(asset.id).then(
+                  (t) => t ?? loadThumbnail(connection, asset.id),
+                ),
+          ])
+          if (cancelled) return
+          if (thumb) setVideoPoster(thumb)
+          if (!mem && cachedVideo) {
+            setPreviewSrc(cachedVideo)
+            setVideoFromCache(true)
+          }
+        })()
+
+        // Warm device cache only when leaving this video (not while streaming),
+        // so the next open is instant without fighting the range request.
+        const warmId = asset.id
+        const warmSize = asset.sizeBytes
+        const warmMime = asset.mimeType
+        const warmConn = connection
+        const alreadyMem = Boolean(mem)
+
+        return () => {
+          cancelled = true
+          if (
+            !alreadyMem &&
+            warmSize > 0 &&
+            warmSize <= VIDEO_CACHE_MAX_BYTES
+          ) {
+            if (videoWarmTimerRef.current) clearTimeout(videoWarmTimerRef.current)
+            // Brief defer so navigation feels snappy first.
+            videoWarmTimerRef.current = setTimeout(() => {
+              void warmVideoCache(warmConn, warmId, warmSize, warmMime)
+            }, 600)
+          }
+        }
+      }
+
+      // Audio (and non-video streamables): stream URL with range requests.
+      setPreviewSrc(assetShareableMediaUrl(connection, asset.id))
+      setVideoFromCache(false)
+      setVideoPoster(null)
       return
     }
 
@@ -422,13 +498,12 @@ export function AssetViewer({
           ) : mediaPreviewError ? (
             <p className="px-4 text-center text-[13px] text-[#a1a1aa]">{mediaPreviewError}</p>
           ) : isVideo && previewSrc ? (
-            <video
+            <MobileVideoPlayer
               key={previewSrc}
               src={previewSrc}
-              controls
-              playsInline
-              preload="metadata"
-              className="max-h-full max-w-full object-contain"
+              poster={videoPoster}
+              fromCache={videoFromCache}
+              className="h-full w-full"
               onError={() => {
                 const ext = asset.originalFilename.toLowerCase().split(".").pop() ?? ""
                 const codec = (asset.codec ?? "").toLowerCase()

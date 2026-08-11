@@ -213,11 +213,21 @@ async function proxyUpstream(request: Request, context: RouteContext) {
 
   // Stream binary responses (video, audio, images) — never buffer the whole body.
   // Forward Range-related headers so the browser's media engine can seek.
+  // Prefer upstream Cache-Control/ETag; download paths default to 1 day private
+  // so mobile media can be reopened from the browser cache within a session.
   const binaryHeaders: Record<string, string> = {
     "Content-Type": responseContentType,
-    "Cache-Control": res.headers.get("cache-control") ?? "private, max-age=300",
+    "Cache-Control":
+      res.headers.get("cache-control") ??
+      (isDownloadPath ? "private, max-age=86400" : "private, max-age=300"),
   }
-  for (const h of ["Content-Range", "Accept-Ranges", "Content-Length", "Content-Disposition"]) {
+  for (const h of [
+    "Content-Range",
+    "Accept-Ranges",
+    "Content-Length",
+    "Content-Disposition",
+    "ETag",
+  ]) {
     const v = res.headers.get(h)
     if (v) binaryHeaders[h] = v
   }

@@ -29,12 +29,17 @@ function rememberBlob(key: string, promise: Promise<Blob>): CacheEntry {
   return entry
 }
 
-/** Warm the blob cache while the viewer is open (helps iOS share after tap). */
+/**
+ * Warm the blob cache while the viewer is open (helps iOS share after tap).
+ * Skip huge files — and never use this for inline video/audio streams (callers
+ * should not prefetch those; full download fights range streaming).
+ */
 export function prefetchAssetBlob(
   connection: MobileConnection,
   assetId: string,
   sizeBytes: number,
 ): void {
+  if (!Number.isFinite(sizeBytes) || sizeBytes <= 0) return
   if (sizeBytes > MAX_PREFETCH_BYTES) return
   const key = cacheKey(connection, assetId)
   if (cache.has(key)) return
