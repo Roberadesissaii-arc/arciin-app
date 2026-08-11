@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
+import { invalidateMediaToken } from "@/lib/api/media-token"
 import { createPortal } from "react-dom"
 import {
   ArrowRightLeft,
@@ -19,6 +20,7 @@ import { isPdfAsset } from "@/lib/files/pdf-thumbnail"
 import { getAssetBlob, prefetchAssetBlob } from "@/lib/api/asset-blob-cache"
 import {
   assetShareableMediaUrl,
+  assetShareableMediaUrlAsync,
   beginDownloadAsset,
   beginShareAsset,
   deleteAsset,
@@ -80,6 +82,8 @@ export function AssetViewer({
   const [mediaPreviewError, setMediaPreviewError] = useState<string | null>(null)
   const [videoPoster, setVideoPoster] = useState<string | null>(null)
   const [videoFromCache, setVideoFromCache] = useState(false)
+  /** One retry per asset: an expired media token should not look like a codec failure. */
+  const mediaTokenRetriedRef = useRef(false)
   const [pdfPage, setPdfPage] = useState(1)
   const [pdfTotal, setPdfTotal] = useState(0)
   const pointerStart = useRef<{ x: number; y: number } | null>(null)
@@ -159,7 +163,8 @@ export function AssetViewer({
     }
 
     if (streamsInline) {
-      let cancelled = false
+      mediaTokenRetriedRef.current = false
+    let cancelled = false
       setPreviewLoading(false)
       setMediaPreviewError(null)
 
@@ -171,7 +176,11 @@ export function AssetViewer({
           setPreviewSrc(mem)
           setVideoFromCache(true)
         } else {
-          setPreviewSrc(assetShareableMediaUrl(connection, asset.id))
+          // Minted per-asset so a link copied out of the player is not a
+          // session credential. Falls back to the legacy URL if minting fails.
+          void assetShareableMediaUrlAsync(connection, asset.id).then((url: string) => {
+            if (!cancelled) setPreviewSrc(url)
+          })
           setVideoFromCache(false)
         }
 
@@ -220,7 +229,9 @@ export function AssetViewer({
       }
 
       // Audio (and non-video streamables): stream URL with range requests.
-      setPreviewSrc(assetShareableMediaUrl(connection, asset.id))
+      void assetShareableMediaUrlAsync(connection, asset.id).then((url: string) => {
+        if (!cancelled) setPreviewSrc(url)
+      })
       setVideoFromCache(false)
       setVideoPoster(null)
       return
@@ -505,6 +516,17 @@ export function AssetViewer({
               fromCache={videoFromCache}
               className="h-full w-full"
               onError={() => {
+                // A 15-minute media token can expire inside a long video. Re-mint
+                // once and let the player retry before blaming the codec — the
+                // key={previewSrc} above remounts on the new URL.
+                if (!mediaTokenRetriedRef.current && !videoFromCache) {
+                  mediaTokenRetriedRef.current = true
+                  invalidateMediaToken(asset.id, "stream")
+                  void assetShareableMediaUrlAsync(connection, asset.id).then((url: string) => {
+                    setPreviewSrc(url)
+                  })
+                  return
+                }
                 const ext = asset.originalFilename.toLowerCase().split(".").pop() ?? ""
                 const codec = (asset.codec ?? "").toLowerCase()
                 const iosUnsupportedExt = new Set(["mkv", "avi", "wmv", "flv", "webm"])

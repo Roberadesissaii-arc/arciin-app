@@ -2,16 +2,26 @@ import { getBrowserApiUrl } from "@/lib/api/browser-api-origin"
 import { arciinProxyHeaders, needsArciinSameOriginProxy, resolveCoLocatedApiBase } from "@/lib/api/arciin-proxy"
 import { buildApiUrl } from "@/lib/api/client"
 import { shouldUseArciinProxy } from "@/lib/api/proxy-fetch"
+import { getMediaToken } from "@/lib/api/media-token"
 import type { MobileConnection } from "@/lib/types/api"
 
 function resolvedApiBase(connection: MobileConnection): string {
   return resolveCoLocatedApiBase(connection.apiBaseUrl)
 }
 
-function assetMediaQueryAuth(connection: MobileConnection) {
-  const params = new URLSearchParams({
-    access_token: connection.sessionToken,
-  })
+/**
+ * Auth carried in the query string, because media elements cannot send headers.
+ *
+ * `mediaToken` is scoped to one asset and expires in minutes. Passing the
+ * session token instead is the legacy path: the API accepts `?access_token=` on
+ * every authenticated route, so a shared media URL is a full credential. It is
+ * still the fallback so a failed mint degrades to working playback rather than
+ * a broken player.
+ */
+function assetMediaQueryAuth(connection: MobileConnection, mediaToken?: string | null) {
+  const params = mediaToken
+    ? new URLSearchParams({ media_token: mediaToken })
+    : new URLSearchParams({ access_token: connection.sessionToken })
   if (shouldUseArciinProxy(connection)) {
     const apiBase = connection.apiBaseUrl.replace(/\/+$/, "")
     params.set("api_base", btoa(apiBase))
@@ -35,8 +45,12 @@ export function assetFilesViewUrl(assetId: string) {
  * Absolute inline media URL for <img>/<video>/<audio>.
  * Includes auth in the query so iOS long-press Share copies a working link (not a blob: URL).
  */
-export function assetShareableMediaUrl(connection: MobileConnection, assetId: string) {
-  const params = assetMediaQueryAuth(connection)
+export function assetShareableMediaUrl(
+  connection: MobileConnection,
+  assetId: string,
+  mediaToken?: string | null,
+) {
+  const params = assetMediaQueryAuth(connection, mediaToken)
   params.set("inline", "1")
 
   if (shouldUseArciinProxy(connection)) {
@@ -55,6 +69,9 @@ export function assetShareableMediaUrl(connection: MobileConnection, assetId: st
 }
 
 export function assetThumbnailUrl(connection: MobileConnection, assetId: string) {
+  // Thumbnails are read through an authenticated fetch() with an Authorization
+  // header, so this query auth is a belt-and-braces path that never reaches an
+  // <img src> a user could copy. Left on the legacy token deliberately.
   const params = assetMediaQueryAuth(connection)
   if (shouldUseArciinProxy(connection)) {
     return `/api/arciin/assets/${encodeURIComponent(assetId)}/thumbnail?${params.toString()}`
@@ -96,4 +113,18 @@ export function assetDownloadRequestInit(connection: MobileConnection): RequestI
     credentials: useProxy ? "same-origin" : "include",
     cache: "no-store",
   }
+}
+
+/**
+ * Same as assetShareableMediaUrl, with a freshly minted per-asset token.
+ *
+ * Async because minting is a round trip; callers already build these inside
+ * effects. Falls back to the legacy URL if the mint fails.
+ */
+export async function assetShareableMediaUrlAsync(
+  connection: MobileConnection,
+  assetId: string,
+): Promise<string> {
+  const token = await getMediaToken(connection, assetId, "stream")
+  return assetShareableMediaUrl(connection, assetId, token)
 }

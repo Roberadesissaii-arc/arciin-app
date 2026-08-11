@@ -4,6 +4,7 @@ import {
   assetDownloadRequestInit,
   assetFilesViewUrl,
   assetShareableMediaUrl,
+  assetShareableMediaUrlAsync,
   assetThumbnailUrl,
 } from "@/lib/api/asset-media-urls"
 import { fetchAssetBlob } from "@/lib/api/asset-binary"
@@ -42,6 +43,7 @@ export {
   assetDownloadRequestInit,
   assetFilesViewUrl,
   assetShareableMediaUrl,
+  assetShareableMediaUrlAsync,
   assetThumbnailUrl,
   beginDownloadAsset,
   beginDownloadAssets,
