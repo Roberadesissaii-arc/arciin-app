@@ -159,6 +159,15 @@ export function RecentUploadsGrid() {
 export function RecentUploadsSection() {
   return (
     <div>
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <CloudUpload className="size-4 text-[#a0a0a0]" />
+          <span className="text-[13px] font-semibold text-[#222222]">Recent uploads</span>
+        </div>
+        <Link href="/files" className="text-accent text-[12px] font-semibold active:opacity-70">
+          View all
+        </Link>
+      </div>
       <RecentUploadsGrid />
     </div>
   )

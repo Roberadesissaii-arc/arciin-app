@@ -1,10 +1,13 @@
 "use client"
 
 import { useCallback } from "react"
-
-import { SectionHeading } from "@/components/ui/section-heading"
-import { ServiceCard } from "@/components/ui/service-card"
+import Link from "next/link"
 import {
+  Activity,
+  BriefcaseBusiness,
+  Database,
+  FingerprintPattern,
+  GalleryVerticalEnd,
   HardDrive,
 } from "lucide-react"
 
@@ -27,6 +30,75 @@ import type { HomeOverview } from "@/lib/types/models"
 import { formatBytes } from "@/lib/utils/format-bytes"
 import { formatRelativeDate } from "@/lib/utils/format-date"
 
+function StatCard({
+  label,
+  value,
+  sub,
+  icon: Icon,
+  iconColor,
+  href,
+  locked,
+}: {
+  label: string
+  value?: string
+  sub?: string
+  icon: React.ElementType
+  iconColor: string
+  href?: string
+  /** Plan-gated (e.g. vault on Free) — show an upgrade badge instead of a dash. */
+  locked?: boolean
+}) {
+  const body = (
+    <>
+      <div className="flex items-center justify-between">
+        <span className="text-[12px] font-medium text-[#717171]">{label}</span>
+        <div
+          className="flex size-7 items-center justify-center rounded-xl bg-[#f7f7f7]"
+          style={{ border: "1px solid #e5e5e5" }}
+        >
+          <Icon className="size-[14px]" style={{ color: iconColor }} strokeWidth={2} />
+        </div>
+      </div>
+      {locked ? (
+        <div>
+          <div className="flex items-center gap-1.5">
+            <PlanBadge plan="pro" />
+            <span className="text-[11px] text-[#a0a0a0]">to unlock</span>
+          </div>
+          <p className="mt-1 text-[11px] text-[#a0a0a0]">Unavailable</p>
+        </div>
+      ) : (
+        <div>
+          <p className="text-[22px] font-bold leading-none tracking-tight text-[#222222]">
+            {value}
+          </p>
+          {sub ? <p className="mt-1 text-[11px] text-[#a0a0a0]">{sub}</p> : null}
+        </div>
+      )}
+    </>
+  )
+
+  if (href) {
+    return (
+      <Link
+        href={href}
+        className="flex flex-col gap-3 rounded-2xl bg-white p-4 transition-opacity active:opacity-80"
+        style={{ border: "1px solid #e5e5e5" }}
+      >
+        {body}
+      </Link>
+    )
+  }
+
+  return (
+    <div
+      className="flex flex-col gap-3 rounded-2xl bg-white p-4"
+      style={{ border: "1px solid #e5e5e5" }}
+    >
+      {body}
+    </div>
+  )
+}
 
 function storagePercent(storage: NonNullable<HomeOverview["storage"]>) {
   if (storage.totalBytes && storage.totalBytes > 0) {
@@ -65,8 +137,25 @@ export function HomePage() {
         : "—"
 
   // Vault fetch 403s on Free (vault.password is Pro+) — treat "unknown count" as locked.
+  const passwordsLocked = data?.passwordVaultCount == null
+
+  const passwordsValue = data?.passwordVaultCount != null ? String(data.passwordVaultCount) : ""
+
+  const passwordsSub = data?.passwordVaultLocked
+    ? "vault locked"
+    : data?.passwordVaultCount === 1
+      ? "saved entry"
+      : "saved entries"
 
   // App databases 403 on Free (developer.app_databases is Pro+) — treat "unknown count" as locked.
+  const databaseLocked = data?.appDataCount == null
+  const databaseValue = data?.appDataCount != null ? String(data.appDataCount) : ""
+  const databaseSub =
+    data?.appDataCount === 0
+      ? "none yet"
+      : data?.appDataCount === 1
+        ? "app database"
+        : "app databases"
 
   if (!data) {
     return (
@@ -98,52 +187,56 @@ export function HomePage() {
         <p className="mt-0.5 text-[13px] text-[#717171]">
           {homeSubtitle(connection, serverReachable)}
         </p>
-        {/* Closes the introduction, so the tiles below read as a new section
-            rather than as more of the greeting. */}
-        <div className="mt-4 border-b border-[#e5e5e5]" />
       </div>
 
       <PageFetchErrorAlert error={error} onRetry={() => void reload()} />
 
-      {/* The supplied card, with its own art. Titles carry the destination; the
-          counts stay in the sections below, where a number has room to be read. */}
       <div className="grid grid-cols-2 gap-3">
-        <ServiceCard
-          title="Jobs"
+        <StatCard
+          label="Jobs"
+          value={String(data.jobCount)}
+          sub={
+            data.runningJobs > 0
+              ? `${data.runningJobs} running now`
+              : data.jobCount > 0
+                ? "queue clear"
+                : "none yet"
+          }
+          icon={BriefcaseBusiness}
+          iconColor="var(--arciin-accent, #ff4f12)"
           href="/jobs"
-          imgSrc="/assets/service-cards/gamification.png"
-          imgAlt="Bowling pins and ball illustration"
-          className="min-h-[160px]"
         />
-        <ServiceCard
-          title="Database"
+        <StatCard
+          label="Database"
+          value={databaseValue}
+          sub={databaseSub}
+          icon={Database}
+          iconColor="var(--arciin-accent, #ff4f12)"
           href="/database"
-          imgSrc="/assets/service-cards/design.png"
-          imgAlt="Paint bucket illustration"
-          className="min-h-[160px]"
+          locked={databaseLocked}
         />
-        <ServiceCard
-          title="Passwords"
+        <StatCard
+          label="Passwords"
+          value={passwordsValue}
+          sub={passwordsSub}
+          icon={FingerprintPattern}
+          iconColor="var(--arciin-accent, #ff4f12)"
           href="/profile/passwords"
-          imgSrc="/assets/service-cards/analytics.png"
-          imgAlt="Megaphone illustration"
-          className="min-h-[160px]"
+          locked={passwordsLocked}
         />
-        <ServiceCard
-          title="Events"
+        <StatCard
+          label="Events"
+          value="Live"
+          sub="Socket.IO monitor"
+          icon={GalleryVerticalEnd}
+          iconColor="var(--arciin-accent, #ff4f12)"
           href="/events"
-          imgSrc="/assets/service-cards/content.png"
-          imgAlt="Notebook and pen illustration"
-          className="min-h-[160px]"
         />
       </div>
 
-      <SectionHeading>Storage</SectionHeading>
-
       <div
         className="flex flex-col gap-3 rounded-2xl p-4"
-        // The tone from the tile you kept, so Storage sits in the same family.
-        style={{ backgroundColor: "#27272a", border: "1px solid rgba(255,255,255,0.08)" }}
+        style={{ backgroundColor: "#0c0c0e", border: "1px solid rgba(255,255,255,0.08)" }}
       >
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
@@ -186,16 +279,18 @@ export function HomePage() {
         </div>
       </div>
 
-      <SectionHeading href="/files" action="View all">
-        Recent uploads
-      </SectionHeading>
       <RecentUploadsSection />
 
-      <SectionHeading href="/activity" action="View timeline">
-        Recent activity
-      </SectionHeading>
-
       <div>
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Activity className="size-4 text-[#a0a0a0]" />
+            <span className="text-[13px] font-semibold text-[#222222]">Recent activity</span>
+          </div>
+          <Link href="/activity" className="text-accent text-[12px] font-semibold active:opacity-70">
+            View timeline
+          </Link>
+        </div>
         <div
           className="overflow-hidden rounded-2xl bg-white"
           style={{ border: "1px solid #e5e5e5" }}
