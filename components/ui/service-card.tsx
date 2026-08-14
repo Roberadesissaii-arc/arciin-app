@@ -18,14 +18,16 @@ import { cn } from "@/lib/utils"
  */
 
 const cardVariants = cva(
-  "relative flex flex-col justify-between w-full p-6 overflow-hidden rounded-xl shadow-sm transition-shadow duration-300 ease-in-out group hover:shadow-lg",
+  "relative flex flex-col justify-between w-full p-4 overflow-hidden rounded-2xl shadow-sm transition-shadow duration-300 ease-in-out group hover:shadow-lg",
   {
     variants: {
       variant: {
-        default: "bg-card text-card-foreground",
-        red: "bg-red-500/90 text-primary-foreground",
-        blue: "bg-blue-500/90 text-primary-foreground",
-        gray: "bg-secondary text-secondary-foreground",
+        // All four carry a colour: with default white and secondary grey in the
+        // set, two tiles read as empty next to two that do not.
+        default: "bg-[#ff4f12] text-white",
+        red: "bg-[#e11d48] text-white",
+        blue: "bg-[#4f46e5] text-white",
+        gray: "bg-[#27272a] text-white",
       },
     },
     defaultVariants: {
@@ -88,11 +90,11 @@ const ServiceCard = React.forwardRef<HTMLDivElement, ServiceCardProps>(
         {...props}
       >
         <div className="relative z-10 flex flex-col h-full">
-          <h3 className="text-2xl font-bold tracking-tight">{title}</h3>
+          <h3 className="text-lg font-bold tracking-tight">{title}</h3>
           <a
             href={href}
             aria-label={`Learn more about ${title}`}
-            className="mt-auto flex items-center text-sm font-semibold group-hover:underline"
+            className="mt-auto flex items-center text-[12px] font-semibold group-hover:underline"
           >
             LEARN MORE
             <motion.div variants={arrowAnimation}>
@@ -101,11 +103,10 @@ const ServiceCard = React.forwardRef<HTMLDivElement, ServiceCardProps>(
           </a>
         </div>
 
-        {/* eslint-disable-next-line @next/next/no-img-element */}
         <motion.img
           src={imgSrc}
           alt={imgAlt}
-          className="absolute -right-8 -bottom-8 w-40 h-40 object-contain opacity-90 group-hover:opacity-100"
+          className="absolute -right-3 -bottom-3 w-20 h-20 object-contain opacity-90 group-hover:opacity-100"
           variants={imageAnimation}
         />
       </motion.div>

@@ -116,7 +116,11 @@ function PdfAssetThumbnail({ asset, connection, className = "", eager = false }:
 }
 
 function ServerAssetThumbnail({ asset, connection, className = "", eager = false }: ThumbnailProps) {
-  const wantsThumb = asset.mediaType === "IMAGE" || asset.mediaType === "VIDEO"
+  // A drawn cover is written to the same path a video still is, so a document
+  // that has one wants a thumbnail too. Without this the cover reached the phone
+  // as a date on the asset and nothing ever asked the server for the picture.
+  const wantsThumb =
+    asset.mediaType === "IMAGE" || asset.mediaType === "VIDEO" || Boolean(asset.coverImageAt)
   const cached = wantsThumb ? getCachedThumbnailUrl(asset.id) : null
 
   const [src, setSrc] = useState<string | null>(cached)

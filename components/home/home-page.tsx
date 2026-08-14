@@ -109,14 +109,14 @@ export function HomePage() {
 
       {/* The supplied card, with its own art. Titles carry the destination; the
           counts stay in the sections below, where a number has room to be read. */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-2 gap-3">
         <ServiceCard
           title="Jobs"
           href="/jobs"
           imgSrc="/assets/service-cards/gamification.png"
           imgAlt="Bowling pins and ball illustration"
           variant="red"
-          className="min-h-[180px]"
+          className="min-h-[132px]"
         />
         <ServiceCard
           title="Database"
@@ -124,7 +124,7 @@ export function HomePage() {
           imgSrc="/assets/service-cards/design.png"
           imgAlt="Paint bucket illustration"
           variant="default"
-          className="min-h-[180px]"
+          className="min-h-[132px]"
         />
         <ServiceCard
           title="Passwords"
@@ -132,7 +132,7 @@ export function HomePage() {
           imgSrc="/assets/service-cards/analytics.png"
           imgAlt="Megaphone illustration"
           variant="gray"
-          className="min-h-[180px]"
+          className="min-h-[132px]"
         />
         <ServiceCard
           title="Events"
@@ -140,7 +140,7 @@ export function HomePage() {
           imgSrc="/assets/service-cards/content.png"
           imgAlt="Notebook and pen illustration"
           variant="blue"
-          className="min-h-[180px]"
+          className="min-h-[132px]"
         />
       </div>
 
@@ -148,7 +148,8 @@ export function HomePage() {
 
       <div
         className="flex flex-col gap-3 rounded-2xl p-4"
-        style={{ backgroundColor: "#0c0c0e", border: "1px solid rgba(255,255,255,0.08)" }}
+        // The tone from the tile you kept, so Storage sits in the same family.
+        style={{ backgroundColor: "#27272a", border: "1px solid rgba(255,255,255,0.08)" }}
       >
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
@@ -191,7 +192,9 @@ export function HomePage() {
         </div>
       </div>
 
-      <SectionHeading>Recent uploads</SectionHeading>
+      <SectionHeading href="/files" action="View all">
+        Recent uploads
+      </SectionHeading>
       <RecentUploadsSection />
 
       <div>
