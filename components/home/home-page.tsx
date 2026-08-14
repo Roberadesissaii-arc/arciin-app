@@ -1,12 +1,10 @@
 "use client"
 
 import { useCallback } from "react"
-import Link from "next/link"
 
 import { SectionHeading } from "@/components/ui/section-heading"
 import { ServiceCard } from "@/components/ui/service-card"
 import {
-  Activity,
   HardDrive,
 } from "lucide-react"
 
@@ -115,32 +113,28 @@ export function HomePage() {
           href="/jobs"
           imgSrc="/assets/service-cards/gamification.png"
           imgAlt="Bowling pins and ball illustration"
-          variant="red"
-          className="min-h-[132px]"
+          className="min-h-[160px]"
         />
         <ServiceCard
           title="Database"
           href="/database"
           imgSrc="/assets/service-cards/design.png"
           imgAlt="Paint bucket illustration"
-          variant="default"
-          className="min-h-[132px]"
+          className="min-h-[160px]"
         />
         <ServiceCard
           title="Passwords"
           href="/profile/passwords"
           imgSrc="/assets/service-cards/analytics.png"
           imgAlt="Megaphone illustration"
-          variant="gray"
-          className="min-h-[132px]"
+          className="min-h-[160px]"
         />
         <ServiceCard
           title="Events"
           href="/events"
           imgSrc="/assets/service-cards/content.png"
           imgAlt="Notebook and pen illustration"
-          variant="blue"
-          className="min-h-[132px]"
+          className="min-h-[160px]"
         />
       </div>
 
@@ -197,16 +191,11 @@ export function HomePage() {
       </SectionHeading>
       <RecentUploadsSection />
 
+      <SectionHeading href="/activity" action="View timeline">
+        Recent activity
+      </SectionHeading>
+
       <div>
-        <div className="mb-3 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <Activity className="size-4 text-[#a0a0a0]" />
-            <span className="text-[13px] font-semibold text-[#222222]">Recent activity</span>
-          </div>
-          <Link href="/activity" className="text-accent text-[12px] font-semibold active:opacity-70">
-            View timeline
-          </Link>
-        </div>
         <div
           className="overflow-hidden rounded-2xl bg-white"
           style={{ border: "1px solid #e5e5e5" }}
