@@ -3,13 +3,10 @@
 import { useCallback } from "react"
 import Link from "next/link"
 
+import { SectionHeading } from "@/components/ui/section-heading"
 import { ServiceCard } from "@/components/ui/service-card"
 import {
   Activity,
-  BriefcaseBusiness,
-  Database,
-  FingerprintPattern,
-  GalleryVerticalEnd,
   HardDrive,
 } from "lucide-react"
 
@@ -32,75 +29,6 @@ import type { HomeOverview } from "@/lib/types/models"
 import { formatBytes } from "@/lib/utils/format-bytes"
 import { formatRelativeDate } from "@/lib/utils/format-date"
 
-function StatCard({
-  label,
-  value,
-  sub,
-  icon: Icon,
-  iconColor,
-  href,
-  locked,
-}: {
-  label: string
-  value?: string
-  sub?: string
-  icon: React.ElementType
-  iconColor: string
-  href?: string
-  /** Plan-gated (e.g. vault on Free) — show an upgrade badge instead of a dash. */
-  locked?: boolean
-}) {
-  const body = (
-    <>
-      <div className="flex items-center justify-between">
-        <span className="text-[12px] font-medium text-[#717171]">{label}</span>
-        <div
-          className="flex size-7 items-center justify-center rounded-xl bg-[#f7f7f7]"
-          style={{ border: "1px solid #e5e5e5" }}
-        >
-          <Icon className="size-[14px]" style={{ color: iconColor }} strokeWidth={2} />
-        </div>
-      </div>
-      {locked ? (
-        <div>
-          <div className="flex items-center gap-1.5">
-            <PlanBadge plan="pro" />
-            <span className="text-[11px] text-[#a0a0a0]">to unlock</span>
-          </div>
-          <p className="mt-1 text-[11px] text-[#a0a0a0]">Unavailable</p>
-        </div>
-      ) : (
-        <div>
-          <p className="text-[22px] font-bold leading-none tracking-tight text-[#222222]">
-            {value}
-          </p>
-          {sub ? <p className="mt-1 text-[11px] text-[#a0a0a0]">{sub}</p> : null}
-        </div>
-      )}
-    </>
-  )
-
-  if (href) {
-    return (
-      <Link
-        href={href}
-        className="flex flex-col gap-3 rounded-2xl bg-white p-4 transition-opacity active:opacity-80"
-        style={{ border: "1px solid #e5e5e5" }}
-      >
-        {body}
-      </Link>
-    )
-  }
-
-  return (
-    <div
-      className="flex flex-col gap-3 rounded-2xl bg-white p-4"
-      style={{ border: "1px solid #e5e5e5" }}
-    >
-      {body}
-    </div>
-  )
-}
 
 function storagePercent(storage: NonNullable<HomeOverview["storage"]>) {
   if (storage.totalBytes && storage.totalBytes > 0) {
@@ -139,25 +67,8 @@ export function HomePage() {
         : "—"
 
   // Vault fetch 403s on Free (vault.password is Pro+) — treat "unknown count" as locked.
-  const passwordsLocked = data?.passwordVaultCount == null
-
-  const passwordsValue = data?.passwordVaultCount != null ? String(data.passwordVaultCount) : ""
-
-  const passwordsSub = data?.passwordVaultLocked
-    ? "vault locked"
-    : data?.passwordVaultCount === 1
-      ? "saved entry"
-      : "saved entries"
 
   // App databases 403 on Free (developer.app_databases is Pro+) — treat "unknown count" as locked.
-  const databaseLocked = data?.appDataCount == null
-  const databaseValue = data?.appDataCount != null ? String(data.appDataCount) : ""
-  const databaseSub =
-    data?.appDataCount === 0
-      ? "none yet"
-      : data?.appDataCount === 1
-        ? "app database"
-        : "app databases"
 
   if (!data) {
     return (
@@ -189,59 +100,51 @@ export function HomePage() {
         <p className="mt-0.5 text-[13px] text-[#717171]">
           {homeSubtitle(connection, serverReachable)}
         </p>
+        {/* Closes the introduction, so the tiles below read as a new section
+            rather than as more of the greeting. */}
+        <div className="mt-4 border-b border-[#e5e5e5]" />
       </div>
 
       <PageFetchErrorAlert error={error} onRetry={() => void reload()} />
 
-      {/* Coloured tiles rather than four white boxes: on a phone these are the
-          primary jumps off the home screen, and identical cards made them read
-          as a table. Each carries its own subject drawn behind it. */}
-      <div className="grid grid-cols-2 gap-3">
+      {/* The supplied card, with its own art. Titles carry the destination; the
+          counts stay in the sections below, where a number has room to be read. */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <ServiceCard
-          label="Jobs"
-          value={String(data.jobCount)}
-          sub={
-            data.runningJobs > 0
-              ? `${data.runningJobs} running now`
-              : data.jobCount > 0
-                ? "queue clear"
-                : "none yet"
-          }
+          title="Jobs"
           href="/jobs"
-          variant="accent"
-          imgSrc="/assets/service-cards/jobs.svg"
-          icon={BriefcaseBusiness}
+          imgSrc="/assets/service-cards/gamification.png"
+          imgAlt="Bowling pins and ball illustration"
+          variant="red"
+          className="min-h-[180px]"
         />
         <ServiceCard
-          label="Database"
-          value={databaseValue}
-          sub={databaseSub}
+          title="Database"
           href="/database"
-          variant="indigo"
-          imgSrc="/assets/service-cards/database.svg"
-          icon={Database}
-          locked={databaseLocked}
+          imgSrc="/assets/service-cards/design.png"
+          imgAlt="Paint bucket illustration"
+          variant="default"
+          className="min-h-[180px]"
         />
         <ServiceCard
-          label="Passwords"
-          value={passwordsValue}
-          sub={passwordsSub}
+          title="Passwords"
           href="/profile/passwords"
-          variant="teal"
-          imgSrc="/assets/service-cards/passwords.svg"
-          icon={FingerprintPattern}
-          locked={passwordsLocked}
+          imgSrc="/assets/service-cards/analytics.png"
+          imgAlt="Megaphone illustration"
+          variant="gray"
+          className="min-h-[180px]"
         />
         <ServiceCard
-          label="Events"
-          value="Live"
-          sub="Socket.IO monitor"
+          title="Events"
           href="/events"
-          variant="slate"
-          imgSrc="/assets/service-cards/events.svg"
-          icon={GalleryVerticalEnd}
+          imgSrc="/assets/service-cards/content.png"
+          imgAlt="Notebook and pen illustration"
+          variant="blue"
+          className="min-h-[180px]"
         />
       </div>
+
+      <SectionHeading>Storage</SectionHeading>
 
       <div
         className="flex flex-col gap-3 rounded-2xl p-4"
@@ -288,6 +191,7 @@ export function HomePage() {
         </div>
       </div>
 
+      <SectionHeading>Recent uploads</SectionHeading>
       <RecentUploadsSection />
 
       <div>

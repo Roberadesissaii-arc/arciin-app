@@ -1,91 +1,117 @@
-import Link from "next/link"
-import type { LucideIcon } from "lucide-react"
+"use client"
+
+import * as React from "react"
+import { cva, type VariantProps } from "class-variance-authority"
+import { motion } from "framer-motion"
+import { ArrowRight } from "lucide-react"
+
+import { cn } from "@/lib/utils"
 
 /**
- * A coloured tile with its subject drawn behind it.
+ * The supplied service card, kept as given.
  *
- * Adapted from the reference component rather than copied. Two things changed
- * for this app, both because it runs on a phone:
- *
- * framer-motion is not used. Every animation in the original is `whileHover`,
- * and a touch screen has no hover — it would have added a library to the bundle
- * for effects nobody here can trigger. The press state is a CSS transition,
- * which is the interaction a phone actually has.
- *
- * The art is local SVG, not a remote URL. This is a self-hosted app that has to
- * work on a LAN with no internet, so cards pointing at someone else's CDN would
- * be blank exactly when the server is doing its job.
- *
- * class-variance-authority is skipped for four fixed variants; a lookup is the
- * same thing without a dependency.
+ * The art is served from /public rather than the original CDN: it is the same
+ * four illustrations, downloaded and resized to the 320px the reference URLs
+ * themselves requested. That took 6 MB of full-resolution PNG down to 104 KB,
+ * and it keeps the cards working on a self-hosted instance with no internet —
+ * which is the normal case for this app.
  */
 
-export type ServiceCardVariant = "accent" | "indigo" | "teal" | "slate"
+const cardVariants = cva(
+  "relative flex flex-col justify-between w-full p-6 overflow-hidden rounded-xl shadow-sm transition-shadow duration-300 ease-in-out group hover:shadow-lg",
+  {
+    variants: {
+      variant: {
+        default: "bg-card text-card-foreground",
+        red: "bg-red-500/90 text-primary-foreground",
+        blue: "bg-blue-500/90 text-primary-foreground",
+        gray: "bg-secondary text-secondary-foreground",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+    },
+  },
+)
 
-/**
- * Art opacity is per surface, not shared.
- *
- * White line work reads very differently against each of these: at the 22% the
- * reference used it was all but invisible on the orange and the indigo. These
- * are tuned against a render so the drawing is present on every tile without
- * competing with the number, which is what the eye should land on first.
- */
-const VARIANTS: Record<ServiceCardVariant, { surface: string; art: string }> = {
-  accent: { surface: "bg-[#ff4f12]", art: "opacity-40" },
-  indigo: { surface: "bg-[#4f46e5]", art: "opacity-40" },
-  teal: { surface: "bg-[#0f766e]", art: "opacity-[0.38]" },
-  slate: { surface: "bg-[#27272a]", art: "opacity-[0.30]" },
-}
-
-export function ServiceCard({
-  label,
-  value,
-  sub,
-  href,
-  variant = "slate",
-  imgSrc,
-  icon: Icon,
-  locked = false,
-}: {
-  label: string
-  value: string
-  sub?: string
+export interface ServiceCardProps
+  extends Omit<React.HTMLAttributes<HTMLDivElement>, "onDrag" | "onDragStart" | "onDragEnd" | "onAnimationStart">,
+    VariantProps<typeof cardVariants> {
+  /** The main title of the card. */
+  title: string
+  /** The URL the card's link should point to. */
   href: string
-  variant?: ServiceCardVariant
+  /** The source URL for the decorative image. */
   imgSrc: string
-  icon?: LucideIcon
-  locked?: boolean
-}) {
-  const { surface, art } = VARIANTS[variant]
-
-  return (
-    <Link
-      href={href}
-      className={`group relative flex min-h-[112px] flex-col justify-between overflow-hidden rounded-2xl p-4 transition-transform duration-200 active:scale-[0.98] ${surface}`}
-    >
-      {/* Bled off the bottom-right corner so the tile reads as cropped artwork
-          rather than as an icon sitting in a box. */}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={imgSrc}
-        alt=""
-        aria-hidden
-        className={`pointer-events-none absolute -bottom-7 -right-6 size-32 select-none object-contain transition-transform duration-300 group-active:scale-105 ${art}`}
-      />
-
-      <div className="relative z-10 flex items-center gap-1.5">
-        {Icon ? <Icon className="size-3.5 text-white/70" aria-hidden /> : null}
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-white/70">
-          {label}
-        </span>
-      </div>
-
-      <div className="relative z-10">
-        <p className="text-[22px] font-bold leading-none tracking-tight text-white">
-          {locked ? "—" : value}
-        </p>
-        {sub ? <p className="mt-1 text-[11px] text-white/65">{sub}</p> : null}
-      </div>
-    </Link>
-  )
+  /** The alt text for the decorative image, for accessibility. */
+  imgAlt: string
 }
+
+const ServiceCard = React.forwardRef<HTMLDivElement, ServiceCardProps>(
+  ({ className, variant, title, href, imgSrc, imgAlt, ...props }, ref) => {
+    const cardAnimation = {
+      hover: {
+        scale: 1.02,
+        transition: { duration: 0.3 },
+      },
+    }
+
+    const imageAnimation = {
+      hover: {
+        scale: 1.1,
+        rotate: 3,
+        x: 10,
+        transition: { duration: 0.4, ease: "easeInOut" as const },
+      },
+    }
+
+    const arrowAnimation = {
+      hover: {
+        x: 5,
+        transition: {
+          duration: 0.3,
+          ease: "easeInOut" as const,
+          repeat: Infinity,
+          repeatType: "reverse" as const,
+        },
+      },
+    }
+
+    return (
+      <motion.div
+        className={cn(cardVariants({ variant, className }))}
+        ref={ref}
+        variants={cardAnimation}
+        whileHover="hover"
+        // A phone has no hover, so the same states are reachable by touch.
+        whileTap="hover"
+        {...props}
+      >
+        <div className="relative z-10 flex flex-col h-full">
+          <h3 className="text-2xl font-bold tracking-tight">{title}</h3>
+          <a
+            href={href}
+            aria-label={`Learn more about ${title}`}
+            className="mt-auto flex items-center text-sm font-semibold group-hover:underline"
+          >
+            LEARN MORE
+            <motion.div variants={arrowAnimation}>
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </motion.div>
+          </a>
+        </div>
+
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <motion.img
+          src={imgSrc}
+          alt={imgAlt}
+          className="absolute -right-8 -bottom-8 w-40 h-40 object-contain opacity-90 group-hover:opacity-100"
+          variants={imageAnimation}
+        />
+      </motion.div>
+    )
+  },
+)
+ServiceCard.displayName = "ServiceCard"
+
+export { ServiceCard }
