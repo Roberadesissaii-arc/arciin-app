@@ -224,7 +224,10 @@ export function AssetThumbnail({
     return <AudioCardArtwork className={className} />
   }
 
-  if (documentThumbnailsEnabled && isPdfAsset(asset)) {
+  // A drawn cover wins over the first page. Rendering page one locally is what
+  // made covers invisible here while the desktop showed them: the phone was
+  // never asking the server for a thumbnail at all.
+  if (documentThumbnailsEnabled && isPdfAsset(asset) && !asset.coverImageAt) {
     return (
       <PdfAssetThumbnail
         asset={asset}

@@ -28,6 +28,14 @@ export type AssetSummary = {
   uploadClient?: string | null
   createdAt: string
   updatedAt: string
+  /**
+   * Set when an AI cover has been drawn for this file.
+   *
+   * A PDF renders its own first page on the device, so without this signal a
+   * cover generated on the desktop sits on the server and is never asked for —
+   * the phone kept showing page one.
+   */
+  coverImageAt?: string | null
 }
 
 export type LibrarySummary = {

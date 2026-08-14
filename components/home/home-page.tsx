@@ -2,6 +2,8 @@
 
 import { useCallback } from "react"
 import Link from "next/link"
+
+import { ServiceCard } from "@/components/ui/service-card"
 import {
   Activity,
   BriefcaseBusiness,
@@ -191,8 +193,11 @@ export function HomePage() {
 
       <PageFetchErrorAlert error={error} onRetry={() => void reload()} />
 
+      {/* Coloured tiles rather than four white boxes: on a phone these are the
+          primary jumps off the home screen, and identical cards made them read
+          as a table. Each carries its own subject drawn behind it. */}
       <div className="grid grid-cols-2 gap-3">
-        <StatCard
+        <ServiceCard
           label="Jobs"
           value={String(data.jobCount)}
           sub={
@@ -202,35 +207,39 @@ export function HomePage() {
                 ? "queue clear"
                 : "none yet"
           }
-          icon={BriefcaseBusiness}
-          iconColor="var(--arciin-accent, #ff4f12)"
           href="/jobs"
+          variant="accent"
+          imgSrc="/assets/service-cards/jobs.svg"
+          icon={BriefcaseBusiness}
         />
-        <StatCard
+        <ServiceCard
           label="Database"
           value={databaseValue}
           sub={databaseSub}
-          icon={Database}
-          iconColor="var(--arciin-accent, #ff4f12)"
           href="/database"
+          variant="indigo"
+          imgSrc="/assets/service-cards/database.svg"
+          icon={Database}
           locked={databaseLocked}
         />
-        <StatCard
+        <ServiceCard
           label="Passwords"
           value={passwordsValue}
           sub={passwordsSub}
-          icon={FingerprintPattern}
-          iconColor="var(--arciin-accent, #ff4f12)"
           href="/profile/passwords"
+          variant="teal"
+          imgSrc="/assets/service-cards/passwords.svg"
+          icon={FingerprintPattern}
           locked={passwordsLocked}
         />
-        <StatCard
+        <ServiceCard
           label="Events"
           value="Live"
           sub="Socket.IO monitor"
-          icon={GalleryVerticalEnd}
-          iconColor="var(--arciin-accent, #ff4f12)"
           href="/events"
+          variant="slate"
+          imgSrc="/assets/service-cards/events.svg"
+          icon={GalleryVerticalEnd}
         />
       </div>
 
